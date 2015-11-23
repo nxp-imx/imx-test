@@ -1,6 +1,3 @@
-# list of platforms which did not want this test case
-EXCLUDE_LIST:=
-
 LINK ?=$(CROSS_COMPILE)gcc
 STRIP ?=$(CROSS_COMPILE)strip
 
@@ -12,11 +9,7 @@ OBJ = memtool.o \
       mx6ul_modules.o \
       mx7d_modules.o
 
-ifeq (,$(findstring $(PLATFORM), $(EXCLUDE_LIST)))
 TARGET = $(OBJDIR)/memtool
-else
-TARGET =
-endif
 
 CFLAGS+= -Os
 
