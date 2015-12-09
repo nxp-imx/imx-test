@@ -1,10 +1,15 @@
-# list of platforms which want this test case
-INCLUDE_LIST:="IMX233 IMX28 IMX50 IMX51 IMX5 IMX6SL IMX6SX IMX7D IMX6UL"
+# list of platforms which do not want this test case
+EXCLUDE_LIST:=
 
-CFLAGS += -lpthread
+# Just use the pxp library to get contiguous physical memory for USERPTR testing
+# However, be aware that this is not the only way.
+CFLAGS += -lpthread -lpxp -DGET_CONTI_PHY_MEM_VIA_PXP_LIB
 
-ifeq ($(PLATFORM),$(findstring $(PLATFORM),$(INCLUDE_LIST)))
-OBJS = $(OBJDIR)/pxp_v4l2_test.out $(OBJDIR)/pxp_v4l2_out_test.sh
+ifeq (,$(findstring $(PLATFORM), $(EXCLUDE_LIST)))
+OBJS = 	$(OBJDIR)/pxp_v4l2_test.out \
+	$(OBJDIR)/pxp_v4l2_out_test.sh \
+	$(OBJDIR)/mx6s_v4l2_capture.out
+
 else
 OBJS =
 endif
