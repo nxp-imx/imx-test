@@ -21,6 +21,7 @@
 #include <string.h>
 #include <errno.h>
 #include <linux/mxc_sim_interface.h>
+#include "../../include/soc_check.h"
 
 #define BUFFER_LEN	200
 #define T0_CMD_LEN	5
@@ -106,6 +107,13 @@ int main(int argc, char *argv[])
 	unsigned int protocol = SIM_PROTOCOL_T0;
 	sim_baud_t baud_data;
 	unsigned char rx_buffer[BUFFER_LEN] = {0};
+	char *soc_list[] = {"i.MX6UL", "i.MX7D", " "};
+
+	ret = soc_version_check(soc_list);
+	if (ret == 0) {
+		printf("sim not supported on current soc\n");
+		return 0;
+	}
 
 	sim_fd = open("/dev/mxc_sim", O_RDWR);
 	if (sim_fd < 0) {

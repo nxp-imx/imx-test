@@ -25,6 +25,8 @@
 #include <getopt.h>
 #include "vpu_test.h"
 
+#include "../../include/soc_check.h"
+
 #define ONE_FRAME_INTERV 100000 // 100 ms
 
 char *usage = "Usage: ./mxc_vpu_test.out -D \"<decode options>\" "\
@@ -492,6 +494,14 @@ main(int argc, char *argv[])
 	vpu_versioninfo ver;
 #endif
 	int ret_thr;
+
+	char *soc_list[] = {"i.MX6Q", "i.MX6QP", "i.MX6DL", " "};
+
+	ret = soc_version_check(soc_list);
+	if (ret == 0) {
+		printf("mxc_vpu_test.out not supported on current soc\n");
+		return 0;
+	}
 
 #ifndef COMMON_INIT
 	srand((unsigned)time(0)); /* init seed of rand() */

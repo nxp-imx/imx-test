@@ -51,6 +51,8 @@ extern "C"{
 #include "pxp_lib.h"
 #endif
 
+#include "../../include/soc_check.h"
+
 sigset_t sigset;
 int quitflag;
 
@@ -693,6 +695,14 @@ int main(int argc, char **argv)
 {
 	int fd_v4l;
 	quitflag = 0;
+	int ret;
+	char *soc_list[] = {"i.MX6UL", "i.MX7D", "i.MX6SX", "i.MX6SL", " "};
+
+	ret = soc_version_check(soc_list);
+	if (ret == 0) {
+		printf("mx6s_v4l2_capture.out not supported on current soc\n");
+		return 0;
+	}
 
 	pthread_t sigtid;
 	sigemptyset(&sigset);
