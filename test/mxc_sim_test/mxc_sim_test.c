@@ -125,6 +125,9 @@ int main(int argc, char *argv[])
 	atr_data.atr_buffer = rx_buffer;
 
 	ret = ioctl(sim_fd, SIM_IOCTL_GET_ATR, &atr_data);
+	if (ret < 0)
+		return ret;
+
 	for (i = 0; i < atr_data.size; i++)
 		printf("atr[%d]= 0x%x ", i, atr_data.atr_buffer[i]);
 	printf("\n");
