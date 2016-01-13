@@ -29,7 +29,7 @@ int  soc_version_check(char **soc_name)
 		if (!strcmp(name, *list))
 			goto out;
 		else
-			*list++;
+			list++;
 	}
 
 out:
