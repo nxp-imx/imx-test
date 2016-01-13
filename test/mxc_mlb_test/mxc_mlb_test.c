@@ -305,6 +305,7 @@ int do_txrx_test(int fd)
 			ret = read(fd, buf, 2048);
 			if (ret <= 0) {
 				printf("Failed to read MLB packet: %s\n", strerror(errno));
+				break;
 			} else {
 				vprintf(">> Read MLB packet:\n(length)\n%d\n(data)\n", ret);
 				dump_hex(buf, ret);
