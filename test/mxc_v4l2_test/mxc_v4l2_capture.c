@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2015 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright 2004-2016 Freescale Semiconductor, Inc. All rights reserved.
  */
 
 /*
@@ -231,10 +231,12 @@ int v4l_capture_setup(void)
 			of.offset.v_offset = 0;
 		}
 
-        if (ioctl(fd_v4l, VIDIOC_S_DEST_CROP, &of) < 0)
-        {
-                printf("set dest crop failed\n");
-                return 0;
+	if (g_usb_camera != 1) {
+		if (ioctl(fd_v4l, VIDIOC_S_DEST_CROP, &of) < 0)
+		{
+			printf("set dest crop failed\n");
+			return 0;
+		}
         }
 
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
