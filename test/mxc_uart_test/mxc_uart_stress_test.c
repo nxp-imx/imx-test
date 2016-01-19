@@ -119,6 +119,7 @@ int init_uart(char *dev, struct termios *ti)
 
 	if (tcgetattr(fd, ti) < 0) {
 		perror("Can't get port settings");
+		close(fd);
 		return -1;
 	}
 
@@ -142,7 +143,8 @@ void r_op(void *arg)
 	int nfds;
 	char tmp[1024];
 	int i = 0, j = -1, k = 0, r;
-	size_t count, total = 0, max = 0, min = 0;
+	size_t total = 0, max = 0, min = 0;
+	int count;
 	fd_set rfds;
 	struct timeval tv;
 
@@ -228,7 +230,8 @@ void w_op(void *arg)
 	int nfds;
 	char tmp[1024];
 	int i = 0, j = -1, k = 0, r;
-	size_t count, total = 0, max = 0, min = 0;
+	size_t total = 0, max = 0, min = 0;
+	int count;
 	fd_set rfds;
 	struct timeval tv;
 
@@ -279,9 +282,12 @@ void real_op_loop(int fd)
 	pthread_t rid, wid;
 	char tmp[10];
 	int ret;
+	int flags;
 
 	printf("Hit enter to start Loopback\n");
-	read(STDIN_FILENO, tmp, 3);
+	flags = read(STDIN_FILENO, tmp, 3);
+	if (flags < 0)
+		return;
 
 	ret = pthread_create(&wid, NULL, (void *)w_op, &fd);
 	if (ret != 0) {
@@ -316,13 +322,16 @@ void real_op(int fd, char op)
 	char *opstr = (op == 'R' ? "reading" : "writing");
 	fd_set rfds;
 	struct timeval tv;
+	int flags;
 
 	nfds = fd;
 	tv.tv_sec = 15;
 	tv.tv_usec = 0;
 
 	printf("Hit enter to start %s\n", opstr);
-	read(STDIN_FILENO, tmp, 3);
+	flags = read(STDIN_FILENO, tmp, 3);
+	if (flags < 0)
+		return;
 
 	/* init buffer */
 	if (op == 'W') {

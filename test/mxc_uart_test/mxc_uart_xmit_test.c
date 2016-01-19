@@ -220,8 +220,10 @@ void *Uartread(void * threadParameter)
                 rx = malloc(iocount);
 		/* Read in and wrap around the list */
                 iores = read(fd, rx, iocount);
-		rcount += iores;
-		fwrite(rx, 1, iores, furead);
+		if (iores > 0) {
+			rcount += iores;
+			fwrite(rx, 1, iores, furead);
+		}
 		free(rx);
 	}
 	return 0;
@@ -246,6 +248,7 @@ int main(int argc, char *argv[])
 	char c = 0;
 	pthread_t p_Uartsend, p_Uartread;
 	void *thread_res;
+	int flags;
 
 	print_name(argv);
 
@@ -261,7 +264,11 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	fcntl(fd, F_SETFL, 0);
+	flags = fcntl(fd, F_SETFL, 0);
+	if (flags < 0) {
+		printf("fcntl F_SETFL fail\n");
+		goto err_fd;
+	}
 
 	tcgetattr(fd, &options);
 	options.c_cflag &= ~CSTOPB;
@@ -322,11 +329,11 @@ int main(int argc, char *argv[])
 
 	ret = pthread_create(&p_Uartsend, NULL, Uartsend, NULL);
 	if(ret < 0)
-		goto error;
+		goto err_furead;
 	ret = pthread_create(&p_Uartread, NULL, Uartread, NULL);
 	if(ret < 0) {
 		ret = pthread_join(p_Uartsend, &thread_res);
-		goto error;
+		goto err_furead;
 	}
 
 	printf("test begin, press 'c' to exit\n");
@@ -350,8 +357,9 @@ int main(int argc, char *argv[])
 	if(ret < 0)
 		printf("fail to stop Uartread thread\n");
 	printf("rcount=%d\n",rcount);
-error:
+err_furead:
 	fclose(furead);
+err_fd:
 	close(fd);
 	print_result(argv);
 

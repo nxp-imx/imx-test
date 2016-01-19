@@ -56,7 +56,7 @@ int main(int argc, char **argv)
         tcgetattr(uart_file1, &old);
         mxc = old;
         mxc.c_lflag &= ~(ICANON | ECHO | ISIG);
-        retval = tcsetattr(uart_file1, TCSANOW, &mxc);
+        tcsetattr(uart_file1, TCSANOW, &mxc);
         printf("Attributes set\n");
 
         line_val = LOOPBACK;
