@@ -271,6 +271,8 @@ void parse_module(char *module, char *reg, char *field, int iswrite)
 			die("can't open file /proc/cpuinfo\n");
 
 		n = read(fd, g_buffer, 4095);
+		close(fd);
+
 		if ((rev = strstr(g_buffer, "Revision"))) {
 			int r;
 			rev = strstr(rev, ":");
