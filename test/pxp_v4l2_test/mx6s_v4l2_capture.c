@@ -260,7 +260,7 @@ int v4l_capture_setup(void)
 	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0)
 	{
 		printf("VIDIOC_S_PARM failed\n");
-		return -1;
+		goto fail;
 	}
 
 	fmtdesc.index = 0;
@@ -268,8 +268,7 @@ int v4l_capture_setup(void)
 
 	if (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) < 0) {
 		printf("VIDIOC ENUM FMT failed \n");
-		close(fd_v4l);
-		return -1;
+		goto fail;
 	}
 	print_pixelformat("pixelformat (output by camera)",
 			fmtdesc.pixelformat);
@@ -279,7 +278,7 @@ int v4l_capture_setup(void)
 	frmsize.index = g_capture_mode;
 	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &frmsize) < 0) {
 		printf("get capture mode %d framesize failed\n", g_capture_mode);
-		return -1;
+		goto fail;
 	}
 
 	g_out_width = frmsize.discrete.width;
@@ -293,13 +292,13 @@ int v4l_capture_setup(void)
 	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0)
 	{
 		printf("set format failed\n");
-		return -1;
+		goto fail;
 	}
 
 	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0)
 	{
 		printf("get format failed\n");
-		return -1;
+		goto fail;
 	}
 
 	memset(&parm, 0, sizeof(parm));
@@ -317,6 +316,10 @@ int v4l_capture_setup(void)
 	g_frame_size = fmt.fmt.pix.sizeimage;
 
 	return fd_v4l;
+
+fail:
+	close(fd_v4l);
+	return -1;
 }
 
 void yuyvtorgb565(unsigned char *yuyv, unsigned char *dst )
