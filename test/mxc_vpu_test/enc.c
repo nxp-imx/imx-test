@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2014 Freescale Semiconductor, Inc.
+ * Copyright 2004-2014, 2016 Freescale Semiconductor, Inc.
  *
  * Copyright (c) 2006, Chips & Media.  All rights reserved.
  */
@@ -818,8 +818,8 @@ err2:
 
 	if (enc->mbInfo.addr)
 		free(enc->mbInfo.addr);
-	if (enc->mbInfo.addr)
-		free(enc->mbInfo.addr);
+	if (enc->mvInfo.addr)
+		free(enc->mvInfo.addr);
 	if (enc->sliceInfo.addr)
 		free(enc->sliceInfo.addr);
 
