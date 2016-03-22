@@ -332,7 +332,7 @@ void signalhandler(int signal)
 void help(void)
 {
 	printf("======================MMDC v1.3===========================\n");
-	printf("Usage: mmdc [ARM:DSP1:DSP2:GPU2D:GPU2D1:GPU2D2:GPU3D:GPUVG:VPU:M4:PXP:USB:SUM] [...]\n");
+	printf("Usage: mmdc [ARM:DSP1:DSP2:GPU2D:GPU2D1:GPU2D2:GPU3D:GPU3D2:GPUVG:VPU:M4:PXP:USB:SUM] [...]\n");
 	printf("export MMDC_SLEEPTIME can be used to define profiling duration, 500 by default means 0.5s\n");
 	printf("export MMDC_LOOPCOUNT can be used to define profiling times. 1 by default. -1 means infinite loop.\n");
 	printf("export MMDC_CUST_MADPCR1 can be used to customize madpcr1. Will ignore it if defined master\n");
@@ -408,6 +408,9 @@ int main(int argc, char **argv)
 				}else if((strcmp(argv[j], "DSP2")==0)&&(cpu_is_mx6q()==1)){
 				  ((pMMDC_t)A)->madpcr1 = axi_ipu2_6q;
 				  printf("MMDC DSP2 \n");
+				}else if((strcmp(argv[j], "DSP2")==0)&&(cpu_is_mx6qp()==1)){
+				  ((pMMDC_t)A)->madpcr1 = axi_ipu2_6qp;
+				  printf("MMDC DSP2 \n");
 				}else if((strcmp(argv[j], "DSP2")==0)&&(cpu_is_mx6sx()==1)){
 				  ((pMMDC_t)A)->madpcr1 = axi_lcd2_6sx;
 				  printf("MMDC DSP2 \n");
@@ -433,8 +436,11 @@ int main(int argc, char **argv)
 				  ((pMMDC_t)A)->madpcr1 = axi_gpu3d_6dl;
 				  printf("MMDC GPU3D \n");
 				}else if((strcmp(argv[j], "GPU3D")==0)&&(cpu_is_mx6qp()==1)){
-				  ((pMMDC_t)A)->madpcr1 = axi_gpu3d_6qp;
+				  ((pMMDC_t)A)->madpcr1 = axi_gpu3dd0_6qp;
 				  printf("MMDC GPU3D \n");
+				}else if((strcmp(argv[j], "GPU3D2")==0)&&(cpu_is_mx6qp()==1)){
+				  ((pMMDC_t)A)->madpcr1 = axi_gpu3dd1_6qp;
+				  printf("MMDC GPU3DD1 \n");
 				}else if((strcmp(argv[j], "GPU3D")==0)&&(cpu_is_mx6q()==1)){
 				  ((pMMDC_t)A)->madpcr1 = axi_gpu3d_6q;
 				  printf("MMDC GPU3D \n");
@@ -479,6 +485,9 @@ int main(int argc, char **argv)
 				   printf("MMDC PRE3 \n");
 				}else if((strcmp(argv[j],"GPUVG")==0)&&(cpu_is_mx6q()==1)){
 				   ((pMMDC_t)A)->madpcr1 = axi_openvg_6q;
+				   printf("MMDC GPUVG \n");
+				}else if((strcmp(argv[j],"GPUVG")==0)&&(cpu_is_mx6qp()==1)){
+				   ((pMMDC_t)A)->madpcr1 = axi_openvg_6qp;
 				   printf("MMDC GPUVG \n");
 				}else if((strcmp(argv[j],"GPUVG")==0)&&(cpu_is_mx6sl()==1)){
 				   ((pMMDC_t)A)->madpcr1 = axi_openvg_6sl;

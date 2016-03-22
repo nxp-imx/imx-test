@@ -162,6 +162,7 @@ MXC_REV(cpu_is_mx6q);
 
 #define axi_ipu1                0x00070004
 #define axi_ipu2_6q             0x00070005
+#define axi_ipu2_6qp            0x00070005
 #define axi_gpu3d_6dl           0x003F0002
 #define axi_gpu3d_6q            0x003E0002
 #define axi_gpu2d2_6dl          0x003F0003
@@ -171,6 +172,7 @@ MXC_REV(cpu_is_mx6q);
 #define axi_vpu_6dl             0x003F000B
 #define axi_vpu_6q              0x003F0013
 #define axi_openvg_6q           0x003F0022
+#define axi_openvg_6qp          0x003F001E
 #define axi_openvg_6sl          0x001F0017
 #define axi_arm                 0x00060000
 #define axi_arm_6sx             0x000E0000
@@ -191,14 +193,15 @@ MXC_REV(cpu_is_mx6q);
 #define axi_enet2_6ul           0x007F0031
 #define axi_lcdif_6ul           0x08010801
 
-#define axi_gpu3d_6qp		0x00170006
-#define axi_gpu2d_6qp		0x001F0016
-#define axi_pre_6qp		0x00070007  /* for all PRE */
-#define axi_pre0_6qp		0x001F0007
-#define axi_pre1_6qp		0x001F000F
-#define axi_pre2_6qp		0x001F0017
-#define axi_pre3_6qp		0x001F001F
-#define axi_vpu_6qp		0x003F0002
+#define axi_gpu3dd0_6qp         0x00170006
+#define axi_gpu3dd1_6qp         0x0017000E
+#define axi_gpu2d_6qp           0x001F0016
+#define axi_pre_6qp             0x00070007  /* for all PRE */
+#define axi_pre0_6qp            0x001F0007
+#define axi_pre1_6qp            0x001F000F
+#define axi_pre2_6qp            0x001F0017
+#define axi_pre3_6qp            0x001F001F
+#define axi_vpu_6qp             0x003F0002
 
 
 #endif /*MMDC_H_*/
