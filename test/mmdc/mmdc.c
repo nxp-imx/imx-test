@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2013-2016 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -249,7 +249,7 @@ static int get_system_rev(void)
 
 	tmp = strstr(buf, "Revision");
 	if (tmp != NULL) {
-		rev = index(tmp, ':');
+		rev = strchr(tmp, ':');
 		if (rev != NULL) {
 			rev++;
 			system_rev = strtoul(rev, NULL, 16);
