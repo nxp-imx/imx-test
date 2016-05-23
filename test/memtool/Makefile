@@ -7,7 +7,8 @@ OBJ = memtool.o \
       mx6sl_modules.o \
       mx6sx_modules.o \
       mx6ul_modules.o \
-      mx7d_modules.o
+      mx7d_modules.o \
+      mx6ull_modules.o
 
 TARGET = $(OBJDIR)/memtool
 
