@@ -101,16 +101,15 @@ int CHUNKS = 100;
 
 void real_op(int fd, char op)
 {
-	char tmp[1024];
+	char tmp[CHUNK_SIZE + 1];
 	int i = 0, k = 0;
 	int count, total = 0;
 	char *opstr = (op == 'R' ? "reading" : "writing");
 
 	/* init buffer */
 	if (op == 'W') {
-		for (i = 0; i < CHUNK_SIZE; i++)
-			tmp[i] = (i + 1) % 0x100;
-		i = 0;
+		pr_info("Doesn't support write yet, just return here.\n");
+		return;
 	}
 
 	while (total < (CHUNK_SIZE * CHUNKS) && k < 10) {
@@ -119,8 +118,7 @@ void real_op(int fd, char op)
 			/* clear it first */
 			memset(tmp, 0, sizeof(tmp));
 			count = read(fd, tmp, CHUNK_SIZE);
-		} else
-			count = write(fd, tmp, CHUNK_SIZE);
+		}
 
 		if (count < 0) {
 			printf("\nError while %s: %d attempt %d\n",
