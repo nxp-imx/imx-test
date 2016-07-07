@@ -1,7 +1,7 @@
 #
 #Makefile for motion sensor driver test.
 #
-OBJS = $(OBJDIR)/acctest.out
+OBJS = $(OBJDIR)/acctest.out  $(OBJDIR)/evtest.out
 
 all : $(OBJS)
 
