@@ -103,7 +103,7 @@ void real_op(int fd, char op)
 {
 	char tmp[CHUNK_SIZE + 1];
 	int i = 0, k = 0;
-	int count, total = 0;
+	int count = 0, total = 0;
 	char *opstr = (op == 'R' ? "reading" : "writing");
 
 	/* init buffer */
@@ -118,6 +118,7 @@ void real_op(int fd, char op)
 			/* clear it first */
 			memset(tmp, 0, sizeof(tmp));
 			count = read(fd, tmp, CHUNK_SIZE);
+			tmp[CHUNK_SIZE] = '\0';
 		}
 
 		if (count < 0) {
