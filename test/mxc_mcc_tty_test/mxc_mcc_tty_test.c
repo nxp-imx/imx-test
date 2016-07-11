@@ -108,7 +108,7 @@ void real_op(int fd, char op)
 
 	/* init buffer */
 	if (op == 'W') {
-		pr_info("Doesn't support write yet, just return here.\n");
+		printf("Doesn't support write yet, just return here.\n");
 		return;
 	}
 
