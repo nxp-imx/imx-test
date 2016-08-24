@@ -1,12 +1,16 @@
 SRCS = pxp_test.c utils.c
-CFLAGS += -lpxp -lpthread
 
-OBJS = $(OBJDIR)/pxp_test.out
-$(OBJS): $(SRCS)
-	mkdir -p $(OBJDIR)
-	$(VERBOSE) $(CC) -g $(INC) $(CFLAGS) $^ $(LIBS) -o $@
+TARGET = $(OBJDIR)/pxp_test.out
 
-all: $(OBJS)
+all: $(TARGET)
+
+OBJ = pxp_test.o utils.o
+
+LDFLAGS += -pthread -lpxp -lstdc++ -pthread
+
+$(OBJDIR)/pxp_test.out: $(OBJ)
+	$(CC) -o  $(OBJDIR)/pxp_test.out $(OBJ) $(LDFLAGS) -Os
+	$(STRIP) $(OBJDIR)/pxp_test.out
 
 .PHONY: clean
 clean:
