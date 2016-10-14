@@ -699,7 +699,8 @@ int main(int argc, char **argv)
 	int fd_v4l;
 	quitflag = 0;
 	int ret;
-	char *soc_list[] = {"i.MX6ULL", "i.MX6UL", "i.MX7D", "i.MX6SX", "i.MX6SL", " "};
+	char *soc_list[] = {"i.MX6SLL", "i.MX6ULL", "i.MX6UL",
+			"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
