@@ -1,7 +1,7 @@
 /*
  * pxp_test - V4L2 test application for the PxP
  *
- * Copyright (C) 2009-2015 Freescale Semiconductor, Inc.
+ * Copyright (C) 2009-2016 Freescale Semiconductor, Inc.
  * Copyright 2008-2009 Embedded Alley Solutions
  * Matt Porter <mporter@embeddedalley.com>
  *
@@ -841,7 +841,8 @@ int main(int argc, char **argv)
 	struct pxp_control *pxp;
 	pthread_t sigtid;
 	int ret;
-	char *soc_list[] = {"i.MX6UL", "i.MX7D", "i.MX6SX", "i.MX6SL", " "};
+	char *soc_list[] = {"i.MX6SLL", "i.MX6UL",
+				"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
