@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2014 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2014-2016 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2017 NXP
  */
 
 /*
@@ -16,7 +17,6 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../../include/soc_check.h"
 
 static int uart_speed(int s)
 {
@@ -158,12 +158,6 @@ void real_op(int fd, char op)
 int main(int argc, char *argv[])
 {
 	int ret;
-	char *soc_list[] = {"i.MX6SX", "i.MX7D", " "};
-	ret = soc_version_check(soc_list);
-	if (ret == 0) {
-		printf("mmc_tty_test.out not supported on current soc\n");
-		return 0;
-	}
 
 	if (argc < 5)
 		printf("Usage:\n\t%s <PORT> <READ/WRITE> X Y\n"
@@ -171,7 +165,7 @@ int main(int argc, char *argv[])
 			"Y : the group size\n\n"
 			"For example:\n"
 			"mx6sx-sd(mcc and m4 are running), receive one string:\n"
-			"./mxc_mcc_tty_test.out /dev/ttyMCCp0 115200 R 100 1000\n\n"
+			"./mxc_mcc_tty_test.out /dev/ttyRPMSG 115200 R 100 1000\n\n"
 			,
 			argv[0]);
 	else {
