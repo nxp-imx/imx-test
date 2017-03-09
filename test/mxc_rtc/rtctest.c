@@ -35,36 +35,73 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <argp.h>
+
 #include "../../include/test_utils.h"
 
-void usage(void)
+static struct argp_option options[] = {
+	{"full", 'f', 0, 0, "do all tests"},
+	{"no-periodic", 'p', 0, 0, "don't do periodic interrupt tests"},
+	{"uie-count", 'u', "int", 0, ""},
+	{"alarm-timeout", 'a', "int", 0, ""},
+	{"start-hz", 'h', "int", 0, ""},
+	{0},
+};
+
+static struct cl_args {
+	int periodic_test;
+	int uie_count;
+	int alarm_timeout;
+	int start_hz;
+} cla = {
+	.periodic_test = 1,
+	.uie_count = 5,
+	.alarm_timeout = 5,
+	.start_hz = 2,
+};
+
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "   rtctest --full         = do all tests\n");
-	fprintf(stderr,
-		"   rtctest --no-periodic  = don't do periodic interrupt tests\n");
+	struct cl_args *cla = state->input;
+
+	switch (key) {
+	case 'p':
+		cla->periodic_test = 0;
+		break;
+	case 'f':
+		cla->periodic_test = 1;
+		break;
+	case 'u':
+		cla->uie_count = atoi(arg);
+		break;
+	case 'a':
+		cla->alarm_timeout = atoi(arg);
+		break;
+	case 'h':
+		cla->start_hz = atoi(arg);
+		break;
+	default:
+		return ARGP_ERR_UNKNOWN;
+	}
+
+	return 0;
 }
+
+static struct argp argp = {
+	.options = options,
+	.parser = parse_opt,
+	.doc = "Real Time Clock Driver Test",
+};
 
 int main(int argc, char **argv)
 {
 	int i, fd, retval, irqcount = 0;
-	int periodic_test = 1;
 	unsigned long tmp, data;
 	struct rtc_time rtc_tm;
 
-	print_name(argv);
-
-	if (argc != 2) {
-		usage();
+	retval = argp_parse(&argp, argc, argv, 0, 0, &cla);
+	if (retval < 0)
 		return 1;
-	}
-
-	if (strcmp(argv[1], "--no-periodic") == 0) {
-		periodic_test = 0;
-	} else if (strcmp(argv[1], "--full") != 0) {
-		usage();
-		return 1;
-	}
 
 	fd = open("/dev/rtc0", O_RDONLY);
 
@@ -83,9 +120,10 @@ int main(int argc, char **argv)
 	}
 
 	fprintf(stderr,
-		"Counting 5 update (1/sec) interrupts from reading /dev/rtc0:");
+		"Counting %d update (1/sec) interrupts from reading /dev/rtc0:",
+		cla.uie_count);
 	fflush(stderr);
-	for (i = 1; i < 6; i++) {
+	for (i = 1; i < cla.uie_count + 1; i++) {
 		/* This read will block */
 		retval = read(fd, &data, sizeof(unsigned long));
 		if (retval == -1) {
@@ -99,7 +137,7 @@ int main(int argc, char **argv)
 
 	fprintf(stderr, "\nAgain, from using select(2) on /dev/rtc0:");
 	fflush(stderr);
-	for (i = 1; i < 6; i++) {
+	for (i = 1; i < cla.uie_count + 1; i++) {
 		struct timeval tv = { 5, 0 };	/* 5 second timeout on select */
 		fd_set readfds;
 
@@ -142,7 +180,7 @@ int main(int argc, char **argv)
 		rtc_tm.tm_hour, rtc_tm.tm_min, rtc_tm.tm_sec);
 
 	/* Set the alarm to 5 sec in the future, and check for rollover */
-	rtc_tm.tm_sec += 5;
+	rtc_tm.tm_sec += cla.alarm_timeout;
 	if (rtc_tm.tm_sec >= 60) {
 		rtc_tm.tm_sec %= 60;
 		rtc_tm.tm_min++;
@@ -177,7 +215,7 @@ int main(int argc, char **argv)
 		exit(errno);
 	}
 
-	fprintf(stderr, "Waiting 5 seconds for alarm...");
+	fprintf(stderr, "Waiting %d seconds for alarm...", cla.alarm_timeout);
 	fflush(stderr);
 	/* This blocks until the alarm ring causes an interrupt */
 	retval = read(fd, &data, sizeof(unsigned long));
@@ -195,9 +233,7 @@ int main(int argc, char **argv)
 		exit(errno);
 	}
 
-	if (periodic_test == 0) {
-		irqcount = 1;
-	} else {
+	if (cla.periodic_test) {
 		/* Read periodic IRQ rate */
 		retval = ioctl(fd, RTC_IRQP_READ, &tmp);
 		if (retval == -1) {
@@ -210,7 +246,7 @@ int main(int argc, char **argv)
 		fflush(stderr);
 
 		/* The frequencies 128Hz, 256Hz, ... 8192Hz are only allowed for root. */
-		for (tmp = 2; tmp <= 64; tmp *= 2) {
+		for (tmp = cla.start_hz; tmp <= 64; tmp *= 2) {
 
 			retval = ioctl(fd, RTC_IRQP_SET, tmp);
 			if (retval == -1) {
