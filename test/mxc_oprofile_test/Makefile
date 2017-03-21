@@ -1,6 +1,7 @@
 OBJS = $(OBJDIR)/autorun-oprofile.sh
 
 all : $(OBJS)
+	mv $(OBJDIR)/autorun-oprofile.sh $(OBJDIR)/OProfile
 
 .PHONY: clean
 clean :

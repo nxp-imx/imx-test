@@ -38,6 +38,37 @@ all : test
 test:
 	@echo
 	@echo Invoking test make...
+	mkdir -p $(OBJDIR)/ALSA
+	mkdir -p $(OBJDIR)/ASRC
+	mkdir -p $(OBJDIR)/DCIC
+	mkdir -p $(OBJDIR)/Display
+	mkdir -p $(OBJDIR)/Dryice
+	mkdir -p $(OBJDIR)/ECSPI
+	mkdir -p $(OBJDIR)/ENET
+	mkdir -p $(OBJDIR)/ETM
+	mkdir -p $(OBJDIR)/GPU
+	mkdir -p $(OBJDIR)/HDMI
+	mkdir -p $(OBJDIR)/I2C
+	mkdir -p $(OBJDIR)/IIM_Driver
+	mkdir -p $(OBJDIR)/Keyboard
+	mkdir -p $(OBJDIR)/L2_Switch_Driver
+	mkdir -p $(OBJDIR)/Media_Local_Bus
+	mkdir -p $(OBJDIR)/MMC_SD_SDIO_Host
+	mkdir -p $(OBJDIR)/MMDC
+	mkdir -p $(OBJDIR)/OProfile
+	mkdir -p $(OBJDIR)/OWire
+	mkdir -p $(OBJDIR)/Power_Management
+	mkdir -p $(OBJDIR)/Remote_Processor_Messaging
+	mkdir -p $(OBJDIR)/SATA
+	mkdir -p $(OBJDIR)/SDMA_API
+	mkdir -p $(OBJDIR)/Sensors
+	mkdir -p $(OBJDIR)/SIM
+	mkdir -p $(OBJDIR)/SRTC
+	mkdir -p $(OBJDIR)/UART
+	mkdir -p $(OBJDIR)/USB
+	mkdir -p $(OBJDIR)/V4L2
+	mkdir -p $(OBJDIR)/VPU
+	mkdir -p $(OBJDIR)/Watchdog
 	$(MAKE) -C $(TOPDIR)/test
 
 module_test:

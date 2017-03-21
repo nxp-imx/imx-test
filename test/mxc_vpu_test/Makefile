@@ -19,10 +19,10 @@ all: $(TARGET)
 $(TARGET): $(OBJ)
 	$(CC) -o $(TARGET) $(OBJ) ${LIBS} -lvpu -lipu -lrt -lpthread
 	mkdir -p $(OBJDIR)
-	mv $(TARGET) $(OBJDIR)
-	cp autorun-vpu.sh $(OBJDIR)
-	cp ./configs/config* $(OBJDIR)
-	cp ./configs/akiyo.mp4 $(OBJDIR)
+	mv $(TARGET) $(OBJDIR)/VPU
+	cp autorun-vpu.sh $(OBJDIR)/VPU
+	cp ./configs/config* $(OBJDIR)/VPU
+	cp ./configs/akiyo.mp4 $(OBJDIR)/VPU
 
 %.o: %.c
 	$(CC) $(INC) -Wall -O2 -c $^ -o $@

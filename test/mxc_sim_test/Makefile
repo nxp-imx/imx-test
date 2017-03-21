@@ -9,6 +9,7 @@ CFLAGS += $(INC)
 TARGET = $(OBJDIR)/mxc_sim_test.out
 
 all: $(TARGET)
+	mv $(OBJDIR)/mxc_sim_test.out $(OBJDIR)/SIM
 
 $(TARGET): $(OBJS)
 	$(CC) -lpthread -o $(TARGET) $(OBJS)

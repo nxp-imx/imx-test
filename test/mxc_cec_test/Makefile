@@ -13,7 +13,7 @@ LDFLAGS += -lpthread -lcec -lrt -lstdc++ -pthread
 $(TARGET):$(OBJ)
 	$(CC) -o $(TARGET) $(OBJ) $(LDFLAGS) -Os
 	$(STRIP) $(TARGET)
-
+	mv $(TARGET) $(OBJDIR)/HDMI
 
 .PHONY: clean
 clean :

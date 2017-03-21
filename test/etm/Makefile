@@ -2,6 +2,7 @@ OBJS = \
 	$(OBJDIR)/etm
 
 all : $(OBJS)
+	mv $(OBJDIR)/etm $(OBJDIR)/ETM
 
 .PHONY: clean
 clean :

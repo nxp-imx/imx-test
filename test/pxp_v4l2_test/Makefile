@@ -13,13 +13,15 @@ LDFLAGS += -lpthread -lpxp -lstdc++ -pthread
 $(OBJDIR)/pxp_v4l2_test.out : pxp_v4l2_test.o
 	$(CC) -o $(OBJDIR)/pxp_v4l2_test.out pxp_v4l2_test.o $(LDFLAGS) -Os
 	$(STRIP) $(OBJDIR)/pxp_v4l2_test.out
+	mv $(OBJDIR)/pxp_v4l2_test.out $(OBJDIR)/Display
 
 $(OBJDIR)/mx6s_v4l2_capture.out : mx6s_v4l2_capture.o
 	$(CC) -o $(OBJDIR)/mx6s_v4l2_capture.out mx6s_v4l2_capture.o $(LDFLAGS) -Os
 	$(STRIP) $(OBJDIR)/mx6s_v4l2_capture.out
+	mv $(OBJDIR)/mx6s_v4l2_capture.out $(OBJDIR)/V4L2
 
 $(OBJDIR)/pxp_v4l2_out_test.sh: pxp_v4l2_out_test.sh
-	cp pxp_v4l2_out_test.sh $(OBJDIR)
+	cp pxp_v4l2_out_test.sh $(OBJDIR)/Display
 
 .PHONY: clean
 clean :

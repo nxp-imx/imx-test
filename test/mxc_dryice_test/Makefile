@@ -6,6 +6,7 @@
 OBJS = $(OBJDIR)/dryice.sh
 
 all : $(OBJS)
+	mv $(OBJDIR)/dryice.sh $(OBJDIR)/Dryice
 
 .PHONY: clean
 clean :

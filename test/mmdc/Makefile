@@ -14,6 +14,7 @@ all : $(TARGET)
 $(TARGET):$(OBJ)
 	$(CC) -o $(TARGET) $(OBJ) $(LDFLAGS) -Os
 	$(STRIP) $(TARGET)
+	mv $(OBJDIR)/mmdc2 $(OBJDIR)/MMDC
 
 .PHONY: clean
 clean :
