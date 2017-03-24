@@ -21,6 +21,7 @@
 
 #include "hdmi-cec.h"
 #include "../../include/soc_check.h"
+#include "../../include/test_utils.h"
 static int ready_flay = 0;
 int my_hdmi_cec_callback(unsigned char event_type, void *parg)
 {
@@ -52,10 +53,11 @@ int main(int argc, char *argv[])
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
 		printf("mxc_cec_test.out not supported on current soc\n");
+		print_result(argv);
 		return 0;
 	}
 
-	printf("Start CEC testing!\n");
+	print_name(argv);
 	hdmi_cec_init();
 	hdmi_cec_open(Playback_Device,my_hdmi_cec_callback);
 	while(0 == ready_flay){
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
 	sleep(1);
 	hdmi_cec_close(Playback_Device);
 	hdmi_cec_deinit();
-	printf("end of test! \n");
+	print_result(argv);
 	return 0;
 }
 

@@ -306,6 +306,8 @@ int main (int argc, char **argv)
 	char name[256] = "Unknown";
 	int abs[5];
 
+	printf("\n---- Running < %s > test ----\n\n", argv[0]);
+
 	if (argc < 2) {
 		printf("Usage: evtest /dev/input/eventX\n");
 		printf("Where X = input device number\n");

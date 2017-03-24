@@ -23,6 +23,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include "mxc_l2switch_test.h"
+#include "../../include/test_utils.h"
 
 #define SIOCGMIIPHY 0x8947
 #define CMD_MAX_LEN 128
@@ -81,6 +82,8 @@ int main(int argc, char **argv)
 	int sockfd;
 
 	int i, k;
+
+	print_name(argv);
 
 	if (argc < 3)
 		usage();

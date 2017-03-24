@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 echo Setting TV to NTSC mode
 echo U:720x480i-60 > /sys/class/graphics/fb1/mode
 echo 0 > /sys/class/graphics/fb1/blank
@@ -25,4 +30,6 @@ echo Unblank the display
 echo 0 > /sys/class/graphics/fb1/blank
 
 echo 3 > /sys/class/graphics/fb1/blank
+
+print_result
 

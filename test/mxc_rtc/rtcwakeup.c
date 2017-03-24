@@ -13,6 +13,8 @@
 
 #include <linux/rtc.h>
 
+#include "../../include/test_utils.h"
+
 //#define	DEBUG
 
 
@@ -193,6 +195,8 @@ int main(int argc, char **argv)
 	int		t;
 	int		fd;
 	time_t		alarm = 0;
+
+	print_name(argv);
 
 	progname = strrchr(argv[0], '/');
 	if (progname)

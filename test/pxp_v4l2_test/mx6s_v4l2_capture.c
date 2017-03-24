@@ -52,6 +52,7 @@ extern "C"{
 #endif
 
 #include "../../include/soc_check.h"
+#include "../../include/test_utils.h"
 
 sigset_t sigset;
 int quitflag;
@@ -707,6 +708,8 @@ int main(int argc, char **argv)
 	char *soc_list[] = {"i.MX6SLL", "i.MX6ULL", "i.MX6UL",
 			"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
 
+	print_name(argv);
+
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
 		printf("mx6s_v4l2_capture.out not supported on current soc\n");
@@ -737,6 +740,8 @@ int main(int argc, char **argv)
 
 	if (g_mem_type == V4L2_MEMORY_USERPTR)
 		memfree(g_frame_size, TEST_BUFFER_NUM);
+
+	print_result(argv);
 
 	return 0;
 }

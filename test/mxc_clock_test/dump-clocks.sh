@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 if ! mount|grep -sq '/sys/kernel/debug'; then
 	mount -t debugfs none /sys/kernel/debug
 fi
@@ -43,3 +48,4 @@ for foo in $(find /sys/kernel/debug/clk -type d); do
 
     cd $saved_path
 done
+print_result

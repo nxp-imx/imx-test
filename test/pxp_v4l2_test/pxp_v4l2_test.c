@@ -43,6 +43,8 @@
 
 #include "../../include/soc_check.h"
 
+#include "../../include/test_utils.h"
+
 #define MAX_V4L2_DEVICE_NR     64
 
 #define DEFAULT_WIDTH	320
@@ -844,6 +846,8 @@ int main(int argc, char **argv)
 	char *soc_list[] = {"i.MX6SLL", "i.MX6UL",
 				"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
 
+	print_name(argv);
+
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
 		printf("pxp_v4l2_test.out not supported on current soc\n");
@@ -887,6 +891,8 @@ int main(int argc, char **argv)
 			return 1;
 
 	pxp_cleanup(pxp);
+
+	print_result(argv);
 
 	return 0;
 }

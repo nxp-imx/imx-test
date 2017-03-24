@@ -2,6 +2,8 @@
 
 source /unit_tests/test-utils.sh
 
+print_name
+
 mount_test()
 {
 	if ! mount $MSC_DEVICE $MSC_DIR; then

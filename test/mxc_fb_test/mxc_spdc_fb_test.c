@@ -52,7 +52,7 @@ extern "C"{
 #include "fsl_rgb_480x360.c"
 #include "colorbar_rgb_800x600.c"
 #include "vgray_rgb_800x600.c"
-
+#include "../../include/test_utils.h"
 
 #define TFAIL -1
 #define TPASS 0
@@ -1921,6 +1921,8 @@ main(int argc, char **argv)
 	struct fb_fix_screeninfo screen_info_fix;
 
 	int i, rt;
+
+	print_name(argv);
 
 	/* Initialize test map so all tests (except stress test) will run */
 	for(i = 0; i < NUM_TESTS - 1; i++)

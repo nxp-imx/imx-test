@@ -2,6 +2,8 @@
 
 source /unit_tests/test-utils.sh
 
+print_name
+
 STATUS=0
 if [[ $(platform) != i.MX6Q* ]] && [[ $(platform) != i.MX6D* ]]; then
 	echo autorun-ipu.sh not supported on current soc

@@ -1,6 +1,11 @@
 #!/bin/bash
 # demo for dbg_monitor module
 
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 # reset and ungate dbg monitor;
 /unit_tests/memtool 0x21cc000=0;
 
@@ -16,4 +21,5 @@
 # after system hang and wdog auto reset, read address
 # of 0x21cc060, 0x21cc070, 0x21cc080 to get the last
 # axi address, data, master ID, and status.
+print_result
 

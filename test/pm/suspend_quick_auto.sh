@@ -1,6 +1,11 @@
 #!/bin/sh
 # This will only run the quickhit tests.
 
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 i=0;
 while [ "$i" -lt 20000 ];
 do
@@ -10,4 +15,5 @@ do
    echo  suspend $i times
    echo "==============================="
 done
+print_result
 

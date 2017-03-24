@@ -17,11 +17,16 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "../../include/test_utils.h"
+
 void help_info(void);
 
 int main(int argc, const char *argv[])
 {
 	int fd, timeout, sleep_sec, test;
+
+	print_name(argv);
+
 	if (argc < 2) {
 		help_info();
 		return 1;
@@ -54,6 +59,9 @@ int main(int argc, const char *argv[])
 		}
 		sleep(sleep_sec);
 	}
+
+	print_result(argv);
+
 	return 0;
 }
 

@@ -44,6 +44,8 @@ extern "C"{
 #include <string.h>
 #include <malloc.h>
 
+#include "../../include/test_utils.h"
+
 #define TEST_BUFFER_NUM 3
 
 struct testbuffer
@@ -474,6 +476,8 @@ int process_cmdline(int argc, char **argv)
 int main(int argc, char **argv)
 {
         int fd_v4l;
+
+        print_name(argv);
 
         if (process_cmdline(argc, argv) < 0) {
                 return -1;

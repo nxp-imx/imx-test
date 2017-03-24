@@ -26,6 +26,7 @@
 #include "vpu_test.h"
 
 #include "../../include/soc_check.h"
+#include "../../include/test_utils.h"
 
 #define ONE_FRAME_INTERV 100000 // 100 ms
 
@@ -255,6 +256,8 @@ int
 parse_main_args(int argc, char *argv[])
 {
 	int status = 0, opt;
+
+	print_name(argv);
 
 	do {
 		opt = getopt(argc, argv, mainopts);

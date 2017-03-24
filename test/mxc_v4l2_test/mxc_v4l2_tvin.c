@@ -48,6 +48,8 @@ extern "C"{
 #include <linux/mxc_v4l2.h>
 #include <linux/ipu.h>
 
+#include "../../include/test_utils.h"
+
 #define TFAIL -1
 #define TPASS 0
 
@@ -677,6 +679,8 @@ int main(int argc, char **argv)
 	struct mxcfb_gbl_alpha alpha;
 	enum v4l2_buf_type type;
 
+	print_name(argv);
+
 	if (process_cmdline(argc, argv) < 0) {
 		return TFAIL;
 	}
@@ -742,5 +746,6 @@ int main(int argc, char **argv)
 	close(fd_capture_v4l);
 	close(fd_output_v4l);
 	close(fd_fb);
+	print_result(argv);
 	return 0;
 }

@@ -2,6 +2,8 @@
 PATH=$PATH:/unit_tests/modules:$PWD
 source /unit_tests/test-utils.sh
 
+print_name
+
 mod=dryice_test
 loc=/lib/modules/$(kernel_version)/test/$mod.ko
 
@@ -74,5 +76,7 @@ echo "SUMMARY:"
 echo "passed=$n_passed"
 echo "failed=$n_failed"
 echo "total =$n_total"
+
+print_result
 
 exit $n_failed

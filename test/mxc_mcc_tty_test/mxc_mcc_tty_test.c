@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../../include/test_utils.h"
+
 static int uart_speed(int s)
 {
 	switch (s) {
@@ -159,6 +161,8 @@ int main(int argc, char *argv[])
 {
 	int ret;
 
+	print_name(argv);
+
 	if (argc < 5)
 		printf("Usage:\n\t%s <PORT> <READ/WRITE> X Y\n"
 			"X : the group number\n"
@@ -175,6 +179,7 @@ int main(int argc, char *argv[])
 		CHUNKS = atoi(argv[4]);
 		if (CHUNKS < 0) {
 			printf("error chunks, %d\n", CHUNKS);
+			print_result(argv);
 			return 1;
 		}
 
@@ -185,5 +190,6 @@ int main(int argc, char *argv[])
 			real_op(fd, op);
 		}
 	}
+	print_result(argv);
 	return 0;
 }

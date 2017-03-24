@@ -35,6 +35,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include "../../include/test_utils.h"
 
 void usage(void)
 {
@@ -50,6 +51,8 @@ int main(int argc, char **argv)
 	int periodic_test = 1;
 	unsigned long tmp, data;
 	struct rtc_time rtc_tm;
+
+	print_name(argv);
 
 	if (argc != 2) {
 		usage();

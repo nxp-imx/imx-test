@@ -28,6 +28,7 @@
 #include <linux/mxc_mlb.h>
 
 #include "../../include/soc_check.h"
+#include "../../include/test_utils.h"
 
 #define MLB_SYNC_DEV	"/dev/sync"
 #define MLB_CTRL_DEV	"/dev/ctrl"
@@ -68,6 +69,8 @@ int main(int argc, char *argv[])
 	int ret, flags;
 	char test_case_str[10] = { 0 };
 	char *soc_list[] = {"i.MX6SX", "i.MX6QP", "i.MX6Q", "i.MX6DL",  " "};
+
+	print_name(argv);
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {

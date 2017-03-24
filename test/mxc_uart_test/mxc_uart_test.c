@@ -19,6 +19,7 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include "../../include/test_utils.h"
 
 #define LOOPBACK        0x8000
 
@@ -31,7 +32,7 @@ int main(int argc, char **argv)
         int retval = 0;
 	int retries = 5;
 
-        printf("Test: MXC UART!\n");
+        print_name(argv);
         printf("Usage: mxc_uart_test <UART device name, opens UART2 if no dev name is specified>\n");
 
         if (argc == 1) {
@@ -75,5 +76,6 @@ int main(int argc, char **argv)
         retval = tcsetattr(uart_file1, TCSAFLUSH, &old);
 
         close(uart_file1);
+        print_result(argv);
         return 0;
 }

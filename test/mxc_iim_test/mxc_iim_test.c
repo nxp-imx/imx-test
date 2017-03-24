@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "../../include/test_utils.h"
 
 static void print_usage()
 {
@@ -43,6 +44,8 @@ int main(int argc, char *argv[])
 	unsigned int value;
 	char ch_val;
 	char *end_char = NULL;
+
+	print_name(argv);
 
 	if (argc < 4 || argc > 6)
 		goto invalid_param_out;

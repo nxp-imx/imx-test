@@ -109,6 +109,8 @@ int main(int argc, char *argv[])
 	unsigned char rx_buffer[BUFFER_LEN] = {0};
 	char *soc_list[] = {"i.MX6UL", "i.MX7D", " "};
 
+	printf("\n---- Running < %s > test ----\n\n", argv[0]);
+
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
 		printf("sim not supported on current soc\n");

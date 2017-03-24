@@ -18,6 +18,7 @@
 #include <string.h>
 #include <asm-generic/ioctls.h>
 #include <pthread.h>
+#include "../../include/test_utils.h"
 
 #define TIOCM_LOOP      0x8000
 
@@ -408,6 +409,7 @@ void real_op(int fd, char op)
 
 int main(int argc, char* argv[])
 {
+	print_name(argv);
 	if (argc < 8)
 		printf("Usage:\n\t%s <PORT> <BAUDRATE> <F> <R/W/L/D> <X> <Y> <O>\n"
 			"<PORT>: like /dev/ttymxc4\n"
@@ -479,5 +481,6 @@ int main(int argc, char* argv[])
 				real_op(fd, op);
 		}
 	}
+	print_result(argv);
 	return 0;
 }

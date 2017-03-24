@@ -20,7 +20,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-
 int test() {
   char buf[48];
   int fd;
@@ -46,8 +45,9 @@ int test() {
 }
 
 int main(int argc,char **argv) {
+  printf("\n---- Running < %s > test ----\n\n", argv[0]);
   test();
-
+  printf("\n----  Test < %s > ended  ----\n\n", argv[0]);
   return 0;
 }
 

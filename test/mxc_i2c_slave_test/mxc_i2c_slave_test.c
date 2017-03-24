@@ -19,6 +19,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <pthread.h>
+#include "../../include/test_utils.h"
 
 #define I2C_SLAVE_FORCE 0x0706
 
@@ -100,6 +101,8 @@ int main(int argc, char *argv[])
 	int fd;
 	int ret, i;
 	pthread_t slave_thread_id;
+
+	print_name(argv);
 
 	fd = open(I2C_MASTER_DEV, O_RDWR);
 	if (fd < 0) {

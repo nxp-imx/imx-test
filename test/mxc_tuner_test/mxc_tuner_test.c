@@ -22,6 +22,8 @@
 #include <sys/stat.h>
 #include <linux/videodev2.h>
 
+#include "../../include/test_utils.h"
+
 #define TRIES		25		/* Get 25 samples */
 #define LOCKTIME	400000		/* Wait 400ms for card to lock on */
 #define SAMPLEDELAY	15000		/* Wait 15ms between samples */
@@ -56,6 +58,8 @@ int main(int argc, char **argv)
 	struct stat buf;
 	struct v4l2_control vctl;
 	char *dev = NULL;
+
+	print_name(argv);
 
 	/* Check if using si476x drivers, return 0 means true */
 	core = stat("/sys/bus/i2c/drivers/si476x-core", &buf);
@@ -214,5 +218,6 @@ int main(int argc, char **argv)
 	}while (n_selection != TUNER_EXIT);
 
 	close(fd);
+	print_result(argv);
 	return 0;
 }

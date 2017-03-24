@@ -1,6 +1,9 @@
 #!/bin/bash
 
+# standardization of Unit Test
 source /unit_tests/test-utils.sh
+
+print_name
 
 STATUS=0
 if [[ $(platform) != i.MX6Q* ]] && [[ $(platform) != i.MX6D* ]] \
@@ -45,3 +48,4 @@ sleep 1
 time=`cat /sys/kernel/debug/gc/idle | awk '{printf "%.2f", $7/10000000.0}'`
 echo "Idle percentage:"$time"%"
 echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+print_result

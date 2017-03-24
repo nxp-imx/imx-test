@@ -1,4 +1,10 @@
 #!/bin/sh
+
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 i=0;
 t=2;
 d=5;
@@ -16,3 +22,4 @@ do
 	d=`expr $r % 20 + 1`;
 	echo wakeup $t seconds, sleep $d seconds;
 done
+print_result

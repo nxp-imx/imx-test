@@ -446,7 +446,7 @@ int main(int ac, char *av[])
 	outclk = OUTCLK_ASRCK1_CLK;
 	convert_flag = 0;
 	pair_index = ASRC_INVALID_PAIR;
-	printf("Hi... \n");
+	printf("\n---- Running < %s > test ----\n\n", av[0]);
 
 	if (ac < 5) {
 		help_info(ac, av);

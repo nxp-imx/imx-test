@@ -2,6 +2,8 @@
 
 source /unit_tests/test-utils.sh
 
+print_name
+
 if [[ $(platform) != i.MX6Q* ]] && [[ $(platform) != i.MX6D* ]] \
 && [[ $(platform) != i.MX6SX ]] && [[ $(platform) != i.MX6SL ]]; then
 	echo gpu.sh not supported on current soc
@@ -31,3 +33,4 @@ cd /opt/viv_samples/hal/ && ./tvui
 #restore the directory
 #
 popd
+print_result

@@ -15,6 +15,8 @@
 
 source /unit_tests/test-utils.sh
 
+print_name
+
 run_test_id()
 {
 	SINGLE_STATUS=

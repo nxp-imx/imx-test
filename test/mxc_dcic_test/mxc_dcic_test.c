@@ -429,6 +429,8 @@ int main(int argc, char **argv)
 	int retval = TPASS;
 	struct fb_var_screeninfo screen_info;
 
+	printf("\n---- Running < %s > test ----\n\n", argv[0]);
+
 	if (process_cmdline(argc, argv) < 0) {
 		return -1;
 	}

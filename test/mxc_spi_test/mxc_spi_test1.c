@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <linux/types.h>
 #include <linux/spi/spidev.h>
+#include "../../include/test_utils.h"
 
 #define BUF_MAX_SIZE	0x1000
 #define DEV_SPI1	"/dev/spidev1.4"
@@ -229,6 +230,8 @@ int main(int argc, char **argv)
 	int bytes, len;
 	int res;
 	int i;
+
+	print_name(argv);
 
 	if (argc <= 1) {
 		help_info(argv[0]);

@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 kernel_ver=2.6.22
 
 if [ -f /lib/modules/$kernel_ver/kernel/drivers/net/irda/mxc_ir.ko ]; then
@@ -41,3 +46,4 @@ else
 	fi
 	irattach $IRDA_PORT -s
 fi
+print_result

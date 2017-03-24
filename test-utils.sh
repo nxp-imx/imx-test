@@ -4,6 +4,18 @@
 # If one test case fails, this script keeps running the rest of the
 # tests.  Exit status is PASS only if all cases pass.
 #
+print_name()
+{
+	script=$(basename $0)
+	printf "\n---- Running < $script > test ----\n"
+}
+
+print_result()
+{
+	script=$(basename $0)
+	printf "\n----  Test < $script > ended  ----\n"
+}
+
 run_testcase()
 {
 	script=$(basename $0)

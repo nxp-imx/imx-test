@@ -46,6 +46,8 @@ extern "C"{
 #include <linux/mxc_v4l2.h>
 #include <linux/ipu.h>
 
+#include "../../include/test_utils.h"
+
 #define TFAIL -1
 #define TPASS 0
 
@@ -522,6 +524,8 @@ main(int argc, char **argv)
 	struct v4l2_crop icrop;
 	FILE * fd_in;
 	int retval = TPASS;
+
+    print_name(argv);
 
         if (process_cmdline(argc, argv) < 0) {
                 printf("MXC Video4Linux Output Device Test\n\n" \

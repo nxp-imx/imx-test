@@ -53,6 +53,7 @@ extern "C"{
 #include "ginger_rgb_800x600.c"
 #include "fsl_rgb_480x360.c"
 #include "colorbar_rgb_800x600.c"
+#include "../../include/test_utils.h"
 
 
 #define TFAIL -1
@@ -2297,6 +2298,8 @@ main(int argc, char **argv)
 	struct fb_fix_screeninfo screen_info_fix;
 
 	int i, rt;
+
+	print_name(argv);
 
 	if ((retval = mxc_epdc_con_init()) < 0)
 		goto err0;

@@ -36,6 +36,7 @@ extern "C"{
 #include <sys/types.h>
 #include <linux/isl29023.h>
 #include <linux/input.h>
+#include "../../include/test_utils.h"
 
 #define TFAIL		-1
 #define TPASS 		0
@@ -94,6 +95,8 @@ int main(int argc, char **argv)
 	char temp_path[50] = {0};
 	char phys[6];
 	struct input_event event;
+
+	print_name(argv);
 
 	inputdir = opendir(INPUT_DIR_BASE);
 	if (inputdir == NULL)

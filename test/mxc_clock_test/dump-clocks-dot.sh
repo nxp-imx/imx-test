@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# standardization of Unit Test
+source /unit_tests/test-utils.sh
+
+print_name
+
 if [ $# -gt 0 ]; then
 	echo "Usage:"
 	echo "	1. run '$0 > d.txt' on Target Board"
@@ -67,3 +72,5 @@ for foo in $(find /sys/kernel/debug/clk -type d); do
 done
 
 printf "}\n"
+
+print_result

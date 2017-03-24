@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include <linux/mxcfb.h>
+#include "../../include/test_utils.h"
 
 
 int fd_fb = 0;
@@ -46,6 +47,8 @@ main(int argc, char **argv)
 	unsigned int total_time;
         char fbdev[] = "/dev/fb0";
         struct timeval tv_start, tv_current;
+
+        print_name(argv);
 
         if (argc != 3) {
                 printf("Usage:\n\n%s <fb #> <count>\n\n", argv[0]);

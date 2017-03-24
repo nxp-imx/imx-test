@@ -4,6 +4,8 @@
 
 source /unit_tests/test-utils.sh
 
+print_name
+
 #
 # Exit status is 0 for PASS, nonzero for FAIL
 #

@@ -40,6 +40,8 @@ extern "C"{
 #include <string.h>
 #include <malloc.h>
 
+#include "../../include/test_utils.h"
+
 #define ipu_fourcc(a,b,c,d)\
         (((__u32)(a)<<0)|((__u32)(b)<<8)|((__u32)(c)<<16)|((__u32)(d)<<24))
 
@@ -282,6 +284,8 @@ int main(int argc, char **argv)
         int fd_v4l;
         int i;
 	int ret;
+
+        print_name(argv);
 
         for (i = 1; i < argc; i++) {
                 if (strcmp(argv[i], "-w") == 0) {

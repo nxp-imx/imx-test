@@ -28,6 +28,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <stdlib.h>
+#include "../../include/test_utils.h"
 
 
 #define DEFAULT_RATE 115200;
@@ -246,6 +247,8 @@ int main(int argc, char *argv[])
 	pthread_t p_Uartsend, p_Uartread;
 	void *thread_res;
 
+	print_name(argv);
+
 	if (argc < 2 || strncmp(argv[1], "/dev/ttymxc", 11)) {
 		print_usage(argv[0]);
 		return -1;
@@ -350,7 +353,7 @@ int main(int argc, char *argv[])
 error:
 	fclose(furead);
 	close(fd);
-	printf("test exit\n");
+	print_result(argv);
 
 	return 0;
 }

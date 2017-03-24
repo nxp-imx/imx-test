@@ -302,6 +302,8 @@ int main(int argc, char **argv)
 	int ret;
 	char *soc_list[] = {"i.MX6UL", " "};
 
+	printf("\n---- Running < %s > test ----\n\n", argv[0]);
+
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
 		printf("acctest.out not supported on current soc\n");

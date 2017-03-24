@@ -34,6 +34,7 @@
 #include <linux/mxcfb.h>
 #include "mxc_ipudev_test.h"
 #include "../../include/soc_check.h"
+#include "../../include/test_utils.h"
 
 #define PAGE_ALIGN(x) (((x) + 4095) & ~4095)
 int ctrl_c_rev = 0;
@@ -180,6 +181,8 @@ int main(int argc, char *argv[])
 	struct fb_fix_screeninfo fb_fix;
 	int blank;
 	char *soc_list[] = {"i.MX6Q", "i.MX6QP", "i.MX6DL", " "};
+
+	print_name(argv);
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {

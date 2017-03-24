@@ -48,6 +48,7 @@ extern "C"{
 #include <signal.h>
 
 #include <linux/mxcfb.h>
+#include "../../include/test_utils.h"
 
 #define TFAIL -1
 #define TPASS 0
@@ -599,6 +600,8 @@ main(int argc, char **argv)
 	int ret = 0;
 	struct sigaction act;
 	struct v4l2_dbg_chip_ident chip;
+
+	print_name(argv);
 
 	/* for ctrl-c */
 	sigemptyset(&act.sa_mask);

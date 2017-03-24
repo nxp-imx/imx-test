@@ -2,6 +2,8 @@
 
 source /unit_tests/test-utils.sh
 
+print_name
+
 STATUS=0
 if [[ $(platform) = i.MX6Q* ]] || [[ $(platform) = i.MX6D* ]]; then
 	echo pxp_v4l2_out_test.sh not supported on current soc

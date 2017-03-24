@@ -35,6 +35,8 @@
 #include "pxp_test.h"
 #include "fsl_logo_480x360.h"
 
+#include "../../include/test_utils.h"
+
 #define DBG_DEBUG		3
 #define DBG_INFO		2
 #define DBG_WARNING		1
@@ -494,6 +496,8 @@ int main(int argc, char *argv[])
 	int i, err, nargc;
 	char *pargv[32] = {0};
 
+	print_name(argv);
+
 	err = parse_main_args(argc, argv);
 	if (err) {
 		goto usage;
@@ -529,6 +533,8 @@ int main(int argc, char *argv[])
 			close_files(&input_arg[i].cmd);
 		}
 	}
+
+	print_result(argv);
 
 	return 0;
 usage:
