@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -59,10 +60,13 @@ int main(int argc, char **argv)
 	ioctl(uart_file1, TIOCMSET, &line_val);
 	printf("Test: IOCTL Set\n");
 
+	tcflush(uart_file1, TCIOFLUSH);
+
 	write(uart_file1, MESSAGE, MESSAGE_SIZE);
 	printf("Data Written= %s\n", MESSAGE);
 
 	sleep(1);
+	memset(buf, 0, MESSAGE_SIZE);
 	while (retries-- && retval < 5)
 		retval += read(uart_file1, buf + retval, MESSAGE_SIZE - retval);
 	printf("Data Read back= %s\n", buf);
@@ -72,6 +76,14 @@ int main(int argc, char **argv)
 	retval = tcsetattr(uart_file1, TCSAFLUSH, &old);
 
 	close(uart_file1);
+
+	if (memcmp(buf, MESSAGE, MESSAGE_SIZE)) {
+		printf("Data read back %s is different than data sent %s\n",
+			buf, MESSAGE);
+		print_result(argv);
+		return 1;
+	}
+
 	print_result(argv);
 	return 0;
 }
