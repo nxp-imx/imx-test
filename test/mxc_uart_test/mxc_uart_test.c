@@ -35,17 +35,8 @@ int main(int argc, char **argv)
 	int retries = 5;
 
 	print_name(argv);
-	printf("Usage: mxc_uart_test <UART device name, opens UART2 if no dev name is specified>\n");
 
-	if (argc == 1) {
-		/* No Args, open UART 2 */
-		if ((uart_file1 = open("/dev/ttymxc/1", O_RDWR)) == -1) {
-			printf("Error opening UART 2\n");
-			exit(1);
-		} else {
-			printf("Test: UART 2 opened\n");
-		}
-	} else {
+	if (argc == 2) {
 		/* Open the specified UART device */
 		if ((uart_file1 = open(*++argv, O_RDWR)) == -1) {
 			printf("Error opening %s\n", *argv);
@@ -53,6 +44,9 @@ int main(int argc, char **argv)
 		} else {
 			printf("%s opened\n", *argv);
 		}
+	} else {
+		printf("Usage: mxc_uart_test <UART device name>\n");
+		exit(1);
 	}
 
 	tcgetattr(uart_file1, &old);
