@@ -22,6 +22,8 @@
 #include "../../include/test_utils.h"
 
 #define LOOPBACK	0x8000
+#define MESSAGE		"Test\0"
+#define MESSAGE_SIZE	sizeof(MESSAGE)
 
 int main(int argc, char **argv)
 {
@@ -63,12 +65,12 @@ int main(int argc, char **argv)
 	ioctl(uart_file1, TIOCMSET, &line_val);
 	printf("Test: IOCTL Set\n");
 
-	write(uart_file1, "Test\0", 5);
-	printf("Data Written= Test\n");
+	write(uart_file1, MESSAGE, MESSAGE_SIZE);
+	printf("Data Written= %s\n", MESSAGE);
 
 	sleep(1);
 	while (retries-- && retval < 5)
-		retval += read(uart_file1, buf + retval, 5 - retval);
+		retval += read(uart_file1, buf + retval, MESSAGE_SIZE - retval);
 	printf("Data Read back= %s\n", buf);
 	sleep(2);
 	ioctl(uart_file1, TIOCMBIC, &line_val);
