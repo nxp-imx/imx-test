@@ -138,7 +138,7 @@ int CHUNKS = 100;
 #define RECORDS	20
 static int record[RECORDS];
 
-void r_op(void *arg)
+void* r_op(void *arg)
 {
 	int fd = *(int*)arg;
 	int nfds;
@@ -148,6 +148,7 @@ void r_op(void *arg)
 	int count;
 	fd_set rfds;
 	struct timeval tv;
+	int res = 0;
 
 	nfds = fd;
 	tv.tv_sec = 15;
@@ -213,8 +214,10 @@ void r_op(void *arg)
 		}
 	}
 	printf("\nread done : total : %d\n", total);
-	if (k > 0)
+	if (k > 0) {
 		printf("too many errors or empty read\n");
+		res = -1;
+	}
 
 	if (i == CHUNKS)
 		printf("\t read : %d calls issued, %d bytes per call\n",
@@ -223,9 +226,11 @@ void r_op(void *arg)
 		printf("\t%d read calls isued\n"
 			"\t total : %d\n",
 			i, total);
+	*(int*)arg = res;
+	return arg;
 }
 
-void w_op(void *arg)
+void* w_op(void *arg)
 {
 	int fd = *(int *)arg;
 	int nfds;
@@ -235,6 +240,7 @@ void w_op(void *arg)
 	int count;
 	fd_set rfds;
 	struct timeval tv;
+	int *res;
 
 	nfds = fd;
 	tv.tv_sec = 15;
@@ -266,8 +272,10 @@ void w_op(void *arg)
 		}
 	}
 	printf("\nwrite done : total : %d\n", total);
-	if (k > 0)
+	if (k > 0) {
 		printf("too many errors or empty write\n");
+		res = -1;
+	}
 
 	if (i == CHUNKS)
 		printf("\t write : %d calls issued, %d bytes per call\n",
@@ -276,28 +284,40 @@ void w_op(void *arg)
 		printf("\t%d write calls isued\n"
 			"\t total : %d\n",
 			i, total);
+	*(int*)arg = res;
+	return arg;
 }
 
 int real_op_loop(int fd)
 {
 	pthread_t rid, wid;
 	char tmp[10];
-	int ret;
+	int ret, arg = fd;
+	int *res;
 
-	ret = pthread_create(&wid, NULL, (void *)w_op, &fd);
+	ret = pthread_create(&wid, NULL, &w_op, &arg);
 	if (ret != 0) {
 		printf("Create write thread failed\n");
 		return -1;
 	}
 
-	ret = pthread_create(&rid, NULL, (void *)r_op, &fd);
+	ret = pthread_create(&rid, NULL, &r_op, &arg);
 	if (ret != 0) {
 		printf("Create read thread failed\n");
 		return -1;
 	}
 
-	pthread_join(wid, NULL);
-	pthread_join(rid, NULL);
+	ret = pthread_join(wid, (void**)&res);
+	if (ret || *res) {
+		printf("Write thread had failures\n");
+		return -1;
+	}
+
+	ret = pthread_join(rid, (void**)&res);
+	if (ret || *res) {
+		printf("Read thread had failures\n");
+		return -1;
+	}
 
 	return 0;
 }
@@ -397,8 +417,10 @@ int real_op(int fd, char op)
 	}
 	printf("\ndone : total : %d\n", total);
 
-	if (k > 0)
+	if (k > 0) {
 		printf("too many errors or empty %ss\n", opstr);
+		return -1;
+	}
 
 	if (i == CHUNKS)
 		printf("\t %s : %d calls issued, %d bytes per call\n",
