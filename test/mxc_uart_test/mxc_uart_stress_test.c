@@ -143,7 +143,7 @@ void* r_op(void *arg)
 	int fd = *(int*)arg;
 	int nfds;
 	char tmp[1024];
-	int i = 0, j = -1, k = 0, r;
+	int i = 0, j = -1, k = 0, ret;
 	size_t total = 0, max = 0, min = 0;
 	int count;
 	fd_set rfds;
@@ -151,8 +151,6 @@ void* r_op(void *arg)
 	int res = 0;
 
 	nfds = fd;
-	tv.tv_sec = 15;
-	tv.tv_usec = 0;
 
 	/* init buffer */
 	for (i = 0; i < CHUNK_SIZE; i++)
@@ -162,18 +160,26 @@ void* r_op(void *arg)
 	while (total < (CHUNK_SIZE * CHUNKS) && k < 10)
 	{
 		i++;
-		/*
+
 		FD_ZERO(&rfds);
 		FD_SET(fd, &rfds);
-		r = select(nfds + 1, &rfds, NULL, NULL, &tv);
-		*/
-		r = 1;
+
+		tv.tv_sec = 15;
+		tv.tv_usec = 0;
+
+		ret = select(nfds + 1, &rfds, NULL, NULL, &tv);
+
 		/* clear it first */
 		memset(tmp, 0, sizeof(tmp));
-		if (r > 0)
+
+		if (ret == -1) {
+			perror("select");
+			count = 0;
+		} else if (ret) {
 			count = read(fd, tmp, CHUNK_SIZE);
-		else {
+		} else {
 			printf("timeout\n");
+			k++;
 			count = 0;
 		}
 
