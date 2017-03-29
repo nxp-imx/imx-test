@@ -18,6 +18,7 @@
 #include <string.h>
 #include <asm-generic/ioctls.h>
 #include <pthread.h>
+#include <sys/ioctl.h>
 #include "../../include/test_utils.h"
 
 #define TIOCM_LOOP      0x8000
