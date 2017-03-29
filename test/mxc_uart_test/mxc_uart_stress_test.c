@@ -198,6 +198,7 @@ void* r_op(void *arg)
 					continue;
 				} else {
 					bad = 1;
+					k++;
 					printf("%d (should be %x): but %x\n",
 						v, ((sum % CHUNK_SIZE) + 1) % 0x100, tmp[v]);
 				}
@@ -400,6 +401,7 @@ int real_op(int fd, char op)
 						continue;
 					} else {
 						bad = 1;
+						k++;
 						printf("%d (should be %x): but %x\n",
 							v, ((sum % CHUNK_SIZE) + 1) % 0x100, tmp[v]);
 					}
