@@ -2,6 +2,7 @@ OBJS += $(OBJDIR)/mxc_dcic_test.out
 
 all : $(OBJS)
 	mv $(OBJDIR)/mxc_dcic_test.out $(OBJDIR)/DCIC
+	cp README $(OBJDIR)/DCIC
 
 .PHONY: clean
 clean :

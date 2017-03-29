@@ -1,0 +1,68 @@
+Clocks README
+~~~~~~~~~~~~~
+
+dump-clocks.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Print clocks' table.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Power_Management# ./dump-clocks.sh
+
+| Expected Result |
+Information about clocks is printed on console.
+
+|====================================================================
+
+<<<
+
+dump-clocks-dot.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Print clocks' info.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Power_Management# ./dump-clocks-dot.sh
+
+| Expected Result |
+Information about clocks is printed on console.
+
+|====================================================================
+
+<<<

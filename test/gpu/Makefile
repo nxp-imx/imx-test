@@ -4,6 +4,7 @@ OBJS = $(OBJDIR)/gpu.sh \
 all: $(OBJS)
 	mv $(OBJDIR)/gpu.sh $(OBJDIR)/GPU
 	mv $(OBJDIR)/gpuinfo.sh $(OBJDIR)/GPU
+	cp README $(OBJDIR)/GPU
 
 .PHONY: clean
 clean:

@@ -7,6 +7,7 @@ all : $(OBJS)
 	mv $(OBJDIR)/autorun-mxc_uart.sh $(OBJDIR)/UART
 	mv $(OBJDIR)/mxc_uart_xmit_test.out $(OBJDIR)/UART
 	mv $(OBJDIR)/mxc_uart_stress_test.out $(OBJDIR)/UART
+	cp README $(OBJDIR)/UART
 
 .PHONY: clean
 clean :

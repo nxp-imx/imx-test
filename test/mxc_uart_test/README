@@ -1,0 +1,98 @@
+UART README
+~~~~~~~~~~~
+
+autorun-mxc_uart.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_uart_stress_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_uart_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_uart_xmit_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<

@@ -1,0 +1,39 @@
+MMDC README
+~~~~~~~~~~~
+
+mmdc2
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MMDC Profiling Tool
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/MMDC# ./mmdc2 [ARM:DSP1:DSP2:GPU2D:GPU2D1:GPU2D2:GPU3D:GPU3D2:GPUVG:VPU:M4:PXP:USB:SUM] [...]
+
+ export MMDC_SLEEPTIME - define profiling duration (500ms by default)
+ export MMDC_LOOPCOUNT - define profiling times (1 by default, -1 means infinite loop)
+ export MMDC_CUST_MADPCR1 - customize madpcr1
+
+| Expected Result |
+Print profiling results.
+
+|====================================================================
+
+<<<

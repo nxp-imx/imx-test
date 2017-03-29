@@ -5,6 +5,7 @@ OBJS = \
 all : $(OBJS)
 	mv $(OBJDIR)/mxc_tuner_test.out $(OBJDIR)/ALSA
 	mv $(OBJDIR)/mxc_tuner_test.sh $(OBJDIR)/ALSA
+	cp README_tuner $(OBJDIR)/ALSA
 
 .PHONY: clean
 clean :

@@ -1,0 +1,609 @@
+V4L2 README
+~~~~~~~~~~~
+
+autorun-v4l2.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+V4L2 auto-test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/V4L2# ./autorun-v4l2.sh > log
+
+.Note
+There are some cases which v4l2 output can not support by IPU, which will return error by v4l2 set format fail or set crop fail etc, pls check the log for this except case.
+
+If need full test, please run test after export FULLTEST=1
+
+| Expected Result |
+"PASS test case:xxxx" should be print.
+
+|====================================================================
+
+<<<
+
+mx6s_v4l2_capture.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_capture.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Camera preview - rotated.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Camera and display required.
+
+| Test Procedure |
+. Check that /dev/video0 exists. If it does not exist, load the camera driver with
+the command:
+
+ # modprobe mxc_v4l2_capture
+
+ # modprobe CAMERA_MODULE
+ (CAMERA_MODULE should be replaced by the camera module on the related platform,
+ e.g. ov3640_camera should be used here on MX51)
+
+Check again for /dev/video0. If it is not there, the camera driver has not loaded
+successfully and the test has failed.
+
+. Run:
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 640 -ih 480 -it 0 -il 0 -ow 160 -oh 160 -ot 20 -ol 20 -r 4 -t 50 -do 0 -fr 30
+
+Direct preview (90 degree rotation) the camera to the background, and set framerate
+to 30 fps.
+
+| Expected Result |
+The image from the camera is displayed on the screen rotated by 90 degrees. Colors
+and image should be correct.
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_capture.out - MIPI CSI
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MIPI CSI Capture.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+OV5640 sensor and MIPI extension board are required.
+
+| Test Procedure |
+. Check that /dev/video1 exists. If it does not exist, load the camera driver with
+the command:
+
+ # modprobe mxc_v4l2_capture
+
+ # modprobe CAMERA_MODULE
+ (CAMERA_MODULE should be replaced by the camera module on the related platform,
+ e.g. ov5640_camera_mipi should be used here on MX6Q).
+
+Check again for /dev/video1. If it is not there, the camera driver has not loaded
+successfully and the test has failed.
+
+. Type the following command lines in a writable directory. The 50 frames of video
+from the camera will be captured in the file "test.yuv" for each resolution. The
+format will be YUV420.
+
+*Test CSI->SMFC->MEM:*
+
+Test 1.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 640 -ih 480 -ow 640 -oh 480 -m 0 -i 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 2.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 320 -ih 240 -ow 320 -oh 240 -m 1 -i 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 3.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 720 -ih 480 -ow 720 -oh 480 -m 2 -i 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 4.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 720 -ih 576 -ow 720 -oh 576 -m 3 -i 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 5.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 1280 -ih 720 -ow 1280 -oh 720 -m 4 -i 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 6.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 1920 -ih 1080 -ow 1920 -oh 1080 -m 5 -i 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 7.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 2592 -ih 1944 -ow 2592 -oh 1944 -m 6 -i 1 -r 0 -c 50 -fr 15 -d /dev/video1 test.yuv
+
+*Test CSI->PRP->MEM:*
+
+Test 8.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 640 -ih 480 -ow 640 -oh 480 -m 0 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 9.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 320 -ih 240 -ow 640 -oh 480 -m 1 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 10.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 720 -ih 480 -ow 640 -oh 480 -m 2 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 11.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 720 -ih 576 -ow 640 -oh 480 -m 3 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 12.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 1280 -ih 720 -ow 640 -oh 480 -m 4 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 13.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 1920 -ih 1080 -ow 640 -oh 480 -m 5 -r 0 -c 50 -fr 30 -d /dev/video1 test.yuv
+
+Test 14.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 2592 -ih 1944 -ow 640 -oh 480 -m 6 -r 0 -c 50 -fr 15 -d /dev/video1 test.yuv
+
+| Expected Result |
+There should be no errors or warnings. The file "test.yuv" will be created.
+
+To display the video at the resolution of 640x480, use the command line below
+(a different resolution may be used depending on display size), then verify captured
+file contents match viewfinder and that the image is clear and the colors correct.
+
+For Test 1:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 640 -ih 480 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 2:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 320 -ih 240 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 3:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 720 -ih 480 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 4:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 720 -ih 576 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 5:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 1280 -ih 720 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 6:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 1920 -ih 1080 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 7:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 2592 -ih 1944 -ow 640 -oh 480 -r 0 -fr 15 test.yuv
+
+For Test 8-13:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 640 -ih 480 -ow 640 -oh 480 -r 0 -fr 30 test.yuv
+
+For Test 14:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 640 -ih 480 -ow 640 -oh 480 -r 0 -fr 15 test.yuv
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_output.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+V4L2 video capture and display test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Camera and display required.
+
+| Test Procedure |
+Check that /dev/video0 exists. If it does not exist, load the camera driver with
+the command:
+
+ # modprobe mxc_v4l2_capture
+
+ # modprobe CAMERA_MODULE
+ (CAMERA_MODULE should be replaced by the camera module on the related platform,
+ e.g. ov3640_camera should be used here on MX51)
+
+Check again for /dev/video0. If it is not there, the camera driver has not loaded
+successfully and the test has failed.
+
+. Type the following command line in a writable directory. The 50 frames of video
+from the camera will be captured in the file "test.yuv" at a resolution of 352x288
+with no rotation and a frame rate of 30 fps. The format will be YUV420.
+
+ /unit_tests/V4L2# ./mxc_v4l2_capture.out -iw 352 -ih 288 -ow 352 -oh 288 -r 0 -c 50 -fr 30 test.yuv
+
+| Expected Result |
+There should be no errors or warnings. The file "test.yuv" will be created with
+a size of 7603200.
+
+To display the video at the resolution of 176x144, use the command line below
+(a different resolution may be used depending on display size):
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 352 -ih 288 -ow 176 -oh 144 -r 0 -fr 30 test.yuv
+
+Verify captured file contents match viewfinder and that the image is clear and
+the colors correct.
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_output.out - TV OUT
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+TV-Out test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+*Test PAL mode:*
+
+ #>echo U:720x576i-50 > /sys/class/graphics/fb1/mode
+ #>echo 0 > /sys/class/graphics/fb1/blank
+ #>/unit_tests/V4L2# ./mxc_v4l2_output.out -iw 320 -ih 240 -ow 720 -oh 576 -d 5
+
+*Test NTSC mode:*
+
+ #>echo U:720x480i-60 > /sys/class/graphics/fb1/mode
+ #>echo 0 > /sys/class/graphics/fb1/blank
+ #>/unit_tests/V4L2# ./mxc_v4l2_output.out -iw 320 -ih 240 -ow 720 -oh 480 -d 5
+
+*Test 720p mode:*
+
+. Add "hdtv" in the boot command line;
+. After the system boot up, execute:
+
+ #>echo U:1280x720p-60 > /sys/class/graphics/fb1/mode
+ #>echo 0 > /sys/class/graphics/fb1/blank
+ #>/unit_tests/V4L2# ./mxc_v4l2_output.out -iw 320 -ih 240 -ow 720 -oh 480 -d 5
+
+| Expected Result |
+Color bar display on the TV.
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_overlay.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Camera preview.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Camera and display are required.
+
+| Test Procedure |
+Check that /dev/video0 exists. If it does not exist, load the camera driver with
+the command:
+
+ # modprobe mxc_v4l2_capture
+
+ # modprobe CAMERA_MODULE
+ (CAMERA_MODULE should be replaced by the camera module on the related platform,
+ e.g. ov3640_camera should be used here on MX51)
+
+Check again for /dev/video0. If it is not there, the camera driver has not loaded
+successfully and the test has failed.
+
+. Run:
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 640 -ih 480 -it 0 -il 0 -ow 160 -oh 160 -ot 20 -ol 20 -r 0 -t 50 -do 0 -fg -fr 30
+
+| Expected Result |
+The image from the camera is displayed on the screen. Colors and image should be
+correct.
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_overlay.out - MIPI CSI
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MIPI CSI preview.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+OV5640 sensor, MIPI extension board and display are required.
+
+| Test Procedure |
+Check that /dev/video1 exists. If it does not exist, load the camera driver with
+the command:
+
+ # modprobe mxc_v4l2_capture
+
+ # modprobe CAMERA_MODULE
+ (CAMERA_MODULE should be replaced by the camera module on the related platform,
+ e.g. ov5640_camera_mipi should be used here on MX6Q)
+
+Check again for /dev/video1. If it is not there, the camera driver has not loaded
+successfully and the test has failed.
+
+Type commands to direct preview the camera to the foreground/background, and set
+the frame rate to 30 fps, the preview size is 640 X 480 with a starting offset of
+(0,0). Use mxc_v4l2_overlay.out -help to see usage.
+
+*Test foreground display:*
+
+Test 1.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 640 -ih 480 -ow 640 -oh 480 -m 0 -di /dev/video1 -fg
+
+Test 2.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 320 -ih 240 -ow 640 -oh 480 -m 1 -di /dev/video1 -fg
+
+Test 3.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 720 -ih 480 -ow 640 -oh 480 -m 2 -di /dev/video1 -fg
+
+Test 4.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 720 -ih 576 -ow 640 -oh 480 -m 3 -di /dev/video1 -fg
+
+Test 5.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 1280 -ih 720 -ow 640 -oh 480 -m 4 -di /dev/video1 -fg
+
+Test 6.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 1920 -ih 1080 -ow 640 -oh 480 -m 5 -di /dev/video1 -fg
+
+Test 7.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 2592 -ih 1944 -ow 640 -oh 480 -m 6 -fr 15 -di /dev/video1 -fg
+
+*Test background display:*
+
+Test 8.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 640 -ih 480 -ow 640 -oh 480 -m 0 -di /dev/video1 -bg
+
+Test 9.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 320 -ih 240 -ow 640 -oh 480 -m 1 -di /dev/video1 -bg
+
+Test 10.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 720 -ih 480 -ow 640 -oh 480 -m 2 -di /dev/video1 -bg
+
+Test 11.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 720 -ih 576 -ow 640 -oh 480 -m 3 -di /dev/video1 -bg
+
+Test 12.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 1280 -ih 720 -ow 640 -oh 480 -m 4 -di /dev/video1 -bg
+
+Test 13.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 1920 -ih 1080 -ow 640 -oh 480 -m 5 -di /dev/video1 -bg
+
+Test 14.
+
+ /unit_tests/V4L2# ./mxc_v4l2_overlay.out -iw 2592 -ih 1944 -ow 640 -oh 480 -m 6 -fr 15 -di /dev/video1 -bg
+
+| Expected Result |
+The image from the camera is displayed on the screen. Colors and image should be
+correct.
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_still.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+V4L2 still image capture and display test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Camera and display required.
+
+| Test Procedure |
+Check that /dev/video0 exists. If it does not exist, load the camera driver with
+the command:
+
+ # modprobe mxc_v4l2_capture
+
+ # modprobe CAMERA_MODULE
+ (CAMERA_MODULE should be replaced by the camera module on the related platform,
+ e.g. ov3640_camera should be used here on MX51)
+
+Check again for /dev/video0. If it is not there, the camera driver has not loaded
+successfully and the test has failed.
+
+Type the following command line in a writable directory. A still image at the
+resolution of 640x480 will be saved in the file "still.yuv" in the format YUV422
+planar.
+
+ /unit_tests/V4L2# ./mxc_v4l2_still.out -w 640 -h 480 -f YUV422P
+
+
+Note: YUV420 is the format defined by sensor(UYVY,YY), and needs to convert to
+YV12 format, then it can be viewed by common tool.
+
+| Expected Result |
+No errors or warnings seen.
+
+The file "still.yuv" is created with the size of 614400.
+
+The image can be viewed with:
+
+ /unit_tests/V4L2# ./mxc_v4l2_output.out -iw 640 -ih 480 -ow 176 -oh 144 -l 100 -f 422P still.yuv
+
+The image should be the correct image, clear and with the correct colors.
+
+|====================================================================
+
+<<<
+
+mxc_v4l2_tvin.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+TVIN test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Camera and display required.
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/V4L2# ./mxc_v4l2_tvin.out -ow 480 -oh 480
+
+| Expected Result |
+The image from the camera is displayed on the screen. Colors and image should be
+correct.
+
+|====================================================================
+
+<<<

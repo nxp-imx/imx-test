@@ -14,6 +14,7 @@ $(TARGET):$(OBJ)
 	$(CC) -o $(TARGET) $(OBJ) $(LDFLAGS) -Os
 	$(STRIP) $(TARGET)
 	mv $(OBJDIR)/mxc_i2c_slave_test.out $(OBJDIR)/I2C
+	cp README $(OBJDIR)/I2C
 
 .PHONY: clean
 clean :

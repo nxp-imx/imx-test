@@ -24,6 +24,7 @@ all : $(OBJS)
 	mv $(OBJDIR)/plumbago-1280x1024-565.rgb $(OBJDIR)/Display
 	mv $(OBJDIR)/testcard-1920x1080-565.rgb $(OBJDIR)/Display
 	mv $(OBJDIR)/testcard-1920x1080-bgra.rgb $(OBJDIR)/Display
+	cp README $(OBJDIR)/Display
 
 .PHONY: clean
 clean :

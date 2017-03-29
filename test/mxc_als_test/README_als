@@ -1,0 +1,35 @@
+ALS README
+~~~~~~~~~~
+
+mxc_isl29023.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Light sensor test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Sensor required.
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Sensors# ./mxc_isl29023.out
+
+| Expected Result |
+Print sensor's information.
+
+|====================================================================
+
+<<<

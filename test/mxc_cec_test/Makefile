@@ -14,6 +14,7 @@ $(TARGET):$(OBJ)
 	$(CC) -o $(TARGET) $(OBJ) $(LDFLAGS) -Os
 	$(STRIP) $(TARGET)
 	mv $(TARGET) $(OBJDIR)/HDMI
+	cp README $(OBJDIR)/HDMI
 
 .PHONY: clean
 clean :

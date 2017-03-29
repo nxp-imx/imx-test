@@ -1,0 +1,50 @@
+ALSA Tuner README
+~~~~~~~~~~~~~~~~~
+
+mxc_tuner_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_tuner_test.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<

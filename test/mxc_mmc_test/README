@@ -1,0 +1,158 @@
+MMC README
+~~~~~~~~~~
+
+autorun-mmc.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MMC/SD read write test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/MMC_SD_SDIO_Host# ./autorun-mmc.sh
+
+| Expected Result |
+Pass
+
+|====================================================================
+
+<<<
+
+autorun-mmc-blockrw.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MMC/SD block read write test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/MMC_SD_SDIO_Host# ./autorun-mmc-blockrw.sh
+
+| Expected Result |
+Pass
+
+|====================================================================
+
+<<<
+
+autorun-mmc-fdisk.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MMC/SD fdisk test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/MMC_SD_SDIO_Host# ./autorun-mmc-fdisk.sh
+
+| Expected Result |
+Pass
+
+|====================================================================
+
+<<<
+
+autorun-mmc-fs.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+MMC/SD file system test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/MMC_SD_SDIO_Host# ./autorun-mmc-fs.sh
+
+| Expected Result |
+Pass
+
+|====================================================================
+
+<<<
+
+autorun-mmc-mkfs.sh
+
+| Summary |
+MMC/SD mkfs test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/MMC_SD_SDIO_Host# ./autorun-mmc-mkfs.sh
+
+| Expected Result |
+Pass
+
+|====================================================================
+
+<<<

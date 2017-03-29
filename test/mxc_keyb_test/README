@@ -1,0 +1,68 @@
+Keyboard README
+~~~~~~~~~~~~~~~
+
+autorun-keypad.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Check Keyboard node.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Keyboard required.
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/Keyboard# ./autorun-keypad.sh
+
+| Expected Result |
+Print "PASS" status.
+
+|====================================================================
+
+<<<
+
+mxc_keyb_test.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Keyboard test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Keyboard required.
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Keyboard# ./mxc_keyb_test.sh
+
+| Expected Result |
+An event occurs when a key is pressed.
+
+|====================================================================
+
+<<<

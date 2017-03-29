@@ -1,0 +1,35 @@
+DCIC README
+~~~~~~~~~~~
+
+mxc_dcic_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Display integrity checker test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/DCIC# ./mxc_dcic_test.out -bw 18 -dev 1
+
+| Expected Result |
+Print success message.
+
+|====================================================================
+
+<<<

@@ -3,6 +3,7 @@ OBJS = \
 
 all : $(OBJS)
 	mv $(OBJDIR)/etm $(OBJDIR)/ETM
+	cp README $(OBJDIR)/ETM
 
 .PHONY: clean
 clean :

@@ -15,6 +15,7 @@ $(TARGET):$(OBJ)
 	$(CC) -o $(TARGET) $(OBJ) $(LDFLAGS) -Os
 	$(STRIP) $(TARGET)
 	mv $(OBJDIR)/mmdc2 $(OBJDIR)/MMDC
+	cp README $(OBJDIR)/MMDC
 
 .PHONY: clean
 clean :

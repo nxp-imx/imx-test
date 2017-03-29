@@ -2,6 +2,7 @@ OBJS = 	$(OBJDIR)/mxc_iim_test.out
 
 all : $(OBJS)
 	mv $(OBJDIR)/mxc_iim_test.out $(OBJDIR)/IIM_Driver
+	cp README $(OBJDIR)/IIM_Driver
 
 .PHONY: clean
 clean :

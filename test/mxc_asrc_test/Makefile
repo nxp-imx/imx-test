@@ -12,6 +12,7 @@ all : $(OBJS)
 	cp audio8k16S.wav $(OBJDIR)/ASRC
 	mv $(OBJDIR)/mxc_asrc_test.out $(OBJDIR)/ASRC
 	mv $(OBJDIR)/autorun-asrc.sh $(OBJDIR)/ASRC
+	cp README $(OBJDIR)/ASRC
 
 .PHONY: clean
 clean :

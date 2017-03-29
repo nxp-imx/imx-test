@@ -12,6 +12,7 @@ all : $(OBJS)
 	mv $(OBJDIR)/mxc_v4l2_tvin.out $(OBJDIR)/V4L2
 	mv $(OBJDIR)/mxc_v4l2_overlay.out $(OBJDIR)/V4L2
 	mv $(OBJDIR)/mxc_v4l2_capture.out $(OBJDIR)/V4L2
+	cp README $(OBJDIR)/V4L2
 
 .PHONY: clean
 clean :

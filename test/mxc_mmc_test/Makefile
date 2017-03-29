@@ -6,6 +6,7 @@ all : $(OBJS)
 	mv $(OBJDIR)/autorun-mmc-fdisk.sh $(OBJDIR)/MMC_SD_SDIO_Host
 	mv $(OBJDIR)/autorun-mmc-mkfs.sh $(OBJDIR)/MMC_SD_SDIO_Host
 	mv $(OBJDIR)/autorun-mmc-fs.sh $(OBJDIR)/MMC_SD_SDIO_Host
+	cp README $(OBJDIR)/MMC_SD_SDIO_Host
 
 .PHONY: clean
 clean :

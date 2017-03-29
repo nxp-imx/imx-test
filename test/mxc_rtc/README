@@ -1,0 +1,91 @@
+RTC README
+~~~~~~~~~~
+
+autorun-rtc.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test RTC function.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_RTC_DRV_SNVS
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/SRTC# ./autorun-rtc.sh
+
+| Expected Result |
+Exit with PASS results.
+
+|====================================================================
+
+<<<
+
+rtctest.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+RTC Driver Test Example.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_RTC_DRV_SNVS
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/SRTC# ./rtctest.out <arg>
+
+ --full         run all tests
+ --no-periodic  don't run periodic interrupt tests
+
+| Expected Result |
+The program ends with "Test complete" status.
+
+|====================================================================
+
+<<<
+
+rtcwakeup.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test RTC resume system.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_RTC_DRV_SNVS
+
+| Software Dependency |
+System suspend/resume function ready.
+
+| Test Procedure |
+Test whether target is able to resume from standby by RTC wakeup.
+
+Example:
+
+ /unit_tests/SRTC# ./rtcwakeup.out -d rtc0 -m mem -s 10
+
+| Expected Result |
+System is wakeup after 10s.
+
+|=====================================================================
+
+<<<

@@ -4,6 +4,7 @@ all : $(OBJS)
 	mv $(OBJDIR)/rtctest.out $(OBJDIR)/SRTC
 	mv $(OBJDIR)/rtcwakeup.out $(OBJDIR)/SRTC
 	mv $(OBJDIR)/autorun-rtc.sh $(OBJDIR)/SRTC
+	cp README $(OBJDIR)/SRTC
 
 .PHONY: clean
 clean :

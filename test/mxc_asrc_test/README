@@ -1,0 +1,71 @@
+ASRC README
+~~~~~~~~~~~
+
+autorun-asrc.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test sample rate converter for ASRC driver.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_ASRC=y
+CONFIG_MXC_ASRC=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/ASRC# ./autorun-asrc.sh
+
+| Expected Result |
+. Log output: All tests passed with success.
+. The sound is heard clearly and properly from headphone of SSI or ESAI interface.
+
+|====================================================================
+
+<<<
+
+mxc_asrc_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Convert an audio file to a different sample rate.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_ASRC=y
+CONFIG_MXC_ASRC=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/ASRC# ./mxc_asrc_test.out -to <output sample rate> <origin.wav> <converted.wav>
+
+| Expected Result |
+All tests passed with success. The converted.wav file is created.
+
+|====================================================================
+
+<<<

@@ -1,0 +1,343 @@
+Display FB README
+~~~~~~~~~~~~~~~~~
+
+autorun-fb.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Autorun framebuffer test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_FB=y
+CONFIG_FB_MXC=y
+CONFIG_FB_MXC_EDID=y
+CONFIG_FB_MXC_SYNC_PANEL=y
+CONFIG_FB_MXC_LDB=y
+CONFIG_FB_MXC_HDMI=y
+...
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+Display is required.
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/Display# ./autorun-fb.sh
+
+| Expected Result |
+Exiting PASS.
+
+|====================================================================
+
+<<<
+
+mxc_epdc_fb_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+EPDC frame buffer test for display updates.
+
+| Automated |
+YES (But manual observation is required to confirming correct updates on display panel).
+
+| Kernel Config Option |
+CONFIG_FB=y
+CONFIG_FB_MXC=y
+CONFIG_FB_MXC_EINK_PANEL=y
+CONFIG_MFD_MAX17135=y
+CONFIG_REGULATOR_MAX17135=y
+CONFIG_MXC_PXP=y
+CONFIG_DMA_ENGINE=y
+...
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+ifdef::imx50[]
+On i.MX508 Armadillo2 board:
+- EPD daughter board must connet to PORT4 of the ARM2 base board.
+
+On i.MX508 EVK:
+- EPD daughter board must be connected to J14 connector or
+- E-Book add-on card must be connected to both J14 and J18 connectors
+endif::[]
+ifdef::imx6q[]
+N/A
+endif::[]
+
+| Test Procedure |
+EPDC fb test for display updates.
+
+.Features tested (no correlation to EPDC test numbers):
+* RGB565, Y8 framebuffer format
+* 0, 90, 180, 270 degree framebuffer rotation
+* Framebuffer panning
+* Use of the alternate framebuffer
+* Auto-waveform mode selection
+* Automatic update mode
+* The force-monochrome update feature and animation mode updates
+* Support for using a grayscale colormap
+* Snapshot, Queue, and Queue and Merge update schemes
+* The EPDC Collision Test mode
+
+.EPDC tests:
+. Basic Updates
+. Rotation Updates
+. Grayscale Framebuffer Updates
+. Auto-waveform Selection Updates
+. Panning Updates
+. Overlay Updates
+. Auto-Updates
+. Animation Mode Updates
+. Fast Updates
+. Partial to Full Update Transitions
+. Test Pixel Shifting Effect
+. Colormap Updates
+. Collision Test Mode
+. Stress Test
+
+ $ /unit_tests/Display/mxc_epdc_fb_test.out
+ Usage: mxc_epdc_fb_test [-h] [-a] [-n]
+	-h Print this message
+	-a Enabled animation waveforms for fast updates (tests 8-9)
+	-p Provide a power down delay (in ms) for the EPDC driver
+	-u Select an update scheme
+		s - Snapshot update scheme
+		q - Queued update scheme
+		m - Queued update scheme with update merging
+	-n Execute the tests specified in expression
+	Expression is a set of comma-separated numeric ranges
+ Example:
+ /unit_tests/Display# ./mxc_epdc_fb_test.out -n 1-3,5,7
+
+| Expected Result |
+The full set of tests should pass without any failure messages.
+
+For each test, a sequence of updates should be reflected on the screen.  For
+almost all tests, the text printed out in the debug console describes the image
+that should be observed on the screen.
+
+|====================================================================
+
+<<<
+
+mxc_epdc_v2_fb_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_fb_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Frame buffer basic test for display.
+The framebuffer driver should be able to easily add new displays to the system
+including timings, refresh, resolution, formats, via tables in the driver.
+
+| Automated |
+YES (But manual observation is required to confirming correct updates on display panel)
+
+| Kernel Config Option |
+CONFIG_FB=y
+CONFIG_FB_MXC=y
+CONFIG_FB_MXC_EDID=y
+CONFIG_FB_MXC_SYNC_PANEL=y
+CONFIG_FB_MXC_LDB=y
+CONFIG_FB_MXC_HDMI=y
+...
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+ifdef::imx6q[]
+The fb0 and fb1 are used for tests, fb0 is background framebuffer, and fb1 is
+foreground overlay framebuffer.
+endif::[]
+
+| Test Procedure |
+Frame buffer test for display.
+
+.Features tested:
+* Basic fb operation
+* Set background/foreground to 16 bpp fb
+* Global alpha blending
+* Color key test
+* Framebuffer Panning
+* Gamma test
+
+ $ /unit_tests/Display/mxc_fb_test.out
+ Usage: execute directly.
+
+ Example:
+ /unit_tests/Display# ./mxc_fb_test.out
+ Opened fb0 and fb1
+ Set the background to 16-bpp
+
+ Screen size = 1572864
+ Set the foreground to 16-bpp
+ Testing global alpha blending...
+ Fill the FG in black
+ Fill the BG in white
+ Alpha is 0, FG is opaque
+ Alpha is 255, BG is opaque
+ Color key enabled
+ Color key disabled
+ Global alpha disabled
+ Set the background to 16-bpp
+ Pan test start.
+ Pan test done.
+ Set the background to 16-bpp
+ Pan test start.
+ Pan test done.
+ Gamma test start.
+ Gamma 0.800000
+ Gamma 1.000000
+ Gamma 1.500000
+ Gamma 2.200000
+ Gamma 2.400000
+ Gamma test end.
+
+| Expected Result |
+The test should pass without any failure messages, and the display on panel
+should be correct.
+
+For each test, a sequence of updates should be reflected on the screen.  For
+almost all tests, the text printed out in the debug console describes the image
+that should be observed on the screen.
+
+|====================================================================
+
+<<<
+
+mxc_fb_vsync_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Frame buffer vsync test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_FB=y
+CONFIG_FB_MXC=y
+CONFIG_FB_MXC_EDID=y
+CONFIG_FB_MXC_SYNC_PANEL=y
+CONFIG_FB_MXC_LDB=y
+CONFIG_FB_MXC_HDMI=y
+...
+
+| Software Dependency |
+N/A
+
+| Test Procedure |
+Make sure test framebuffer is unblank.
+
+ $ /unit_tests/Display/mxc_fb_vsync_test.out
+ Usage:
+
+  /unit_tests/Display# ./mxc_fb_vsync_test.out <fb #> <count>
+	<fb #>  the framebuffer number
+	<count> the frames to be rendered
+
+ Example:
+ /unit_tests/Display# echo 0 > /sys/class/graphics/fb0/blank
+ /unit_tests/Display# ./mxc_fb_vsync_test.out 0 100
+ total time for 100 frames = 1655674 us = 60 fps
+
+| Expected Result |
+Console print out message like (the fps is depended on your display device's
+refresh rate):
+
+ total time for 100 frames = 1655674 us = 60 fps
+
+|====================================================================
+
+<<<
+
+mxc_spdc_fb_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+mxc_tve_test.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<

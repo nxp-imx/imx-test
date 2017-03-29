@@ -10,6 +10,7 @@ $(OBJS): $(SRCS)
 	cp stefan_interlaced_320x240_5frames.yv12 $(OBJDIR)/Display
 	cp wall-1024x768-565.rgb $(OBJDIR)/Display
 	mv $(OBJDIR)/mxc_ipudev_test.out $(OBJDIR)/Display
+	cp README_ipu $(OBJDIR)/Display
 
 all: $(OBJS)
 

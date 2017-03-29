@@ -1,0 +1,54 @@
+Power README
+~~~~~~~~~~~~
+
+suspend_quick_auto.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test system suspend resume stress test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Power_Management# ./suspend_quick_auto.sh
+
+| Expected Result |
+Pass 48 hours test.
+
+|====================================================================
+
+<<<
+
+suspend_random_auto.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test system suspend resume stress test.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Power_Management# ./suspend_random_auto.sh
+
+| Expected Result |
+Pass 48 hours test.
+
+|====================================================================
+
+<<<

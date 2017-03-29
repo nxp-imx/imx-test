@@ -23,6 +23,7 @@ $(TARGET): $(OBJ)
 	cp autorun-vpu.sh $(OBJDIR)/VPU
 	cp ./configs/config* $(OBJDIR)/VPU
 	cp ./configs/akiyo.mp4 $(OBJDIR)/VPU
+	cp README $(OBJDIR)/VPU
 
 %.o: %.c
 	$(CC) $(INC) -Wall -O2 -c $^ -o $@

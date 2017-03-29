@@ -12,6 +12,7 @@ $(OBJDIR)/pxp_test.out: $(OBJ)
 	$(CC) -o  $(OBJDIR)/pxp_test.out $(OBJ) $(LDFLAGS) -Os
 	$(STRIP) $(OBJDIR)/pxp_test.out
 	mv $(OBJDIR)/pxp_test.out $(OBJDIR)/Display
+	cp README_pxp $(OBJDIR)/Display
 
 .PHONY: clean
 clean:

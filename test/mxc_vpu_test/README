@@ -1,0 +1,435 @@
+VPU README
+~~~~~~~~~~
+
+autorun-vpu.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+VPU autorun test.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+Display required.
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/VPU# ./autorun-vpu.sh
+
+| Expected Result |
+Exiting PASS. A video is displayed on screen.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Decode and display
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Decode one stream and display on the LCD.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+The test files are not in /unit_tests. The test files must be procured by the person running the test.
+
+| Test Procedure |
+To test MPEG-4 decode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.m4v -f 0"
+
+To test H.263 decode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.263 -f 1"
+
+To test H.264 decode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.264 -f 2"
+
+To test VC1 decode (i.MX37 and i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.rcv -f 3"
+
+To test MPEG2 decode (i.MX37 and i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.mpg -f 4"
+
+To test MJPEG decode (i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.mjpg -f 7"
+
+You can get the mp4 test file from the linux-test.git server. It is located under
+[linux-test.git]/test/mxc_vpu_test/configs/akiyo.mp4.
+
+| Expected Result |
+Stream is displayed on the LCD correctly.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Decode and save to file
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Decode a stream and save to a file.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+To test MPEG-4 decode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.m4v -f 0 -o out.yuv"
+
+To test H.263 decode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.263 -f 1 -o out.yuv"
+
+To test H.264 decode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.264 -f 2 -o out.yuv"
+
+To test VC1 decode (i.MX37 and i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.rcv -f 3 -o out.yuv"
+
+To test MPEG2 decode (i.MX37 and i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.mpg -f 4 -o out.yuv"
+
+To test MJPEG decode (i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i /usr/vectors/file.mjpg -f 7 -o out.yuv"
+
+| Expected Result |
+Stream is saved to file correctly.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Decode using config file
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Decode a stream using a config file.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Change options in config file, e.g, config_dec. Input correct input filename,
+output filename, format, etc.
+
+. Run:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -C config_dec
+
+| Expected Result |
+Stream can be decoded successfully.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Encode YUV stream and save to file
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Encode a YUV stream and save to a file.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+To test MPEG-4 encode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -E "-i file.yuv -w 240 -h 320 -f 0 -o file.mpeg4"
+
+To test H.263 encode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -E "-i file.yuv -w 240 -h 320 -f 1 -o file.263"
+
+To test H.264 encode:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -E "-i file.yuv -w 240 -h 320 -f 2 -o file.264"
+
+To test MJPEG encode (i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -E "-i file.yuv -w 240 -h 320 -f 7 -o file.mjpg"
+
+| Expected Result |
+Stream can be encoded successfully.
+
+It is possible to use VPU decoder command to check if encoded data is correct or
+not.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Encode image from a camera and decode to display
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Encode an image from the camera and decode it to display on the LCD.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+To encode an MPEG4 image from the camera and display on the LCD:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -L "-f 0 -w 1280 -h 720"
+
+To encode an H263 image from the camera and display on the LCD:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -L "-f 1 -w 1280 -h 720"
+
+To encode an H264 image from the camera and display on the LCD:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -L "-f 2 -w 1280 -h 720"
+
+To encode an MJPG image from the camera and display on the LCD (i.MX51 VPU only):
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -L "-f 7 -w 1280 -h 720"
+
+.Note
+If needed, modify the resolution.
+
+| Expected Result |
+Captured image can be displayed on the LCD correctly.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Decode multiple streams with different formats
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Decode multiple streams with different formats simultaneously.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+Example: decoder one H264 and one MPEG4 streams.
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i/vectors/file.264 -f 2" -D "-i ./akiyo.mp4 -f 0 -o akiyo.yuv"
+
+| Expected Result |
+Streams can be decoded correctly.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - Decode and encode
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Decode and encode simultaneously.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+Example: encode one MPEG-4 stream and decode one H.264 stream simultaneously.
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -E "-w 176 -h 144 -f 0 -o enc.m4v" -D "-i/vectors/file.264 -f 2"
+
+| Expected Result |
+Streams can be encoded/decoded correctly.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - TV OUT
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test VPU with TV out.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+Connect board to TV with correct lines.
+
+| Test Procedure |
+. Set environment per TV mode:
+
+ NTSC mode: export VPU_TV_MODE=NTSC
+ PAL mode: export VPU_TV_MODE=PAL
+ 720P mode (This is available on MX51): export VPU_TV_MODE=720P
+
+. Decoder one stream as normal VPU test. For example, H264 video stream:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i filename -f 2"
+
+.Note
+Please make sure input stream is 1280 * 720 when TV mode is 720p.
+
+| Expected Result |
+Video is displayed correctly on TV.
+
+|====================================================================
+
+<<<
+
+mxc_vpu_test.out - VDI
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test VPU with VDI (HW deinterlace via IPU).
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Software Dependency |
+Need /usr/lib/libvpu.so.
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Select one stream with top and bottom fields are interlaced.
+
+ av_stress2_dsmcc4m_1_C1_V11_A6.mp4_track1.h264
+
+To decode the stream and display on LCD:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i av_stress2_dsmcc4m_1_C1_V11_A6.mp4_track1.h264 -f2"
+
+To decode the stream and display on LCD using high motion stream video De Interlacing
+algorithm:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i av_stress2_dsmcc4m_1_C1_V11_A6.mp4_track1.h264 -v h -f2"
+
+To decode the stream and display on LCD using low motion stream video De Interlacing
+algorithm:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i av_stress2_dsmcc4m_1_C1_V11_A6.mp4_track1.h264 -v l -f2"
+
+To decode the stream and display on LCD having input in NV12 pixel format:
+
+ /unit_tests/VPU# ./mxc_vpu_test.out -D "-i av_stress2_dsmcc4m_1_C1_V11_A6.mp4_track1.h264 -v l -t 1 -f2"
+
+| Expected Result |
+The video is smooth and there is no field sawtooth for moving objects.
+
+|====================================================================
+
+<<<

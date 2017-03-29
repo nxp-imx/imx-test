@@ -22,6 +22,7 @@ $(OBJDIR)/mx6s_v4l2_capture.out : mx6s_v4l2_capture.o
 
 $(OBJDIR)/pxp_v4l2_out_test.sh: pxp_v4l2_out_test.sh
 	cp pxp_v4l2_out_test.sh $(OBJDIR)/Display
+	cp README_pxp_v4l2 $(OBJDIR)/Display
 
 .PHONY: clean
 clean :

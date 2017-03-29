@@ -5,6 +5,7 @@ OBJS = \
 all : $(OBJS)
 	mv $(OBJDIR)/suspend_quick_auto.sh $(OBJDIR)/Power_Management
 	mv $(OBJDIR)/suspend_random_auto.sh $(OBJDIR)/Power_Management
+	cp README_power $(OBJDIR)/Power_Management
 
 .PHONY: clean
 clean :

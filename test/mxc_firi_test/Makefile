@@ -5,6 +5,7 @@ SCRIPTS = $(OBJDIR)/mxc_irlan_test.sh
 all : $(OBJS) $(SCRIPTS)
 	mv $(OBJDIR)/autorun-firi.sh $(OBJDIR)/ENET
 	mv $(OBJDIR)/mxc_irlan_test.sh $(OBJDIR)/ENET
+	cp README $(OBJDIR)/ENET
 
 .PHONY: clean
 clean :

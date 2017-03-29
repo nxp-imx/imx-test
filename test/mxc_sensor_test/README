@@ -1,0 +1,62 @@
+Sensors README
+~~~~~~~~~~~~~~
+
+acctest.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+evtest.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Input device monitor.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Sensors# ./evtest.out /dev/input/eventX
+
+ X  input device number
+ To list all input devices, run: cat /proc/bus/input/devices
+
+| Expected Result |
+Information about the input device specified is displayed on the command line as
+an event happens.
+
+|====================================================================
+
+<<<

@@ -1,0 +1,130 @@
+WDOG README
+~~~~~~~~~~~
+
+autorun-wdog.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Check WatchDog device node.
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_WATCHDOG=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/Watchdog# ./autorun-wdog.sh
+
+| Expected Result |
+Should get the following message:
+
+ autorun-wdog.sh: Exiting PASS
+
+|====================================================================
+
+<<<
+
+dbg_monitor.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
+
+wdt_driver_test.out - Reset when timeout
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+WatchDog reset when timeout.
+
+| Automated |
+
+| Kernel Config Option |
+CONFIG_WATCHDOG=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Watchdog# ./wdt_driver_test.out 1 2 0 &
+
+| Expected Result |
+This should generate a reset after 3 seconds (a 1 second time-out and a 2 second
+sleep).
+
+|====================================================================
+
+<<<
+
+wdt_driver_test.out - Do not reset when timeout
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+WatchDog doesn't reset when timeout.
+
+| Automated |
+
+| Kernel Config Option |
+CONFIG_WATCHDOG=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/Watchdog# ./wdt_driver_test.out 2 1 0
+
+. The system should keep running without being reset. This test requires the
+kernel to be executed with the "jtag=on" on some platforms.
+. Press "Ctrl+C" to terminate this test program.
+
+| Expected Result |
+The system resets after 3 seconds.
+
+|====================================================================
+
+<<<

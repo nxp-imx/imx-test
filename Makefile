@@ -92,7 +92,7 @@ install_actual:
 	mkdir -p $(DESTDIR)
 	-rm -rf $(DESTDIR)/*
 	cp -rf $(OBJDIR)/* $(DESTDIR)
-	cp autorun.sh test-utils.sh all-suite.txt $(DESTDIR)
+	cp autorun.sh test-utils.sh all-suite.txt README $(DESTDIR)
 
 distclean: clean
 

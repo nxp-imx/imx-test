@@ -1,0 +1,58 @@
+IPU README
+~~~~~~~~~~
+
+autorun-ipu.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+IPU device interface autotest.
+
+| Automated |
+YES
+
+| Software Dependency |
+N/A
+
+| Test Procedure |
+.Note
+There are some cases which IPU can not support. Please check the log.
+
+Go to "Display" unit test directory and run:
+
+ /unit_tests/Display# ./autorun-ipu.sh > log
+
+If need full test, please run test after export FULLTEST=1
+
+| Expected Result |
+The correct image or video can show on the fb.
+
+|====================================================================
+
+<<<
+
+mxc_ipudev_test.out
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+
+| Automated |
+
+| Kernel Config Option |
+
+| Software Dependency |
+
+| Non-default Hardware Configuration |
+
+| Test Procedure |
+
+| Expected Result |
+
+|====================================================================
+
+<<<
