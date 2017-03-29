@@ -278,7 +278,7 @@ void w_op(void *arg)
 			i, total);
 }
 
-void real_op_loop(int fd)
+int real_op_loop(int fd)
 {
 	pthread_t rid, wid;
 	char tmp[10];
@@ -287,28 +287,27 @@ void real_op_loop(int fd)
 	ret = pthread_create(&wid, NULL, (void *)w_op, &fd);
 	if (ret != 0) {
 		printf("Create write thread failed\n");
-		exit(1);
+		return -1;
 	}
 
 	ret = pthread_create(&rid, NULL, (void *)r_op, &fd);
 	if (ret != 0) {
 		printf("Create read thread failed\n");
-		exit(1);
+		return -1;
 	}
 
 	pthread_join(wid, NULL);
 	pthread_join(rid, NULL);
-	close(fd);
 
-	exit(0);
+	return 0;
 }
 
-void real_op_duplex(int fd)
+int real_op_duplex(int fd)
 {
-	real_op_loop(fd);
+	return real_op_loop(fd);
 }
 
-void real_op(int fd, char op)
+int real_op(int fd, char op)
 {
 	int nfds;
 	char tmp[1024];
@@ -326,7 +325,7 @@ void real_op(int fd, char op)
 	printf("Hit enter to start %s\n", opstr);
 	flags = read(STDIN_FILENO, tmp, 3);
 	if (flags < 0)
-		return;
+		return flags;
 
 	/* init buffer */
 	if (op == 'W') {
@@ -396,7 +395,6 @@ void real_op(int fd, char op)
 				k++;
 		}
 	}
-	close(fd);
 	printf("\ndone : total : %d\n", total);
 
 	if (k > 0)
@@ -409,12 +407,18 @@ void real_op(int fd, char op)
 		printf("\t%d %s calls isued\n"
 			"\t total : %d\n",
 			i, opstr, total);
+	return 0;
 }
 
 int main(int argc, char* argv[])
 {
+	struct termios ti;
+	int fd, ret;
+	int flow_control = 0;
+	char op;
+
 	print_name(argv);
-	if (argc < 8)
+	if (argc < 8) {
 		printf("Usage:\n\t%s <PORT> <BAUDRATE> <F> <R/W/L/D> <X> <Y> <O>\n"
 			"<PORT>: like /dev/ttymxc4\n"
 			"<BAUDRATE>: the baud rate number value (0~4000000)\n"
@@ -450,41 +454,55 @@ int main(int argc, char* argv[])
 			"	  ./mxc_uart_stress_test.out /dev/ttymxc4 115200 F D 1000 1000 O\n\n"
 			,
 			argv[0]);
-	else {
-		struct termios ti;
-		int fd;
-		int flow_control = 0;
-
-		if ((argv[3][0] & (~0x20))=='F' || (argv[3][0] & (~0x20))=='f')
-			flow_control = 1;
-		if ((argv[4][0] & (~0x20))=='L' || (argv[4][0] & (~0x20))=='l')
-			loopflag = 1;
-
-		fd = init_uart(argv[1], &ti);
-
-		CHUNKS = atoi(argv[5]);
-		if (CHUNKS < 0) {
-			printf("error chunks, %d\n", CHUNKS);
-			return 1;
-		}
-
-		CHUNK_SIZE  = atoi(argv[6]);
-
-		if ((argv[7][0] & (~0x20))=='O' || (argv[7][0] & (~0x20))=='o')
-			log_out = 1;
-
-		if (fd >= 0 && !set_speed(fd, &ti, atoi(argv[2]))
-			&& !set_flow_control(fd, &ti, flow_control))
-		{
-			char op = argv[4][0] & (~0x20);
-			if (op == 'L' || op == 'l')
-				real_op_loop(fd);
-			else if (op == 'D' || op == 'd')
-				real_op_duplex(fd);
-			else
-				real_op(fd, op);
-		}
+		return 0;
 	}
+
+	if ((argv[3][0] & (~0x20))=='F' || (argv[3][0] & (~0x20))=='f')
+		flow_control = 1;
+	if ((argv[4][0] & (~0x20))=='L' || (argv[4][0] & (~0x20))=='l')
+		loopflag = 1;
+
+	CHUNKS = atoi(argv[5]);
+	if (CHUNKS < 0) {
+		printf("error chunks, %d\n", CHUNKS);
+		print_result(argv);
+		return 1;
+	}
+
+	CHUNK_SIZE  = atoi(argv[6]);
+
+	if ((argv[7][0] & (~0x20))=='O' || (argv[7][0] & (~0x20))=='o')
+		log_out = 1;
+
+	fd = init_uart(argv[1], &ti);
+	if (fd < 0) {
+		print_result(argv);
+		return fd;
+	}
+
+	ret = set_speed(fd, &ti, atoi(argv[2]));
+	if (ret) {
+		close(fd);
+		print_result(argv);
+		return ret;
+	}
+
+	ret = set_flow_control(fd, &ti, flow_control);
+	if (ret) {
+		close(fd);
+		print_result(argv);
+		return ret;
+	}
+
+	op = argv[4][0] & (~0x20);
+	if (op == 'L' || op == 'l')
+		ret = real_op_loop(fd);
+	else if (op == 'D' || op == 'd')
+		ret = real_op_duplex(fd);
+	else
+		ret = real_op(fd, op);
+
+	close(fd);
 	print_result(argv);
-	return 0;
+	return ret;
 }
