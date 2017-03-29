@@ -283,12 +283,6 @@ void real_op_loop(int fd)
 	pthread_t rid, wid;
 	char tmp[10];
 	int ret;
-	int flags;
-
-	printf("Hit enter to start Loopback\n");
-	flags = read(STDIN_FILENO, tmp, 3);
-	if (flags < 0)
-		return;
 
 	ret = pthread_create(&wid, NULL, (void *)w_op, &fd);
 	if (ret != 0) {
