@@ -99,8 +99,7 @@ int set_flow_control(int fd, struct termios *ti, int flow_control)
 
 int init_uart(char *dev, struct termios *ti)
 {
-	int fd, i;
-	unsigned long flags = 0;
+	int fd;
 	int pins;
 
 	fd = open(dev, O_RDWR |  O_NOCTTY);
@@ -135,16 +134,13 @@ int init_uart(char *dev, struct termios *ti)
 int CHUNK_SIZE = 1024;
 int CHUNKS = 100;
 
-#define RECORDS	20
-static int record[RECORDS];
-
 void* r_op(void *arg)
 {
 	int fd = *(int*)arg;
 	int nfds;
 	char tmp[1024];
-	int i = 0, j = -1, k = 0, ret;
-	size_t total = 0, max = 0, min = 0;
+	int i = 0, k = 0, ret;
+	size_t total = 0;
 	int count;
 	fd_set rfds;
 	struct timeval tv;
@@ -240,18 +236,11 @@ void* r_op(void *arg)
 void* w_op(void *arg)
 {
 	int fd = *(int *)arg;
-	int nfds;
 	char tmp[1024];
-	int i = 0, j = -1, k = 0, r;
-	size_t total = 0, max = 0, min = 0;
+	int i = 0, k = 0;
+	size_t total = 0;
 	int count;
-	fd_set rfds;
-	struct timeval tv;
-	int *res;
-
-	nfds = fd;
-	tv.tv_sec = 15;
-	tv.tv_usec = 0;
+	int res = 0;
 
 	/* init buffer */
 	for (i = 0; i < CHUNK_SIZE; i++)
@@ -298,7 +287,6 @@ void* w_op(void *arg)
 int real_op_loop(int fd)
 {
 	pthread_t rid, wid;
-	char tmp[10];
 	int ret, arg = fd;
 	int *res;
 
@@ -336,18 +324,21 @@ int real_op_duplex(int fd)
 
 int real_op(int fd, char op)
 {
-	int nfds;
 	char tmp[1024];
-	int i = 0, j = -1, k = 0, r;
-	size_t count, total = 0, max = 0, min = 0;
+	int i = 0, k = 0, r;
+	size_t count, total = 0;
 	char *opstr = (op == 'R' ? "reading" : "writing");
+	int flags;
+	/*
+	int nfds;
 	fd_set rfds;
 	struct timeval tv;
-	int flags;
+
 
 	nfds = fd;
 	tv.tv_sec = 15;
 	tv.tv_usec = 0;
+	*/
 
 	printf("Hit enter to start %s\n", opstr);
 	flags = read(STDIN_FILENO, tmp, 3);
