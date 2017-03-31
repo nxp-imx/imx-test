@@ -22,6 +22,7 @@
 #include "../../include/test_utils.h"
 
 #define TIOCM_LOOP      0x8000
+#define CHUNK_SIZE_DEFAULT 1024
 
 static int log_out = 0;
 static int loopflag = 0;
@@ -131,14 +132,14 @@ int init_uart(char *dev, struct termios *ti)
 #define XSTR(X) STR(X)
 
 
-int CHUNK_SIZE = 1024;
+int CHUNK_SIZE = CHUNK_SIZE_DEFAULT;
 int CHUNKS = 100;
 
 void* r_op(void *arg)
 {
 	int fd = *(int*)arg;
 	int nfds;
-	char tmp[1024];
+	char tmp[CHUNK_SIZE_DEFAULT];
 	int i = 0, k = 0, ret;
 	size_t total = 0;
 	int count;
@@ -236,7 +237,7 @@ void* r_op(void *arg)
 void* w_op(void *arg)
 {
 	int fd = *(int *)arg;
-	char tmp[1024];
+	char tmp[CHUNK_SIZE_DEFAULT];
 	int i = 0, k = 0;
 	size_t total = 0;
 	int count;
@@ -324,7 +325,7 @@ int real_op_duplex(int fd)
 
 int real_op(int fd, char op)
 {
-	char tmp[1024];
+	char tmp[CHUNK_SIZE_DEFAULT];
 	int i = 0, k = 0, r;
 	size_t count, total = 0;
 	char *opstr = (op == 'R' ? "reading" : "writing");
@@ -490,7 +491,12 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	CHUNK_SIZE  = atoi(argv[6]);
+	CHUNK_SIZE = atoi(argv[6]);
+	if (CHUNK_SIZE > CHUNK_SIZE_DEFAULT) {
+		printf("Chunk size %d not supported, using default %d\n",
+			CHUNK_SIZE, CHUNK_SIZE_DEFAULT);
+		CHUNK_SIZE = CHUNK_SIZE_DEFAULT;
+	}
 
 	if ((argv[7][0] & (~0x20))=='O' || (argv[7][0] & (~0x20))=='o')
 		log_out = 1;
