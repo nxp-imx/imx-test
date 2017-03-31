@@ -524,6 +524,8 @@ int main(int argc, char* argv[])
 		return ret;
 	}
 
+	tcflush(fd, TCIOFLUSH);
+
 	op = argv[4][0] & (~0x20);
 	if (op == 'L' || op == 'l')
 		ret = real_op_loop(fd);
