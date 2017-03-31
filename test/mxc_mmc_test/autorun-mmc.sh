@@ -10,17 +10,17 @@ STATUS=0
 run_mmc_case()
 {
 	# Generate Test data
-	dd if=/dev/urandom of=/root/mmc_data bs=512 count=10240
+	dd if=/dev/urandom of=/home/root/mmc_data bs=512 count=10240
 
-	dd if=/root/mmc_data of=/dev/mmcblk0 bs=512 count=10240
-	dd if=/dev/mmcblk0 of=/root/mmc_data1 bs=512 count=10240
+	dd if=/home/root/mmc_data of=/dev/mmcblk0 bs=512 count=10240
+	dd if=/dev/mmcblk0 of=/home/root/mmc_data1 bs=512 count=10240
 
-	cmp /root/mmc_data1 /root/mmc_data
+	cmp /home/root/mmc_data1 /home/root/mmc_data
 
 	if [ "$?" = 0 ]; then
 		printf "MMC test passes \n\n"
-		rm /root/mmc_data
-		rm /root/mmc_data1
+		rm /home/root/mmc_data
+		rm /home/root/mmc_data1
 	else
 		STATUS=1
 		printf "MMC test fails \n\n"
