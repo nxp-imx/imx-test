@@ -23,15 +23,15 @@ run_mmc_case()
 	mkfs.ext2 /dev/mmcblk0p1
 	mount -t ext2 /dev/mmcblk0p1 /mnt/mmc_part1
 
-	dd if=/dev/urandom of=/root/mmc_data bs=1M count=5
-	cp /root/mmc_data /mnt/mmc_part1/mmc_data
+	dd if=/dev/urandom of=/home/root/mmc_data bs=1M count=5
+	cp /home/root/mmc_data /mnt/mmc_part1/mmc_data
 	sync
 
-	cmp /root/mmc_data /mnt/mmc_part1/mmc_data
+	cmp /home/root/mmc_data /mnt/mmc_part1/mmc_data
 
 	if [ "$?" = 0 ]; then
 		printf "MMC test passes \n\n"
-		rm /root/mmc_data
+		rm /home/root/mmc_data
 		rm /mnt/mmc_part1/mmc_data
 		umount /mnt/mmc_part1
 		rm -r /mnt/mmc_part1
