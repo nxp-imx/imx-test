@@ -11,7 +11,7 @@ d=5;
 r=0;
 while [ "$i" -lt 20000 ];
 do
-	/unit_tests/rtcwakeup.out -d rtc0 -m mem -s $t;
+	/unit_tests/SRTC/rtcwakeup.out -d rtc0 -m mem -s $t;
 	sleep $d;
 	echo =============================
 	echo    suspend $i times;
