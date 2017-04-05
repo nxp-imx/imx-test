@@ -159,7 +159,7 @@ for MODE in 0 1 2 3 4 5 6; do
 		echo ==== v4l2 capture test: $WIDTH X $HIGHT @ $RATO ====
 		for FCOUNT in 5 10 15 20 25 30; do
 			echo ==== save frame count: $FCOUNT ====
-			run_testcase "./mxc_v4l2_capture.out -$WIDTH -ih $HIGHT -ow 640 -oh 480 -fr $RATO -m $MODE -c $FCOUNT test.yuv"
+			run_testcase "./mxc_v4l2_capture.out -iw $WIDTH -ih $HIGHT -ow 640 -oh 480 -fr $RATO -m $MODE -c $FCOUNT test.yuv"
 		done
 	done
 done
