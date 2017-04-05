@@ -392,6 +392,11 @@ int process_cmdline(int argc, char **argv)
 {
 	int i;
 
+	if (argc == 1) {
+		print_help();
+		return -1;
+	}
+
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-dev") == 0) {
 			g_dcic_dev = atoi(argv[++i]);
