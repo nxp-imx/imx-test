@@ -5,6 +5,12 @@ source /unit_tests/test-utils.sh
 mod=dryice_test
 loc=/lib/modules/$(kernel_version)/test/$mod.ko
 
+if [ ! -f "$loc" ]; then
+    echo "Linux Kernel Module $loc not found."
+    echo "Please configure Linux Kernel to include CONFIG_MXC_DRYICE"
+    exit
+fi
+
 # Initialize counters
 n_passed=0
 n_failed=0
