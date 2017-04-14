@@ -295,6 +295,7 @@ int v4l_capture_test(int fd_v4l, const char * file)
 #endif
         struct v4l2_format fmt;
         FILE * fd_y_file = 0;
+        size_t wsize;
         int count = g_capture_count;
 
         if ((fd_y_file = fopen(file, "wb")) ==NULL)
@@ -331,7 +332,13 @@ int v4l_capture_test(int fd_v4l, const char * file)
                         printf("VIDIOC_DQBUF failed.\n");
                 }
 
-                fwrite(buffers[buf.index].start, fmt.fmt.pix.sizeimage, 1, fd_y_file);
+                wsize = fwrite(buffers[buf.index].start, fmt.fmt.pix.sizeimage, 1, fd_y_file);
+                if (wsize < 1) {
+                        printf("No space left on device. Stopping after %d frames.\n",
+                                g_capture_count - (count + 1));
+                        break;
+                }
+
 
 #if TEST_OUTSYNC_ENQUE
 				/* Testing out of order enque */
