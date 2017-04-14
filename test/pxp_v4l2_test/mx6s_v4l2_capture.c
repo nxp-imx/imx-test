@@ -408,6 +408,7 @@ int v4l_capture_test(int fd_v4l)
 	int out_w = 0, out_h = 0;
 	int bufoffset;
 	FILE * fd_y_file = 0;
+	size_t wsize;
 	unsigned char *cscbuf = NULL;
 
 	if (g_saved_to_file == 1) {
@@ -483,7 +484,11 @@ loop:
 
 		if (fd_y_file) {
 			/* Save capture frame to file */
-			fwrite(buffers[buf.index].start, g_frame_size, 1, fd_y_file);
+			wsize = fwrite(buffers[buf.index].start, g_frame_size, 1, fd_y_file);
+			if (wsize < 1) {
+				printf("No space left on device. Stopping after %d frames.\n", frame_num);
+				break;
+			}
 		} else {
 			/* Show capture frame to display */
 			software_csc(buffers[buf.index].start, cscbuf, out_w, out_h);
