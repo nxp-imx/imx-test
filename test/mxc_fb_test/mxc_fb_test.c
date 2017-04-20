@@ -39,6 +39,8 @@ extern "C"{
 #include <math.h>
 #include <string.h>
 #include <malloc.h>
+#include <dirent.h>
+#include <getopt.h>
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
@@ -56,6 +58,62 @@ struct fb_info {
 	struct fb_var_screeninfo screen_info;
 };
 struct fb_info fb0, fb1;
+
+struct img_file {
+	char fname[256];
+	size_t xres;
+	size_t yres;
+	int bpp;
+};
+
+/* Maximum resolution to use in a framebuffer (X or Y) */
+int max_res = 1920;
+/* Use this to 1 if no user input is expected (when running this test from a script) */
+int nouser = 0;
+
+static char *options = "m:n";
+char *usage = "Usage: ./mxc_fb_test.out [options]\n" \
+	       "options:\n" \
+	       "\t-m <max_res>\t Maximum X/Y resolution to use when searching files to display\n" \
+	       "\t-n\t Expect no user input: with this option, the test can be ran from a script";
+
+int set_screen(struct fb_info *fb, int xres, int yres, int xres_virtual, int yres_virtual, int bpp)
+{
+	int ret = 0;
+	int new_size;
+	struct fb_var_screeninfo screen_info;
+
+	memcpy(&screen_info, &fb->screen_info, sizeof(screen_info));
+	screen_info.xres = xres;
+	screen_info.xres_virtual = xres_virtual;
+	screen_info.yres = yres;
+	screen_info.yres_virtual = yres_virtual;
+	screen_info.bits_per_pixel = bpp;
+	if ((ret = ioctl(fb->fd, FBIOPUT_VSCREENINFO, &screen_info)) < 0) {
+		fprintf(stderr, "@%s: Failed setting screen to %dx%d (virtual: %dx%d) @%d-bpp\n", fb->name, xres, yres, xres_virtual, yres_virtual, bpp);
+		return ret;
+	}
+	fb->screen_info.xres = xres;
+	fb->screen_info.xres_virtual = xres_virtual;
+	fb->screen_info.yres = yres;
+	fb->screen_info.yres_virtual = yres_virtual;
+	fb->screen_info.bits_per_pixel = bpp;
+	printf("@%s: Succesfully changed screen to %dx%d (virtual: %dx%d) @%d-bpp\n", fb->name, xres, yres, xres_virtual, yres_virtual, bpp);
+	new_size = screen_info.xres_virtual * screen_info.yres_virtual * bpp / 8;
+	// If the new size requires larger memory, remap it
+	if (new_size > fb->size) {
+		munmap(fb->fb, fb->size);
+		fb->fb = (unsigned short *)mmap(0, new_size, PROT_READ | PROT_WRITE, MAP_SHARED, fb->fd, 0);
+		if ((int)fb->fb <= 0) {
+			fprintf(stderr, "@%s: Failed to remap framebuffer to memory (%d)\n", fb->name, errno);
+			munmap(fb->fb, new_size);
+			return errno;
+		}
+		fb->size = new_size;
+	}
+	return ret;
+
+}
 
 int fb_test_bpp(struct fb_info *fb)
 {
@@ -279,6 +337,262 @@ void fb_test_gamma(int fd_fb)
         printf("Gamma test end.\n");
 }
 
+/* fb_test_file: Uses an image file to fill a framebuffer
+ * Parameters:
+ * 	fb: framebuffer where the image will be displayed
+ * 	img: image structure containing details of the image file used to fill
+ * 	the framebuffer
+ * 	first: if this is the first test ran with an image file, do some additional
+ * 	tests with the framebuffer: alpha-blending and panning; these tests will be
+ * 	executed only on the background framebuffer (id == 1), so it will blend with
+ * 	the foreground framebuffer (id == 0)
+ */
+int fb_test_file(struct fb_info *fb, struct img_file* img, int first)
+{
+	int ret = 0;
+	char c = 0;
+	int fd;
+	volatile int delay;
+	size_t fsize = 0, rdsize = 0;
+	struct mxcfb_gbl_alpha gbl_alpha;
+
+	if (img->bpp != 16 && img->bpp != 32) {
+		return ret;
+	}
+	if (img->xres < 64 || img->yres < 64 ||
+		img->xres > max_res || img->yres > max_res) {
+		printf("Invalid resolution: %dx%d (file: %s)\n", img->xres, img->yres, img->fname);
+		return ret;
+	}
+
+	if ((fd = open(img->fname, O_RDONLY, 0)) < 0) {
+		printf("Unable to open img file %s\n", img->fname);
+		return ret;
+	}
+	fsize = lseek(fd, 0, SEEK_END);
+	if (fsize == 0)
+		return ret;
+	lseek(fd, 0, SEEK_SET);
+
+	// If this is the first test, use a larger virtual screen, for X/Y panning test
+	if (first)
+		ret = set_screen(fb, img->xres, img->yres, img->xres + img->xres / 2, img->yres + img->yres / 2, img->bpp);
+	else
+		ret = set_screen(fb, img->xres, img->yres, img->xres, img->yres, img->bpp);
+	if (ret < 0)
+		return ret;
+	gbl_alpha.enable = 1;
+	if (fb->id == 1)
+		gbl_alpha.alpha = 0x0;
+	else
+		gbl_alpha.alpha = 0xFF;
+	ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+
+	memset(fb->fb, 0xFF, fb->size);
+	if (nouser) {
+		sleep(1);
+	} else {
+		printf("@%s: Screen should be %dx%d white. Verify the screen and press any key to continue!\n",
+			fb->name, fb->screen_info.xres, fb->screen_info.yres);
+		scanf("%c", &c);
+	}
+
+	if (fsize > fb->size) {
+		printf("FB size:%d is smaller than file size: %d!\n", fb->size, fsize);
+		return ret;
+	}
+	if (fb->id == 1) {
+		gbl_alpha.alpha = 0xFF;
+		ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+	}
+
+	printf("@%s: Using %s to fill the screen...\n", fb->name, img->fname);
+	if (fb->screen_info.xres < fb->screen_info.xres_virtual) {
+		void *fb_ptr = fb->fb;
+		int y;
+		// Copy the image line by line
+		for (y = 0; y < fb->screen_info.yres; y++) {
+			rdsize += read(fd, fb_ptr, (fb->screen_info.xres * (fb->screen_info.bits_per_pixel / 8)));
+			fb_ptr += (fb->screen_info.xres_virtual * (fb->screen_info.bits_per_pixel / 8));
+		}
+		fprintf(stderr, "Read %u, expected %u\n", rdsize, fsize);
+	} else {
+		if ((rdsize = read(fd, fb->fb, fsize)) != fsize)
+			fprintf(stderr, "Warning: Read %u, expected %u\n", rdsize, fsize);
+	}
+	if (fb->id == 1) {
+		if (first) {
+			int i;
+			printf("@%s: Test alpha blend (image should fade in)...\n", fb->name);
+			for (i = 0xFF; i > 0; i--) {
+				delay = 1000;
+				gbl_alpha.alpha = i;
+				ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+				ioctl(fb0.fd, MXCFB_WAIT_FOR_VSYNC, 0);
+				while (delay--) ;
+			}
+			if (nouser) {
+				sleep(1);
+			} else {
+				printf("Verify the screen and press any key to continue!\n");
+				scanf("%c", &c);
+			}
+			int p, ret;
+			printf("@%s: Test y panning...\n", fb->name);
+			for (p = 0; fb->ypanstep > 0 && p <= fb->screen_info.yres; p += fb->ypanstep) {
+				fb->screen_info.yoffset = p;
+				if((ret = ioctl(fb->fd, FBIOPAN_DISPLAY, &fb->screen_info)) < 0)
+					break;
+			}
+			fb->screen_info.yoffset = 0;
+			printf("@%s: Test x panning...\n", fb->name);
+			for (p = 0; fb->xpanstep > 0 && p <= fb->screen_info.xres; p += fb->xpanstep) {
+				fb->screen_info.xoffset = p;
+				if((ret = ioctl(fb->fd, FBIOPAN_DISPLAY, &fb->screen_info)) < 0)
+					break;
+			}
+			fb->screen_info.xoffset = 0;
+			ioctl(fb->fd, FBIOPAN_DISPLAY, &fb->screen_info);
+		} else {
+			gbl_alpha.alpha = 0;
+			ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+		}
+	}
+	if (nouser) {
+		sleep(1);
+	} else {
+		printf("Verify the screen and press any key to continue!\n");
+		scanf("%c", &c);
+	}
+	return ret;
+}
+
+
+/* is_image_file: Check if a filename has the format: <name>-<xres>x<yres>-<bpp>.rgb
+ * Examples:
+ * 	testcard-1920x1080-bgra.rgb
+ * 	testcard-640x480-565.rgb
+ *
+ * If the file matches the format, it will fill the img_file with parsed params
+ */
+int is_image_file(char *fname, struct img_file *str)
+{
+	char *ptr, *ptr2;
+
+	if ((ptr = strrchr(fname, '.')) == NULL)
+		return 0;
+	if (!strncmp(ptr, ".rgb", 4)) {
+		// this is an image file
+		strcpy(str->fname, fname);
+		str->fname[strlen(fname)] = 0;
+		*ptr = 0;
+		if ((ptr = strrchr(fname, '-')) == NULL)
+			return 0;
+		ptr++;
+		if (!strncmp(ptr, "565", 3)) {
+			str->bpp = 16;
+		} else if (!strncmp(ptr, "bgra", 4)) {
+			str->bpp = 32;
+		} else {
+			return 0;
+		}
+		ptr--;
+		*ptr = 0;
+		if ((ptr = strrchr(fname, '-')) == NULL)
+			return 0;
+		ptr++;
+		if ((ptr2 = strchr(ptr, 'x')) == NULL) {
+			return 0;
+		}
+		ptr2++;
+		str->yres = atoi(ptr2);
+		ptr2--;
+		ptr2 = NULL;
+		str->xres = atoi(ptr);
+		return 1;
+	}
+	return 0;
+}
+
+/* fb_test_images: Parses the current directory for image files and will use
+ *                 them to fill BG and FG framebuffers
+ */
+int fb_test_images(void)
+{
+	DIR *dir;
+	char c;
+	int ret = 0;
+	struct dirent *ent;
+	struct img_file img, fb0_state, fb1_state;
+	struct mxcfb_gbl_alpha gbl_alpha;
+	int first_test = 1;
+
+	if ((dir = opendir(".")) == NULL) {
+		fprintf(stderr, "Cannot open current directory!\n");
+		return ret;
+	}
+
+	// use img_file struct to save fb0 and fb1 resolution and bpp
+	fb0_state.xres = fb0.screen_info.xres;
+	fb0_state.yres = fb0.screen_info.yres;
+	fb0_state.bpp  = fb0.screen_info.bits_per_pixel;
+	fb1_state.xres = fb1.screen_info.xres;
+	fb1_state.yres = fb1.screen_info.yres;
+	fb1_state.bpp  = fb1.screen_info.bits_per_pixel;
+
+	gbl_alpha.enable = 1;
+	gbl_alpha.alpha = 0x0;
+	if ((ret = ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha)) < 0) {
+		/* TODO:
+		 * We failed to reset global alpha, not sure if we should abandon
+		 * or just print the error and continue in this state.
+		 */
+		fprintf(stderr, "Failed to reset global alpha! (%d)\n", ret);
+	}
+
+	memset(fb0.fb, 0x00, fb0.size);
+	ioctl(fb0.fd, MXCFB_WAIT_FOR_VSYNC, 0);
+	memset(fb1.fb, 0xFF, fb1.size);
+	ioctl(fb1.fd, MXCFB_WAIT_FOR_VSYNC, 0);
+	if (nouser) {
+		sleep(1);
+	} else {
+		printf("Prepared %s (black) and %s (white). Verify the screen and press any key to continue!\n",
+			fb0.name, fb1.name);
+		scanf("%c", &c);
+	}
+
+	while ((ent = readdir(dir)) != NULL) {
+		if (is_image_file(ent->d_name, &img)) {
+			if (img.xres >= fb0.screen_info.xres && img.yres >= fb0.screen_info.yres)
+				ret = fb_test_file(&fb0, &img, 0);
+			else
+				ret = fb_test_file(&fb1, &img, first_test);
+			// For the first sample, test alpha blending and X/Y panning
+			first_test = 0;
+			if (ret < 0)
+				break;
+		}
+	}
+
+	closedir(dir);
+
+	// Restore initial states for fb0 and fb1
+	if (ret < 0 || (ret = set_screen(&fb0, fb0_state.xres, fb0_state.yres, fb0_state.xres, fb0_state.yres, fb0_state.bpp)) < 0)
+		return ret;
+	if (ret < 0 || (ret = set_screen(&fb1, fb1_state.xres, fb1_state.yres, fb1_state.xres, fb1_state.yres, fb1_state.bpp)) < 0)
+		return ret;
+	// Reset the framebuffers to black
+	memset(fb0.fb, 0, fb0.size);
+	ioctl(fb0.fd, MXCFB_WAIT_FOR_VSYNC, 0);
+	memset(fb1.fb, 0, fb1.size);
+	ioctl(fb1.fd, MXCFB_WAIT_FOR_VSYNC, 0);
+	sleep(2);
+	return ret;
+}
+
+
+
 int setup_fb(struct fb_info *fb, int id)
 {
 	int retval = TPASS;
@@ -339,11 +653,45 @@ void cleanup_fb(struct fb_info *fb)
 	memset(fb, 0, sizeof(struct fb_info));
 }
 
+void print_usage(void)
+{
+	printf("%s", usage);
+}
+
+int parse_args(int argc, char **argv)
+{
+	int ret = 0;
+	int opt;
+
+	do {
+		opt = getopt(argc, argv, options);
+		switch (opt) {
+		case 'm':
+			max_res = atoi(optarg);
+			if (max_res <= 0) {
+				fprintf(stderr, "Invalid max_res: %s\n", optarg);
+				ret = -1;
+			}
+			break;
+		case 'n':
+			nouser = 1;
+			break;
+		}
+	} while ((opt != -1) && (ret == 0));
+
+	return ret;
+}
+
 int
 main(int argc, char **argv)
 {
 	int retval = TPASS;
 	struct mxcfb_gbl_alpha gbl_alpha;
+
+	if (parse_args(argc, argv) < 0) {
+		print_usage();
+		return retval;
+	}
 
 	if ((retval = setup_fb(&fb0, 0)) < 0)
 		goto exit;
@@ -366,6 +714,7 @@ main(int argc, char **argv)
 		goto exit;
 	}
 
+	fb_test_images();
 	fb_test_gbl_alpha();
 	fb_test_pan(&fb1);
 
