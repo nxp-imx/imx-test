@@ -256,7 +256,6 @@ void parse_module(char *module, char *reg, char *field, int iswrite)
 	char *rev;
 
 	int kv, kv_major, kv_minor, kv_rel;
-	int rev_major, rev_minor;
 	struct utsname sys_name;
 
 	if (uname(&sys_name) < 0)
