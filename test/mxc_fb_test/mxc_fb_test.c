@@ -57,66 +57,54 @@ struct fb_info {
 };
 struct fb_info fb0, fb1;
 
-void fb_test_bpp(int fd, unsigned short * fb)
+int fb_test_bpp(struct fb_info *fb)
 {
         int i;
-        __u32 screensize;
-        int retval;
-        struct fb_var_screeninfo screen_info;
+        int retval = 0;
 
-        retval = ioctl(fd, FBIOGET_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                return;
+        printf("Test bpp start\n");
+        printf("@%s: Set colorspace to 32-bpp\n", fb->name);
+        fb->screen_info.bits_per_pixel = 32;
+        if ((retval = ioctl(fb->fd, FBIOPUT_VSCREENINFO, &fb->screen_info)) < 0) {
+                fprintf(stderr, "@%s: Could not set screen info!\n", fb->name);
+                return retval;
         }
 
-        printf("Set the background to 32-bpp\n");
-        screen_info.bits_per_pixel = 32;
-        retval = ioctl(fd, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                return;
-        }
-        printf("fb_test: xres_virtual = %d\n", screen_info.xres_virtual);
-        screensize = screen_info.xres * screen_info.yres * screen_info.bits_per_pixel / 8;
-
-        printf("Fill the BG in red, size = 0x%08X\n", screensize);
-        for (i = 0; i < screensize/4; i++)
-                ((__u32*)fb)[i] = 0x00FF0000;
-        sleep(3);
-
-        printf("Set the BG to 24-bpp\n");
-        screen_info.bits_per_pixel = 24;
-        retval = ioctl(fd, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                return;
-        }
-        printf("fb_test: xres_virtual = %d\n", screen_info.xres_virtual);
-        screensize = screen_info.xres * screen_info.yres * screen_info.bits_per_pixel / 8;
-
-        printf("Fill the BG in blue, size = 0x%08X\n", screensize);
-        for (i = 0; i < screensize; ) {
-                ((__u8*)fb)[i++] = 0xFF;       // Blue
-                ((__u8*)fb)[i++] = 0x00;       // Green
-                ((__u8*)fb)[i++] = 0x00;       // Red
+        printf("@%s: Fill the screen in red\n", fb->name);
+        for (i = 0; i < fb->size / 4; i++) {
+                ((__u32*)fb->fb)[i] = 0x00FF0000;
         }
         sleep(3);
 
-        printf("Set the background to 16-bpp\n");
-        screen_info.bits_per_pixel = 16;
-        retval = ioctl(fd, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                return;
+        printf("@%s: Set colorspace to 24-bpp\n", fb->name);
+        fb->screen_info.bits_per_pixel = 24;
+        if ((retval = ioctl(fb->fd, FBIOPUT_VSCREENINFO, &fb->screen_info)) < 0) {
+                fprintf(stderr, "@%s: Could not set screen info!\n", fb->name);
+                return retval;
         }
-        screensize = screen_info.xres * screen_info.yres * screen_info.bits_per_pixel / 8;
 
-        printf("Fill the BG in green, size = 0x%08X\n", screensize);
-        for (i = 0; i < screensize/2; i++)
-                fb[i] = 0x07E0;
+        printf("@%s: Fill the screen in blue\n", fb->name);
+        for (i = 0; i < fb->size; ) {
+                ((__u8*)fb->fb)[i++] = 0xFF;       // Blue
+                ((__u8*)fb->fb)[i++] = 0x00;       // Green
+                ((__u8*)fb->fb)[i++] = 0x00;       // Red
+        }
         sleep(3);
 
+        printf("@%s: Set colorspace to 16-bpp\n", fb->name);
+        fb->screen_info.bits_per_pixel = 16;
+        if ((retval = ioctl(fb->fd, FBIOPUT_VSCREENINFO, &fb->screen_info)) < 0) {
+                fprintf(stderr, "@%s: Could not set screen info!\n", fb->name);
+                return retval;
+        }
+
+        printf("@%s: Fill the screen in green\n", fb->name);
+        for (i = 0; i < fb->size / 2; i++)
+                fb->fb[i] = 0x07E0;
+        sleep(3);
+
+        printf("Test bpp end\n");
+        return retval;
 }
 
 void fb_test_gbl_alpha(void)
@@ -398,6 +386,7 @@ main(int argc, char **argv)
 
 	fb_test_pan(&fb0);
 	fb_test_gamma(fb0.fd);
+	fb_test_bpp(&fb0);
 
 	// Leave the screen black before exiting the test
 	memset(fb0.fb, 0, fb0.size);
