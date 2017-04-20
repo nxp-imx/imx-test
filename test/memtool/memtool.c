@@ -613,6 +613,7 @@ int main(int argc, char **argv)
 	void *aligned_vaddr;
 	unsigned long aligned_paddr;
 	uint32_t aligned_size;
+	int page_size = getpagesize();
 
 	if (parse_cmdline(argc, argv)) {
 		printf("Usage:\n\n"
@@ -638,9 +639,9 @@ int main(int argc, char **argv)
 	/* Align address to access size */
 	g_paddr &= ~(g_size - 1);
 
-	aligned_paddr = g_paddr & ~(4096 - 1);
+	aligned_paddr = g_paddr & ~(page_size - 1);
 	aligned_size = g_paddr - aligned_paddr + (g_count * g_size);
-	aligned_size = (aligned_size + 4096 - 1) & ~(4096 - 1);
+	aligned_size = (aligned_size + page_size - 1) & ~(page_size - 1);
 
 	if (g_is_write)
 		printf("Writing %d-bit value 0x%X to address 0x%08lX\n",
