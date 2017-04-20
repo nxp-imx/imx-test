@@ -561,7 +561,7 @@ void read_mem(void *addr, uint32_t count, uint32_t size)
 	case 1:
 		for (i = 0; i < count; i++) {
 			if ((i % 16) == 0)
-				printf("\n0x%08X: ", g_paddr);
+				printf("\n0x%08lX: ", g_paddr);
 			printf(" %02X", addr8[i]);
 			g_paddr++;
 		}
@@ -569,7 +569,7 @@ void read_mem(void *addr, uint32_t count, uint32_t size)
 	case 2:
 		for (i = 0; i < count; i++) {
 			if ((i % 8) == 0)
-				printf("\n0x%08X: ", g_paddr);
+				printf("\n0x%08lX: ", g_paddr);
 			printf(" %04X", addr16[i]);
 			g_paddr += 2;
 		}
@@ -577,7 +577,7 @@ void read_mem(void *addr, uint32_t count, uint32_t size)
 	case 4:
 		for (i = 0; i < count; i++) {
 			if ((i % 4) == 0)
-				printf("\n0x%08X: ", g_paddr);
+				printf("\n0x%08lX: ", g_paddr);
 			printf(" %08X", addr32[i]);
 			g_paddr += 4;
 		}
@@ -643,10 +643,10 @@ int main(int argc, char **argv)
 	aligned_size = (aligned_size + 4096 - 1) & ~(4096 - 1);
 
 	if (g_is_write)
-		printf("Writing %d-bit value 0x%X to address 0x%08X\n",
+		printf("Writing %d-bit value 0x%X to address 0x%08lX\n",
 		       g_size * 8, g_value, g_paddr);
 	else
-		printf("Reading 0x%X count starting at address 0x%08X\n",
+		printf("Reading 0x%X count starting at address 0x%08lX\n",
 		       g_count, g_paddr);
 
 	if ((fd = open("/dev/mem", O_RDWR | O_SYNC, 0)) < 0)
