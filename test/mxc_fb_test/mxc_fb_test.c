@@ -40,15 +40,22 @@ extern "C"{
 #include <string.h>
 #include <malloc.h>
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 #define TFAIL -1
 #define TPASS 0
 
-int fd_fb0 = 0;
-int fd_fb1 = 0;
-unsigned short * fb0;
-unsigned short * fb1;
-int g_fb0_size;
-int g_fb1_size;
+struct fb_info {
+	int id;
+	int fd;
+	unsigned short *fb;
+	int size;
+	char name[16];
+	int xpanstep;
+	int ypanstep;
+	struct fb_var_screeninfo screen_info;
+};
+struct fb_info fb0, fb1;
 
 void fb_test_bpp(int fd, unsigned short * fb)
 {
@@ -122,12 +129,18 @@ void fb_test_gbl_alpha(void)
 
         printf("Testing global alpha blending...\n");
 
-        printf("Fill the FG in black \n");
-        memset(fb1, 0x0, g_fb1_size);
+        printf("Fill the FG in black (screen is %dx%d @ %d-bpp)\n",
+                       fb1.screen_info.xres,
+                       fb1.screen_info.yres,
+                       fb1.screen_info.bits_per_pixel);
+        memset(fb1.fb, 0x0, fb1.size);
         sleep(2);
 
-        printf("Fill the BG in white \n");
-        memset(fb0, 0xFF, g_fb0_size);
+        printf("Fill the BG in white (screen is %dx%d @ %d-bpp)\n",
+                       fb0.screen_info.xres,
+                       fb0.screen_info.yres,
+                       fb0.screen_info.bits_per_pixel);
+        memset(fb0.fb, 0xFF, fb0.size);
         sleep(2);
 
         gbl_alpha.enable = 1;
@@ -135,10 +148,10 @@ void fb_test_gbl_alpha(void)
                 delay = 1000;
 
                 gbl_alpha.alpha = i;
-                retval = ioctl(fd_fb0, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+                retval = ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
 
                 // Wait for VSYNC
-                retval = ioctl(fd_fb0, MXCFB_WAIT_FOR_VSYNC, 0);
+                retval = ioctl(fb0.fd, MXCFB_WAIT_FOR_VSYNC, 0);
                 if (retval < 0) {
                         printf("Error waiting on VSYNC\n");
                         break;
@@ -149,7 +162,7 @@ void fb_test_gbl_alpha(void)
                 delay = 1000;
 
                 gbl_alpha.alpha = i;
-                retval = ioctl(fd_fb0, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+                retval = ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
 
                 while (delay--) ;
         }
@@ -157,53 +170,62 @@ void fb_test_gbl_alpha(void)
         sleep(3);
 
         gbl_alpha.alpha = 0xFF;
-        retval = ioctl(fd_fb0, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+        retval = ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
         printf("Alpha is 255, BG is opaque\n");
         sleep(3);
 
         key.enable = 1;
         key.color_key = 0x00FF0000; // Red
-        retval = ioctl(fd_fb0, MXCFB_SET_CLR_KEY, &key);
+        retval = ioctl(fb0.fd, MXCFB_SET_CLR_KEY, &key);
 
         for (i = 0; i < 240*80; i++)
-                fb0[i] = 0xF800;
+                fb0.fb[i] = 0xF800;
 
         printf("Color key enabled\n");
         sleep(3);
 
         key.enable = 0;
-        retval = ioctl(fd_fb0, MXCFB_SET_CLR_KEY, &key);
+        retval = ioctl(fb0.fd, MXCFB_SET_CLR_KEY, &key);
         printf("Color key disabled\n");
 
 
         gbl_alpha.enable = 0;
-        retval = ioctl(fd_fb0, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+        retval = ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
         printf("Global alpha disabled\n");
         sleep(3);
 
 }
 
-void fb_test_pan(int fd_fb, unsigned short * fb, struct fb_var_screeninfo * var)
+void fb_test_pan(struct fb_info *fb)
 {
         int x, y;
-        int retval;
         int color = 0;
 
         printf("Pan test start.\n");
 
-        for (y = 0; y < var->yres_virtual; y++) {
-                for (x = 0; x < var->xres; x++) {
-                        fb[(y*var->xres) + x] = color;
+	if (fb->screen_info.yres_virtual == fb->screen_info.yres)
+		fb->screen_info.yres_virtual += fb->screen_info.yres / 2;
+        printf("@%s: Set the colorspace to 16-bpp\n", fb->name);
+        fb->screen_info.bits_per_pixel = 16;
+        if (ioctl(fb->fd, FBIOPUT_VSCREENINFO, &fb->screen_info) < 0) {
+                fprintf(stderr, "@%s: Could not set screen info!\n", fb->name);
+                return;
+        }
+
+        for (y = 0; y < fb->screen_info.yres_virtual; y++) {
+                for (x = 0; x < fb->screen_info.xres; x++) {
+                        fb->fb[(y * fb->screen_info.xres) + x] = color;
                 }
                 color+=4;
         }
 
-        for (y = 0; y <= var->yres; y++) {
-                var->yoffset = y;
-                retval = ioctl(fd_fb, FBIOPAN_DISPLAY, var);
-                if (retval < 0)
+        for (y = 0; y <= fb->screen_info.yres; y += fb->ypanstep) {
+                fb->screen_info.yoffset = y;
+                if (ioctl(fb->fd, FBIOPAN_DISPLAY, &fb->screen_info) < 0)
                         break;
         }
+	fb->screen_info.yoffset = 0;
+	ioctl(fb->fd, FBIOPAN_DISPLAY, &fb->screen_info);
         printf("Pan test done.\n");
 }
 
@@ -269,129 +291,120 @@ void fb_test_gamma(int fd_fb)
         printf("Gamma test end.\n");
 }
 
+int setup_fb(struct fb_info *fb, int id)
+{
+	int retval = TPASS;
+	struct fb_fix_screeninfo fb_fix;
+	char path[16];
+
+	memset(fb, 0, sizeof(struct fb_info));
+	snprintf(&path[0], ARRAY_SIZE(path), "/dev/fb%d", id);
+	fb->id = id;
+	if ((fb->fd = open(path, O_RDWR, 0)) < 0) {
+		fprintf(stderr, "Unable to open %s\n", path);
+		return TFAIL;
+	}
+	if ((retval = ioctl(fb->fd, FBIOBLANK, FB_BLANK_UNBLANK)) < 0) {
+		fprintf(stderr, "Unable to unblank %s\n", path);
+		return retval;
+	}
+	if ((retval = ioctl(fb->fd, FBIOGET_FSCREENINFO, &fb_fix)) < 0) {
+		fprintf(stderr, "Could not get fix screen info for %s\n", path);
+		return retval;
+	}
+	strcpy(fb->name, fb_fix.id);
+	fb->xpanstep = fb_fix.xpanstep;
+	fb->ypanstep = fb_fix.ypanstep;
+	printf("Opened fb: %s (%s)\n", path, fb->name);
+
+
+	if ((retval = ioctl(fb->fd, FBIOGET_VSCREENINFO, &fb->screen_info)) < 0) {
+		fprintf(stderr, "Could not get screen info for %s\n", path);
+		return retval;
+	}
+	printf("%s: screen info: %dx%d (virtual: %dx%d) @ %d-bpp\n\n",
+			fb->name,
+			fb->screen_info.xres,
+			fb->screen_info.yres,
+			fb->screen_info.xres_virtual,
+			fb->screen_info.yres_virtual,
+			fb->screen_info.bits_per_pixel);
+
+	/* Map the device to memory*/
+	fb->size = fb->screen_info.xres_virtual * fb->screen_info.yres_virtual * fb->screen_info.bits_per_pixel / 8;
+	fb->fb = (unsigned short *)mmap(0, fb->size, PROT_READ | PROT_WRITE, MAP_SHARED, fb->fd, 0);
+	if ((int)fb->fb <= 0) {
+		fprintf(stderr, "Error: failed mapping framebuffer %s to memory!\n", fb->name);
+		return TFAIL;
+	}
+
+	return retval;
+}
+
+
+void cleanup_fb(struct fb_info *fb)
+{
+	if ((int)fb->fb > 0 && fb->size > 0)
+		munmap(fb->fb, fb->size);
+	if (fb->fd > 0)
+		close(fb->fd);
+	memset(fb, 0, sizeof(struct fb_info));
+}
+
 int
 main(int argc, char **argv)
 {
-        int retval = TPASS;
-        struct mxcfb_gbl_alpha gbl_alpha;
-        struct fb_var_screeninfo screen_info;
-        struct fb_fix_screeninfo fb_fix;
-        u_int32_t screensize = 0;
+	int retval = TPASS;
+	struct mxcfb_gbl_alpha gbl_alpha;
 
-        if ((fd_fb0 = open("/dev/fb0", O_RDWR, 0)) < 0)
-        {
-                printf("Unable to open /dev/fb0\n");
-                retval = TFAIL;
-                goto err0;
-        }
+	if ((retval = setup_fb(&fb0, 0)) < 0)
+		goto exit;
+	if ((retval = setup_fb(&fb1, 1)) < 0)
+		goto exit;
 
-        if ((fd_fb1 = open("/dev/fb1", O_RDWR, 0)) < 0)
-        {
-                printf("Unable to open /dev/fb1\n");
-                retval = TFAIL;
-                goto err0;
-        }
-	retval = ioctl(fd_fb1, FBIOGET_FSCREENINFO, &fb_fix);
-        if (retval < 0)
-        {
-                goto err1;
-        }
-        retval = ioctl(fd_fb1, FBIOBLANK, FB_BLANK_UNBLANK);
-        if (retval < 0)
-        {
-                goto err1;
-        }
+	printf("@%s: Set colorspace to 16-bpp\n", fb0.name);
+	fb0.screen_info.bits_per_pixel = 16;
+	fb0.screen_info.yoffset = 0;
+	if ((retval = ioctl(fb0.fd, FBIOPUT_VSCREENINFO, &fb0.screen_info)) < 0) {
+		fprintf(stderr, "@%s: Could not set screen info!\n", fb0.name);
+		goto exit;
+	}
 
-        printf("Opened fb0 and fb1\n");
+	printf("@%s: Set colorspace to 16-bpp\n", fb1.name);
+	fb1.screen_info.bits_per_pixel = 16;
+	fb1.screen_info.yoffset = 0;
+	if ((retval = ioctl(fb1.fd, FBIOPUT_VSCREENINFO, &fb1.screen_info)) < 0) {
+		fprintf(stderr, "@%s: Could not set screen info!\n", fb1.name);
+		goto exit;
+	}
 
-        retval = ioctl(fd_fb0, FBIOGET_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                goto err2;
-        }
-        printf("Set the background to 16-bpp\n");
-        screen_info.bits_per_pixel = 16;
-        screen_info.yoffset = 0;
-        retval = ioctl(fd_fb0, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                goto err2;
-        }
-        g_fb0_size = screen_info.xres * screen_info.yres_virtual * screen_info.bits_per_pixel / 8;
+	fb_test_gbl_alpha();
+	fb_test_pan(&fb1);
 
-        printf("\n Screen size = %u \n", screensize);
+	// Set BG to visible
+	gbl_alpha.alpha = 0xFF;
+	retval = ioctl(fb0.fd, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
+	retval = ioctl(fb0.fd, FBIOGET_VSCREENINFO, &fb0.screen_info);
+	if (retval < 0) {
+		fprintf(stderr, "@%s: Could not get screen info!\n", fb0.name);
+		goto exit;
+	}
+	printf("@%s: Set colorspace to 16-bpp\n", fb0.name);
+	fb0.screen_info.bits_per_pixel = 16;
+	if ((retval = ioctl(fb0.fd, FBIOPUT_VSCREENINFO, &fb0.screen_info)) < 0) {
+		fprintf(stderr, "@%s: Could not set screen info!\n", fb0.name);
+		goto exit;
+	}
 
-        /* Map the device to memory*/
-        fb0 = (unsigned short *)mmap(0, g_fb0_size,PROT_READ | PROT_WRITE, MAP_SHARED, fd_fb0, 0);
-        if ((int)fb0 <= 0)
-        {
-                printf("\nError: failed to map framebuffer device 0 to memory.\n");
-                goto err2;
-        }
+	fb_test_pan(&fb0);
+	fb_test_gamma(fb0.fd);
 
-        retval = ioctl(fd_fb1, FBIOGET_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                goto err3;
-        }
-        printf("Set the foreground to 16-bpp\n");
-        screen_info.bits_per_pixel = 16;
-        screen_info.yoffset = 0;
-        retval = ioctl(fd_fb1, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0)
-        {
-                goto err3;
-        }
-        g_fb1_size = screen_info.xres * screen_info.yres_virtual * screen_info.bits_per_pixel / 8;
+	// Leave the screen black before exiting the test
+	memset(fb0.fb, 0, fb0.size);
+exit:
+	cleanup_fb(&fb0);
+	cleanup_fb(&fb1);
 
-        /* Map the device to memory*/
-        fb1 = (unsigned short *)mmap(0, g_fb1_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_fb1, 0);
-        if ((int)fb1 <= 0)
-        {
-                printf("\nError: failed to map framebuffer device 1 to memory.\n");
-                goto err3;
-        }
-
-        fb_test_gbl_alpha();
-
-        retval = ioctl(fd_fb1, FBIOGET_VSCREENINFO, &screen_info);
-        if (retval < 0) {
-                goto err4;
-        }
-        printf("Set the background to 16-bpp\n");
-        screen_info.bits_per_pixel = 16;
-        retval = ioctl(fd_fb1, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0) {
-                goto err4;
-        }
-        fb_test_pan(fd_fb1, fb1, &screen_info);
-
-        // Set BG to visable
-        gbl_alpha.alpha = 0xFF;
-        retval = ioctl(fd_fb0, MXCFB_SET_GBL_ALPHA, &gbl_alpha);
-
-        retval = ioctl(fd_fb0, FBIOGET_VSCREENINFO, &screen_info);
-        if (retval < 0) {
-                goto err4;
-        }
-        printf("Set the background to 16-bpp\n");
-        screen_info.bits_per_pixel = 16;
-        retval = ioctl(fd_fb0, FBIOPUT_VSCREENINFO, &screen_info);
-        if (retval < 0) {
-                goto err4;
-        }
-        fb_test_pan(fd_fb0, fb0, &screen_info);
-
-        fb_test_gamma(fd_fb0);
-err4:
-        munmap(fb1, g_fb1_size);
-err3:
-        munmap(fb0, g_fb0_size);
-err2:
-        close(fd_fb1);
-err1:
-        close(fd_fb0);
-err0:
-        return retval;
+	return retval;
 }
 
