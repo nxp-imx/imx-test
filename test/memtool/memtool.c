@@ -271,6 +271,10 @@ void parse_module(char *module, char *reg, char *field, int iswrite)
 			die("can't open file /proc/cpuinfo\n");
 
 		n = read(fd, g_buffer, 4095);
+		if(n < 0) {
+			close(fd);
+			die("read from /proc/cpuinfo failed\n");
+		}
 		g_buffer[4095] = '\0';
 		close(fd);
 
