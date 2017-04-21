@@ -36,7 +36,7 @@ char *g_field;
 char *g_reg_input;
 
 int g_fmem;
-int g_map_vaddr = 0;
+uintptr_t g_map_vaddr = 0;
 int g_map_paddr = 0;
 int g_comp = 0;
 int g_module_match = 0;
@@ -78,7 +78,7 @@ int map_address(int address)
 		munmap((void *)g_map_vaddr, MAP_SIZE);
 
 	g_map_vaddr =
-	    (int)mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+	    (uintptr_t)mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
 		      g_fmem, address & (~(MAP_SIZE - 1)));
 	g_map_paddr = address & (~(MAP_SIZE - 1));
 
