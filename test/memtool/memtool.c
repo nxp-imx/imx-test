@@ -51,6 +51,7 @@ extern const module_t mx6sx[];
 extern const module_t mx6ul[];
 extern const module_t mx7d[];
 extern const module_t mx6ull[];
+extern const module_t mx7ulp[];
 
 char g_buffer[4096];
 
@@ -337,6 +338,8 @@ void parse_module(char *module, char *reg, char *field, int iswrite)
 			mx = mx7d;
 		else if (!strcmp(soc_name, "i.MX6ULL"))
 			mx = mx6ull;
+		else if (!strcmp(soc_name, "i.MX7ULP"))
+			mx = mx7ulp;
 		else
 			die("Unknown SOC\n");
 	}
