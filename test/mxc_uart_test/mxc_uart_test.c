@@ -21,61 +21,61 @@
 #include <unistd.h>
 #include "../../include/test_utils.h"
 
-#define LOOPBACK        0x8000
+#define LOOPBACK	0x8000
 
 int main(int argc, char **argv)
 {
-        int uart_file1;
-        unsigned int line_val;
-        char buf[5];
-        struct termios mxc, old;
-        int retval = 0;
+	int uart_file1;
+	unsigned int line_val;
+	char buf[5];
+	struct termios mxc, old;
+	int retval = 0;
 	int retries = 5;
 
-        print_name(argv);
-        printf("Usage: mxc_uart_test <UART device name, opens UART2 if no dev name is specified>\n");
+	print_name(argv);
+	printf("Usage: mxc_uart_test <UART device name, opens UART2 if no dev name is specified>\n");
 
-        if (argc == 1) {
-                /* No Args, open UART 2 */
-                if ((uart_file1 = open("/dev/ttymxc/1", O_RDWR)) == -1) {
-                        printf("Error opening UART 2\n");
-                        exit(1);
-                } else {
-                        printf("Test: UART 2 opened\n");
-                }
-        } else {
-                /* Open the specified UART device */
-                if ((uart_file1 = open(*++argv, O_RDWR)) == -1) {
-                        printf("Error opening %s\n", *argv);
-                        exit(1);
-                } else {
-                        printf("%s opened\n", *argv);
-                }
-        }
+	if (argc == 1) {
+		/* No Args, open UART 2 */
+		if ((uart_file1 = open("/dev/ttymxc/1", O_RDWR)) == -1) {
+			printf("Error opening UART 2\n");
+			exit(1);
+		} else {
+			printf("Test: UART 2 opened\n");
+		}
+	} else {
+		/* Open the specified UART device */
+		if ((uart_file1 = open(*++argv, O_RDWR)) == -1) {
+			printf("Error opening %s\n", *argv);
+			exit(1);
+		} else {
+			printf("%s opened\n", *argv);
+		}
+	}
 
-        tcgetattr(uart_file1, &old);
-        mxc = old;
-        mxc.c_lflag &= ~(ICANON | ECHO | ISIG);
-        tcsetattr(uart_file1, TCSANOW, &mxc);
-        printf("Attributes set\n");
+	tcgetattr(uart_file1, &old);
+	mxc = old;
+	mxc.c_lflag &= ~(ICANON | ECHO | ISIG);
+	tcsetattr(uart_file1, TCSANOW, &mxc);
+	printf("Attributes set\n");
 
-        line_val = LOOPBACK;
-        ioctl(uart_file1, TIOCMSET, &line_val);
-        printf("Test: IOCTL Set\n");
+	line_val = LOOPBACK;
+	ioctl(uart_file1, TIOCMSET, &line_val);
+	printf("Test: IOCTL Set\n");
 
-        write(uart_file1, "Test\0", 5);
-        printf("Data Written= Test\n");
+	write(uart_file1, "Test\0", 5);
+	printf("Data Written= Test\n");
 
 	sleep(1);
-        while (retries-- && retval < 5)
+	while (retries-- && retval < 5)
 		retval += read(uart_file1, buf + retval, 5 - retval);
-        printf("Data Read back= %s\n", buf);
-        sleep(2);
-        ioctl(uart_file1, TIOCMBIC, &line_val);
+	printf("Data Read back= %s\n", buf);
+	sleep(2);
+	ioctl(uart_file1, TIOCMBIC, &line_val);
 
-        retval = tcsetattr(uart_file1, TCSAFLUSH, &old);
+	retval = tcsetattr(uart_file1, TCSAFLUSH, &old);
 
-        close(uart_file1);
-        print_result(argv);
-        return 0;
+	close(uart_file1);
+	print_result(argv);
+	return 0;
 }
