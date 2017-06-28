@@ -27,4 +27,4 @@ endif
 
 .PHONY: clean
 clean:
-	rm -f *.pdf *.html
+	rm -f *.pdf *.html *.xml def.cfg
