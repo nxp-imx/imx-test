@@ -1,20 +1,4 @@
-LIBS += -lpthread
-
-OBJS = 	$(OBJDIR)/mxc_uart_test.out  $(OBJDIR)/autorun-mxc_uart.sh $(OBJDIR)/mxc_uart_xmit_test.out $(OBJDIR)/mxc_uart_stress_test.out
-
-all : $(OBJS)
-	mv $(OBJDIR)/mxc_uart_test.out $(OBJDIR)/UART
-	mv $(OBJDIR)/autorun-mxc_uart.sh $(OBJDIR)/UART
-	mv $(OBJDIR)/mxc_uart_xmit_test.out $(OBJDIR)/UART
-	mv $(OBJDIR)/mxc_uart_stress_test.out $(OBJDIR)/UART
-	cp README $(OBJDIR)/UART
-
-.PHONY: clean
-clean :
-	rm -f $(OBJS)
-
-#
-# include the Rules
-#
-include ../make.rules
-
+DIR = UART
+BUILD = mxc_uart_test.out mxc_uart_xmit_test.out mxc_uart_stress_test.out
+LDFLAGS = -lpthread
+COPY = autorun-mxc_uart.sh README

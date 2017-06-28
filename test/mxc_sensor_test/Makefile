@@ -1,19 +1,3 @@
-#
-#Makefile for motion sensor driver test.
-#
-OBJS = $(OBJDIR)/acctest.out  $(OBJDIR)/evtest.out
-
-all : $(OBJS)
-	mv $(OBJDIR)/acctest.out $(OBJDIR)/Sensors
-	mv $(OBJDIR)/evtest.out $(OBJDIR)/Sensors
-	cp README $(OBJDIR)/Sensors
-
-.PHONY: clean
-clean :
-	rm -f $(OBJS)
-
-#
-# include the Rules
-#
-include ../make.rules
-
+DIR = Sensors
+BUILD = acctest.out evtest.out
+COPY = README

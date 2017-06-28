@@ -27,4 +27,5 @@ endif
 
 .PHONY: clean
 clean:
-	rm -f *.pdf *.html *.xml def.cfg
+	@echo "	CLEAN	doc"
+	$(Q)rm -f *.pdf *.html *.xml def.cfg

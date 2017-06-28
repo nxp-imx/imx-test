@@ -1,28 +1,6 @@
-LINK ?=$(CROSS_COMPILE)gcc
-STRIP ?=$(CROSS_COMPILE)strip
-
-OBJ = mmdc.o
-
-TARGET = $(OBJDIR)/mmdc2
-
-CFLAGS+= -Os
-
-LDFLAGS+= -lstdc++
-
-all : $(TARGET)
-
-$(TARGET):$(OBJ)
-	$(CC) -o $(TARGET) $(OBJ) $(LDFLAGS) -Os
-	$(STRIP) $(TARGET)
-	mv $(OBJDIR)/mmdc2 $(OBJDIR)/MMDC
-	cp README $(OBJDIR)/MMDC
-
-.PHONY: clean
-clean :
-	rm -f $(OBJ)
-
-#
-# include the Rules
-#
-include ../make.rules
-
+DIR = MMDC
+BUILD = mmdc2
+mmdc2 = mmdc.o
+LDFLAGS = -lstdc++
+CFLAGS = -Os
+COPY = README

@@ -73,8 +73,8 @@ int tc_send(int fd, int test_case, int step, int transfer_count, int data_len)
 		memset(data, i, data_len);
 		result = write(fd, data, data_len);
 		if (result != data_len) {
-			printf("Sending message was unsuccessful.
-				Send request (tc-step-loop) %d-%d-%d.\r\n",
+			printf("Sending message was unsuccessful.\r\n"
+			       "Send request (tc-step-loop) %d-%d-%d.\r\n",
 				test_case, step, i);
 			return -1;
 		}
@@ -93,15 +93,15 @@ int tc_receive(int fd, int test_case, int step, int transfer_count,
 	for (i = 0; i < transfer_count; i++) {
 		result = read(fd, data, data_len);
 		if (result != data_len) {
-			printf("Receiving message was unsuccessful.
-				Receive request (tc-step-loop) %d-%d-%d.\r\n",
+			printf("Receiving message was unsuccessful.\r\n"
+			       "Receive request (tc-step-loop) %d-%d-%d.\r\n",
 				test_case, step, i);
 			return -1;
 		}
 		result = pattern_cmp(data, i, data_len);
 		if (result == -1) {
-			printf("Received bad message.
-				Receive request (tc-step-loop) %d-%d-%d.\r\n",
+			printf("Received bad message.\r\n"
+			       "Receive request (tc-step-loop) %d-%d-%d.\r\n",
 				test_case, step, i);
 			return result;
 		}

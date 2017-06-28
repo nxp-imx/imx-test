@@ -1,35 +1,6 @@
-CC ?=$(CROSS_COMPILE)gcc
-LINK ?=$(CROSS_COMPILE)gcc
-
-OBJ = main.o \
-      dec.o \
-      enc.o \
-      capture.o \
-      display.o \
-      fb.o \
-      utils.o \
-      loopback.o \
-      transcode.o
-
-
-TARGET = mxc_vpu_test.out
-
-all: $(TARGET)
-
-$(TARGET): $(OBJ)
-	$(CC) -o $(TARGET) $(OBJ) ${LIBS} -lvpu -lipu -lrt -lpthread
-	mkdir -p $(OBJDIR)
-	mv $(TARGET) $(OBJDIR)/VPU
-	cp autorun-vpu.sh $(OBJDIR)/VPU
-	cp ./configs/config* $(OBJDIR)/VPU
-	cp ./configs/akiyo.mp4 $(OBJDIR)/VPU
-	cp README $(OBJDIR)/VPU
-
-%.o: %.c
-	$(CC) $(INC) -Wall -O2 -c $^ -o $@
-
-.PHONY: clean
-clean:
-	rm -f $(OBJDIR)/$(TARGET) $(OBJ)
-
-include ../make.rules
+DIR = VPU
+BUILD = mxc_vpu_test.out
+LDFLAGS = -lvpu -lipu -lrt -lpthread
+mxc_vpu_test.out = main.o dec.o enc.o capture.o display.o fb.o utils.o \
+	           loopback.o transcode.o
+COPY = README autorun-vpu.sh config_dec config_enc config_encdec config_net akiyo.mp4

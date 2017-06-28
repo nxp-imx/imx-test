@@ -26,65 +26,35 @@ install_target=$(shell if [ -d $(TOPDIR)/platform/$(PLATFORM) ]; then echo insta
 		       else echo install_dummy; fi; )
 endif
 
+Q := $(if $(V),,@)
+
 #
 # Export all variables that might be needed by other Makefiles
 #
-export INC CROSS_COMPILE LINUXPATH PLATFORM TOPDIR OBJDIR
+export INC CROSS_COMPILE LINUXPATH PLATFORM TOPDIR OBJDIR Q
 
 .PHONY: test module_test doc clean distclean pkg install
 
-all : test doc
+all : test
+
+define do_make =
+	@echo "	MAKE	$(1) $(2)"
+	+$(Q)$(MAKE) $(if $(Q),--no-print-directory,) -C $(1) $(2)
+endef
 
 test:
-	@echo
-	@echo Invoking test make...
-	mkdir -p $(OBJDIR)/ALSA
-	mkdir -p $(OBJDIR)/ASRC
-	mkdir -p $(OBJDIR)/DCIC
-	mkdir -p $(OBJDIR)/Display
-	mkdir -p $(OBJDIR)/Dryice
-	mkdir -p $(OBJDIR)/ECSPI
-	mkdir -p $(OBJDIR)/ENET
-	mkdir -p $(OBJDIR)/ETM
-	mkdir -p $(OBJDIR)/GPU
-	mkdir -p $(OBJDIR)/HDMI
-	mkdir -p $(OBJDIR)/I2C
-	mkdir -p $(OBJDIR)/IIM_Driver
-	mkdir -p $(OBJDIR)/Keyboard
-	mkdir -p $(OBJDIR)/L2_Switch_Driver
-	mkdir -p $(OBJDIR)/Media_Local_Bus
-	mkdir -p $(OBJDIR)/MMC_SD_SDIO_Host
-	mkdir -p $(OBJDIR)/MMDC
-	mkdir -p $(OBJDIR)/OProfile
-	mkdir -p $(OBJDIR)/OWire
-	mkdir -p $(OBJDIR)/Power_Management
-	mkdir -p $(OBJDIR)/Remote_Processor_Messaging
-	mkdir -p $(OBJDIR)/SATA
-	mkdir -p $(OBJDIR)/SDMA_API
-	mkdir -p $(OBJDIR)/Sensors
-	mkdir -p $(OBJDIR)/SIM
-	mkdir -p $(OBJDIR)/SRTC
-	mkdir -p $(OBJDIR)/UART
-	mkdir -p $(OBJDIR)/USB
-	mkdir -p $(OBJDIR)/V4L2
-	mkdir -p $(OBJDIR)/VPU
-	mkdir -p $(OBJDIR)/Watchdog
-	$(MAKE) -C $(TOPDIR)/test
+	$(call do_make,test)
 
 module_test:
-	@echo
-	@echo Building test modules...
-	$(MAKE) -C $(TOPDIR)/module_test OBJDIR=$(OBJDIR)/modules
+	$(call do_make,module_test,OBJDIR=$(OBJDIR)/modules)
 
 doc:
-	@echo
-	@echo Generating user manual...
-	$(MAKE) -C $(TOPDIR)/doc
+	$(call do_make,doc)
 
 install: $(install_target)
 
 install_dummy:
-	@echo -e "\n**DESTDIR not set or Build not yet done. No installtion done."
+	@echo -e "\n**DESTDIR not set or Build not yet done. No installation done."
 	@echo -e "**If build is complete files will be under $(TOPDIR)/platform/$(PLATFORM)/ dir."
 
 install_actual:
@@ -97,13 +67,10 @@ install_actual:
 distclean: clean
 
 clean:
-	$(MAKE) -C $(TOPDIR)/test $@
-	$(MAKE) -C $(TOPDIR)/module_test $@
-	$(MAKE) -C $(TOPDIR)/doc $@
-	-rm -rf platform
+	$(call do_make,test,clean)
+	$(call do_make,module_test,clean)
+	$(call do_make,doc,clean)
+	$(Q)-rm -rf platform
 
 pkg : clean
 	tar --exclude CVS -C .. $(EXCLUDES) -czf $(PKG_NAME) $(MISC_DIR)
-
-%::
-	$(MAKE) -C $(TOPDIR)/test $@

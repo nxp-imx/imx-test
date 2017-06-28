@@ -1,21 +1,6 @@
-SRCS = pxp_test.c utils.c
+DIR = Display
+BUILD = pxp_test.out
+pxp_test.out = pxp_test.o utils.o
+LDFLAGS = -lpthread -lpxp -lstdc++
+COPY = README_pxp
 
-TARGET = $(OBJDIR)/pxp_test.out
-
-all: $(TARGET)
-
-OBJ = pxp_test.o utils.o
-
-LDFLAGS += -pthread -lpxp -lstdc++ -pthread
-
-$(OBJDIR)/pxp_test.out: $(OBJ)
-	$(CC) -o  $(OBJDIR)/pxp_test.out $(OBJ) $(LDFLAGS) -Os
-	$(STRIP) $(OBJDIR)/pxp_test.out
-	mv $(OBJDIR)/pxp_test.out $(OBJDIR)/Display
-	cp README_pxp $(OBJDIR)/Display
-
-.PHONY: clean
-clean:
-	rm -f $(OBJS)
-
-include ../make.rules

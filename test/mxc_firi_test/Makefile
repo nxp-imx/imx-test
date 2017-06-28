@@ -1,18 +1,2 @@
-OBJS = $(OBJDIR)/autorun-firi.sh
-
-SCRIPTS = $(OBJDIR)/mxc_irlan_test.sh
-
-all : $(OBJS) $(SCRIPTS)
-	mv $(OBJDIR)/autorun-firi.sh $(OBJDIR)/ENET
-	mv $(OBJDIR)/mxc_irlan_test.sh $(OBJDIR)/ENET
-	cp README $(OBJDIR)/ENET
-
-.PHONY: clean
-clean :
-	rm -f $(OBJS) $(SCRIPTS)
-
-#
-# include the Rules
-#
-include ../make.rules
-
+DIR = ENET
+COPY = mxc_irlan_test.sh autorun-firi.sh README

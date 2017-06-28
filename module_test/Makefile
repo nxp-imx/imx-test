@@ -64,9 +64,10 @@ install:
 
 .PHONY: clean
 clean :
-	@rm -f *.o *.mod.c *.ko .*.cmd
-	@rm -rf .tmp_versions
-	@for X in $(shell /bin/ls -d */); do	\
+	@echo "	CLEAN	module_test"
+	$(Q)rm -f *.o *.mod.c *.ko .*.cmd
+	$(Q)rm -rf .tmp_versions
+	$(Q)for X in $(shell /bin/ls -d */ 2>/dev/null); do	\
 		cd $$X;				\
 		rm -f *.o *.mod.c *.ko .*.cmd;	\
 		rm -rf .tmp_versions;		\

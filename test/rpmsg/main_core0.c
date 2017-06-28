@@ -10,7 +10,7 @@
  */
 
 #include <stdio.h>
-#include "../common/common.h"
+#include "common.h"
 
 #define TC_TRANSFER_COUNT 12
 #define DATA_LEN 45

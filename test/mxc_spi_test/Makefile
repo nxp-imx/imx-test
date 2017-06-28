@@ -1,14 +1,3 @@
-OBJS = 	$(OBJDIR)/mxc_spi_test1.out
-
-all : $(OBJS)
-	mv $(OBJDIR)/mxc_spi_test1.out $(OBJDIR)/ECSPI
-	cp README $(OBJDIR)/ECSPI
-
-.PHONY: clean
-clean :
-	rm -f $(OBJS)
-
-#
-# include the Rules
-#
-include ../make.rules
+DIR = ECSPI
+BUILD = mxc_spi_test1.out
+COPY = README
