@@ -2279,7 +2279,7 @@ static void mxc_epdc_con_fini(void)
 			fprintf(stderr, "%s: activate vt %d failed\n", __func__, orig_vt);
 		retval = ioctl(vt_fd, VT_WAITACTIVE, orig_vt);
 		if (retval < 0)
-			fprintf(stderr, "%s: wait vt %d active failed\n", orig_vt);
+			fprintf(stderr, "%s: wait vt %d active failed\n", __func__, orig_vt);
 	}
 
 	close(vt_fd);

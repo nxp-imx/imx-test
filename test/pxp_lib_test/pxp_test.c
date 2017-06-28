@@ -270,7 +270,7 @@ int pxp_test(void *arg)
 		dbg(DBG_DEBUG, "get mem err\n");
 		goto err1;
 	}
-	dbg(DBG_DEBUG, "mem.virt_uaddr %08x, mem.phys_addr %08x, mem.size %d\n",
+	dbg(DBG_DEBUG, "mem.virt_uaddr %08x, mem.phys_addr %08lx, mem.size %d\n",
 				mem.virt_uaddr, mem.phys_addr, mem.size);
 
 	ret = pxp_get_mem(&mem_o);
@@ -279,7 +279,7 @@ int pxp_test(void *arg)
 		goto err2;
 	}
 
-	dbg(DBG_DEBUG, "mem_o.virt_uaddr %08x, mem_o.phys_addr %08x, mem_o.size %d\n",
+	dbg(DBG_DEBUG, "mem_o.virt_uaddr %08x, mem_o.phys_addr %08lx, mem_o.size %d\n",
 				mem_o.virt_uaddr, mem_o.phys_addr, mem_o.size);
 
 	for (i = 0; i < (WIDTH * HEIGHT * 2 / 4); i++) {
@@ -324,7 +324,7 @@ int pxp_test(void *arg)
 	pxp_conf->s0_param.color_key_enable = false;
 	pxp_conf->s0_param.paddr = mem.phys_addr;
 
-	dbg(DBG_DEBUG, "pxp_test s0 paddr %08x\n", pxp_conf->s0_param.paddr);
+	dbg(DBG_DEBUG, "pxp_test s0 paddr %08lx\n", pxp_conf->s0_param.paddr);
 	/*
 	 * Initialize OL parameters
 	 * No overlay will be used for PxP operation
@@ -382,7 +382,7 @@ int pxp_test(void *arg)
 	}
 
 	pxp_conf->out_param.paddr = mem_o.phys_addr;
-	dbg(DBG_DEBUG, "pxp_test out paddr %08x\n", pxp_conf->out_param.paddr);
+	dbg(DBG_DEBUG, "pxp_test out paddr %08lx\n", pxp_conf->out_param.paddr);
 
 	ret = pxp_config_channel(&pxp_chan, pxp_conf);
 	if (ret < 0) {

@@ -229,7 +229,7 @@ mxc_v4l_output_test(FILE *in)
 	}
 
         gettimeofday(&tv_start, 0);
-        printf("start time = %d s, %d us\n", tv_start.tv_sec, tv_start.tv_usec);
+        printf("start time = %ld s, %ld us\n", tv_start.tv_sec, tv_start.tv_usec);
 
         for (i = 0; ; i++) {
                 buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;

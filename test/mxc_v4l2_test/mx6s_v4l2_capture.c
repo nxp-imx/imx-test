@@ -686,7 +686,7 @@ int memalloc(int buf_size, int buf_cnt)
 			goto err;
 		}
 		printf("%s, buf_size=0x%x\n", __func__, buf_size);
-		printf("USRP: alloc bufs va=0x%x, pa=0x%x, size %d\n",
+		printf("USRP: alloc bufs va=%p, pa=0x%x, size %d\n",
 				buffers[i].start, buffers[i].offset, buf_size);
 	}
 
