@@ -52,7 +52,7 @@ enum si476x_ctrl_id {
 
 int main(int argc, char **argv)
 {
-	int fd, ret, n_selection, freq, core;
+	int fd = -1, ret, n_selection, freq, core;
 	struct v4l2_frequency vt;
 	struct v4l2_hw_freq_seek seek;
 	struct stat buf;
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
 			break;
 		case TUNER_OFF:
-			if (fd)
+			if (fd >= 0)
 				close(fd);
 			break;
 		default:
