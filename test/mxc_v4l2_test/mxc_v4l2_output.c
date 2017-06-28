@@ -428,7 +428,7 @@ int process_cmdline(int argc, char **argv)
                         if ( (g_in_fmt != V4L2_PIX_FMT_BGR24) &&
                              (g_in_fmt != V4L2_PIX_FMT_BGR32) &&
                              (g_in_fmt != V4L2_PIX_FMT_RGB565) &&
-                             (g_in_fmt != 'PMBW') &&
+                             (g_in_fmt != v4l2_fourcc('P', 'M', 'B', 'W')) &&
                              (g_in_fmt != V4L2_PIX_FMT_UYVY) &&
 			     (g_in_fmt != V4L2_PIX_FMT_YUYV) &&
 			     (g_in_fmt != V4L2_PIX_FMT_YUV422P) &&
@@ -441,7 +441,7 @@ int process_cmdline(int argc, char **argv)
                         {
                                 return -1;
                         }
-                        if (g_in_fmt == 'PMBW') {
+                        if (g_in_fmt == v4l2_fourcc('P', 'M', 'B', 'W')) {
                                 g_bmp_header = 1;
                                 g_in_fmt = V4L2_PIX_FMT_BGR24;
                         }
