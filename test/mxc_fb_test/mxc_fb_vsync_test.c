@@ -23,8 +23,7 @@
 /* Verification Test Environment Include Files */
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <sys/time.h>
 #include <math.h>
 #include <string.h>
 
