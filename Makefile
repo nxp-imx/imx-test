@@ -33,7 +33,7 @@ export INC CROSS_COMPILE LINUXPATH PLATFORM TOPDIR OBJDIR
 
 .PHONY: test module_test doc clean distclean pkg install
 
-all : test
+all : test doc
 
 test:
 	@echo
@@ -99,6 +99,7 @@ distclean: clean
 clean:
 	$(MAKE) -C $(TOPDIR)/test $@
 	$(MAKE) -C $(TOPDIR)/module_test $@
+	$(MAKE) -C $(TOPDIR)/doc $@
 	-rm -rf platform
 
 pkg : clean
