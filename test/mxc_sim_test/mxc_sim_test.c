@@ -37,7 +37,7 @@ static unsigned char cmd2[5] = {0xa0, 0xb0, 0x00, 0x00, 0x0a};
 static unsigned char* cmd_array[3] = {cmd0, cmd1, cmd2};
 static unsigned char cmd_array_size[3] = {7, 7, 5};
 
-static int send_t0_cmd(int fd, char *cmd_buff, unsigned char cmd_len, char *rcv_buff)
+static int send_t0_cmd(int fd, unsigned char *cmd_buff, unsigned char cmd_len, unsigned char *rcv_buff)
 {
 	unsigned char remaining = cmd_len;
 	unsigned char tx_len = 0;
