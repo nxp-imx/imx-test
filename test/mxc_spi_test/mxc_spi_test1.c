@@ -226,7 +226,7 @@ exit:
 
 int main(int argc, char **argv)
 {
-	int spi_id;
+	int spi_id = -1;
 	int bytes, len;
 	int res;
 	int i;
@@ -243,11 +243,6 @@ int main(int argc, char **argv)
 		if(!strcmp(argv[i], "-D")) {
 			i++;
 			spi_id = atoi(argv[i]);
-			if (spi_id < 0 || spi_id > 2) {
-				printf("invalid parameter for device option\n");
-				help_info(argv[0]);
-				return -1;
-			}
 		} else if(!strcmp(argv[i], "-s")) {
 			i++;
 			speed = atoi(argv[i]);
@@ -265,6 +260,12 @@ int main(int argc, char **argv)
 			help_info(argv[0]);
 			return -1;
 		}
+	}
+
+	if (spi_id < 0 || spi_id > 2) {
+		printf("invalid parameter for device option\n");
+		help_info(argv[0]);
+		return -1;
 	}
 
 	bytes = strlen((char *)argv[argc - 1]);
