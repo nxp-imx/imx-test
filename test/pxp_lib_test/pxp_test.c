@@ -472,12 +472,12 @@ err0:
 
 static int signal_thread(void *arg)
 {
-	int sig, err;
+	int sig;
 
 	pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
 	while (1) {
-		err = sigwait(&sigset, &sig);
+		sigwait(&sigset, &sig);
 		if (sig == SIGINT) {
 			dbg(DBG_INFO, "Ctrl-C received\n");
 		} else {

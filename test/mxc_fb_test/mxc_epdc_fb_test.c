@@ -2131,8 +2131,6 @@ static void vt_switch_handler(int sig)
 	switch(sig) {
 		case VT_SWITCH_FROM:
 		{
-			struct mxcfb_update_marker_data upd_marker_data;
-
 			printf("VT switching from\n");
 
 			retval = ioctl(fd_fb_ioctl, MXCFB_DISABLE_EPDC_ACCESS);

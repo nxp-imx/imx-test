@@ -159,8 +159,6 @@ void real_op(int fd, char op)
 
 int main(int argc, char *argv[])
 {
-	int ret;
-
 	print_name(argv);
 
 	if (argc < 5)

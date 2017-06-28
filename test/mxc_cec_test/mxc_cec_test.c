@@ -26,7 +26,6 @@ static int ready_flay = 0;
 int my_hdmi_cec_callback(unsigned char event_type, void *parg)
 {
 	hdmi_cec_message *msg;
-	int i =0;
 	if(HDMI_CEC_DEVICE_READY == event_type)
 		ready_flay = 1;
 	else if(HDMI_CEC_RECEIVE_MESSAGE == event_type)

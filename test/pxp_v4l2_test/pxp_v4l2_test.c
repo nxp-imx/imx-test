@@ -187,7 +187,6 @@ int quitflag = 0;
 static int signal_thread(void *arg)
 {
 	int sig;
-	struct pxp_control *pxp = (struct pxp_control *)arg;
 
 	pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 

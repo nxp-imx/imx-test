@@ -72,10 +72,6 @@ static enum asrc_outclk outclk;
 unsigned int convert_flag;
 int fd_asrc;
 
-static pthread_t input_thread;
-static pthread_t output_thread;
-
-
 void *asrc_input_thread(void *info);
 void *asrc_output_thread(void *info);
 
@@ -118,10 +114,8 @@ void help_info(int ac, char *av[])
 int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
 {
 	int err = 0;
-	int i = 0;
 	struct asrc_req req;
 	struct asrc_config config;
-	struct asrc_querybuf buf_info;
 
 	req.chn_num = info->channel;
 	if ((err = ioctl(fd_asrc, ASRC_REQ_PAIR, &req)) < 0) {
@@ -179,7 +173,6 @@ int asrc_get_output_buffer_size(int input_buffer_size,
 int play_file(int fd_asrc, struct audio_info_s *info)
 {
 	int err = 0;
-	int i = 0;
 	struct asrc_convert_buffer buf_info;
 	char *input_p;
 	char *output_p;
