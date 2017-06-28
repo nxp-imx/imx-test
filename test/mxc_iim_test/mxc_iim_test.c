@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include "../../include/test_utils.h"
 
-static void print_usage()
+static void print_usage(void)
 {
 	printf("Usage:\n"
 		"Read iim: mxc_iim_test read -d <addr>\n"

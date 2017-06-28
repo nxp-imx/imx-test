@@ -39,7 +39,7 @@
 
 char * options = "p:d:t:c:l:i:o:O:s:f:h";
 
-void util_help()
+void util_help(void)
 {
  printf("options: \n\r");
  printf("p:d:t:c:l:i:o:O:s:f:h \r\n");

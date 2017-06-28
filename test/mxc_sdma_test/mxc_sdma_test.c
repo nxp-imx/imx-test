@@ -20,7 +20,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-int test() {
+int test(void) {
   char buf[48];
   int fd;
 

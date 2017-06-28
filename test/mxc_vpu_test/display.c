@@ -93,7 +93,7 @@ static pthread_mutex_t ipu_mutex;
 static pthread_cond_t ipu_cond;
 static int ipu_waiting = 0;
 static int ipu_running = 0;
-static inline void wait_queue()
+static inline void wait_queue(void)
 {
 	pthread_mutex_lock(&ipu_mutex);
 	ipu_waiting = 1;
@@ -101,7 +101,7 @@ static inline void wait_queue()
 	pthread_mutex_unlock(&ipu_mutex);
 }
 
-static inline void wakeup_queue()
+static inline void wakeup_queue(void)
 {
 	pthread_cond_signal(&ipu_cond);
 }
