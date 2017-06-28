@@ -21,7 +21,7 @@
 
 void help_info(void);
 
-int main(int argc, const char *argv[])
+int main(int argc, char * const argv[])
 {
 	int fd, timeout, sleep_sec, test;
 
