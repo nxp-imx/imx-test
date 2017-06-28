@@ -401,9 +401,9 @@ int v4l_capture_test(int fd_v4l)
 	struct fb_var_screeninfo var;
 	struct v4l2_buffer buf;
 	char fb_device[100] = "/dev/fb0";
-	int fd_fb = 0;
+	int fd_fb = -1;
 	int frame_num = 0, fb0_size;
-	unsigned char *fb0;
+	unsigned char *fb0 = MAP_FAILED;
 	struct timeval tv1, tv2;
 	int j = 0;
 	int out_w = 0, out_h = 0;
@@ -411,8 +411,9 @@ int v4l_capture_test(int fd_v4l)
 	FILE * fd_y_file = 0;
 	size_t wsize;
 	unsigned char *cscbuf = NULL;
+	int ret = -1;
 
-	if (g_saved_to_file == 1) {
+	if (g_saved_to_file) {
 		if ((fd_y_file = fopen(g_saved_filename, "wb")) == NULL) {
 			printf("Unable to create y frame recording file\n");
 			return -1;
@@ -451,18 +452,18 @@ int v4l_capture_test(int fd_v4l)
 
 	 /* Map the device to memory*/
 	fb0_size = var.xres * var.yres_virtual * var.bits_per_pixel / 8;
-	fb0 = (unsigned char *)mmap(0, fb0_size,
-					PROT_READ | PROT_WRITE, MAP_SHARED, fd_fb, 0);
-	if ((int)fb0 == -1) {
+	fb0 = (unsigned char *)mmap(0, fb0_size, PROT_READ | PROT_WRITE,
+				    MAP_SHARED, fd_fb, 0);
+	if (fb0 == MAP_FAILED) {
 		printf("Error: failed to map framebuffer device 0 to memory.\n");
 		goto FAIL;
 	}
 
 	/* allocate buffer for csc */
 	cscbuf = malloc(out_w * out_h * 2);
-    if (cscbuf == NULL) {
+	if (cscbuf == NULL) {
 		printf("Unable to allocate cssbuf bytes\n");
-        goto FAIL;
+		goto FAIL;
 	}
 
 	var.yoffset = var.yres;
@@ -483,7 +484,7 @@ loop:
 			break;
 		}
 
-		if (fd_y_file) {
+		if (g_saved_to_file) {
 			/* Save capture frame to file */
 			wsize = fwrite(buffers[buf.index].start, g_frame_size, 1, fd_y_file);
 			if (wsize < 1) {
@@ -528,15 +529,11 @@ loop:
 	} while((tv2.tv_sec - tv1.tv_sec < g_timeout) && !quitflag);
 
 	/* Make sure pan display offset is zero before capture is stopped */
-	if (g_saved_to_file == 0)
-		if (var.yoffset) {
-			var.yoffset = 0;
-			if (ioctl(fd_fb, FBIOPAN_DISPLAY, &var) < 0)
-				printf("FBIOPAN_DISPLAY failed\n");
-		}
-
-	if (fd_y_file)
-		fclose(fd_y_file);
+	if (!g_saved_to_file && var.yoffset) {
+		var.yoffset = 0;
+		if (ioctl(fd_fb, FBIOPAN_DISPLAY, &var) < 0)
+			printf("FBIOPAN_DISPLAY failed\n");
+	}
 
 	if (stop_capturing(fd_v4l) < 0)
 		printf("stop_capturing failed\n");
@@ -547,19 +544,20 @@ loop:
 		goto loop;
 	}
 
-	if (g_saved_to_file == 0) {
-		munmap((void *)fd_fb, fb0_size);
-		close(fd_fb);
-		free(cscbuf);
-	}
-
-	close(fd_v4l);
-	return 0;
+	ret = 0;
 FAIL:
-	if (g_saved_to_file == 0)
+	free(cscbuf);
+
+	if (fb0 != MAP_FAILED)
+		munmap(fb0, fb0_size);
+
+	if (fd_fb >= 0)
 		close(fd_fb);
-	close(fd_v4l);
-	return -1;
+
+	if (fd_y_file)
+		fclose(fd_y_file);
+
+	return ret;
 }
 
 void print_help(void)
@@ -737,6 +735,8 @@ int main(int argc, char **argv)
 		}
 
 	v4l_capture_test(fd_v4l);
+
+	close(fd_v4l);
 
 	if (g_mem_type == V4L2_MEMORY_USERPTR)
 		memfree(g_frame_size, TEST_BUFFER_NUM);
