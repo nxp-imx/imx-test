@@ -35,8 +35,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 #include <string.h>
 #include "vpu_test.h"
 
-struct encode *enc;
-struct decode *dec;
+static struct encode *enc;
+static struct decode *dec;
 extern int quitflag;
 extern struct capture_testbuffer cap_buffers[];
 static int disp_clr_index = -1;

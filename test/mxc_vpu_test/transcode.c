@@ -44,8 +44,6 @@ static int isInterlacedMPEG4 = 0;
 
 #define JPG_HEADER_SIZE	     0x200
 
-struct encode *enc;
-struct decode *dec;
 static int frameRateInfo = 0;
 
 /*
