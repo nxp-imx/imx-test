@@ -131,7 +131,7 @@ static void copy_image_to_buffer(int left, int top, int width, int height, uint 
 	for (i = 0; i < height; i++) {
 		dest = fb_ptr + ((i + top) * screen_info->xres_virtual + left) * 2 / 4;
 		src = img_ptr + (i * width) * 2 /4;
-		memcpy(fb_ptr + ((i + top) * screen_info->xres_virtual + left) * 2 / 4, img_ptr + (i * width) * 2 /4, width * 2);
+		memcpy(dest, src, width * 2);
 	}
 }
 
@@ -140,7 +140,7 @@ static void copy_image_to_buffer_byte(int left, int top, int width, int height, 
 {
 	int i;
 	__u32 *dest;
-	__u8  *src;
+	const __u8  *src;
 	uint *fb_ptr;
 
 	if (target_buf == BUFFER_FB)
@@ -162,7 +162,7 @@ static void copy_image_to_buffer_byte(int left, int top, int width, int height, 
 	for (i = 0; i < height; i++) {
 		dest = fb_ptr + ((i + top) * screen_info->xres_virtual + left) * 2 / 4;
 		src = img_ptr + (i * width) * 2;
-		memcpy(fb_ptr + ((i + top) * screen_info->xres_virtual + left) * 2 / 4, img_ptr + (i * width) * 2, width * 2);
+		memcpy(dest, src, width * 2);
 	}
 }
 
@@ -1717,56 +1717,6 @@ static int test_colormap(void)
 	update_to_display(0, 0, screen_info.xres, screen_info.yres,
 		WAVEFORM_MODE_INIT, TRUE, EPDC_FLAG_USE_CMAP);
 	printf("Posterized colorbar\n");
-
-	return retval;
-}
-
-static int test_dry_run(void)
-{
-	int retval = TPASS;
-	__u32 coll;
-
-	printf("Blank screen\n");
-	memset(fb, 0x0, screen_info.xres_virtual*screen_info.yres*2);
-	update_to_display(0, 0, screen_info.xres, screen_info.yres,
-		WAVEFORM_MODE_AUTO, TRUE, 0);
-
-	/*
-	 * Draw gray rectangle
-	 * Use dry run first, which should not result in collision
-	 */
-	draw_rectangle(fb, 0, 0, 300, 250, 0x8410);
-	coll = update_to_display(0, 0, 300, 250, WAVEFORM_MODE_AUTO, FALSE, EPDC_FLAG_TEST_COLLISION);
-	if (coll)
-		retval = TFAIL;
-	update_to_display(0, 0, 300, 250, WAVEFORM_MODE_AUTO, FALSE, 0);
-
-	/* Draw overlapping rectangle */
-	draw_rectangle(fb, 250, 200, 300, 250, 0x4104);
-	update_to_display(250, 200, 300, 250, WAVEFORM_MODE_AUTO, FALSE, 0);
-
-	sleep(3);
-
-	printf("Blank screen\n");
-	memset(fb, 0x0, screen_info.xres_virtual*screen_info.yres*2);
-	update_to_display(0, 0, screen_info.xres, screen_info.yres,
-		WAVEFORM_MODE_AUTO, TRUE, 0);
-
-	sleep(1);
-
-	/* Draw gray rectangle */
-	draw_rectangle(fb, 0, 0, 300, 250, 0x8410);
-	update_to_display(0, 0, 300, 250, WAVEFORM_MODE_AUTO, FALSE, 0);
-
-	/* Draw overlapping rectangle, use dry-run test to check for collision */
-	draw_rectangle(fb, 250, 200, 300, 250, 0x4104);
-	coll = update_to_display(250, 200, 300, 250, WAVEFORM_MODE_AUTO, FALSE, EPDC_FLAG_TEST_COLLISION);
-	if (coll)
-		sleep(1);
-	else
-		retval = TFAIL;
-	/* Now that collision resolved, finally submit update */
-	update_to_display(250, 200, 300, 250, WAVEFORM_MODE_AUTO, FALSE, 0);
 
 	return retval;
 }
