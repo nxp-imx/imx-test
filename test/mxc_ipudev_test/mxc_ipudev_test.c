@@ -176,7 +176,6 @@ int main(int argc, char *argv[])
 	void *inbuf = NULL, *vdibuf = NULL;
 	void *ovbuf = NULL, *alpbuf = NULL;
 	void *outbuf = NULL;
-	dma_addr_t outpaddr;
 	struct fb_var_screeninfo fb_var;
 	struct fb_fix_screeninfo fb_fix;
 	int blank;
@@ -362,7 +361,7 @@ int main(int argc, char *argv[])
 		ioctl(fd_fb, FBIOGET_VSCREENINFO, &fb_var);
 		ioctl(fd_fb, FBIOGET_FSCREENINFO, &fb_fix);
 
-		outpaddr = fb_fix.smem_start;
+		t->output.paddr = fb_fix.smem_start;
 		blank = FB_BLANK_UNBLANK;
 		ioctl(fd_fb, FBIOBLANK, blank);
 	} else {
@@ -440,9 +439,6 @@ task_begin:
 			printf("Can not read enough data from input file\n");
 			break;
 		}
-
-		if (test_handle.show_to_fb)
-			t->output.paddr = outpaddr;
 
 		ret = ioctl(fd_ipu, IPU_QUEUE_TASK, t);
 		if (ret < 0) {
