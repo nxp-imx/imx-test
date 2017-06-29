@@ -65,6 +65,9 @@ $$(OBJDIR)/$$(dstdir)/$$(exec): $$(srcdir)/$$(exec)
 	$(Q)$(STRIP) $$@
 endef
 
+define srcdir_wildcard =
+$(patsubst $(SRCDIR)/%,%,$(wildcard $(SRCDIR)/$(1)))
+endef
 
 # This creates rules to build and copy the targets to the output
 # directory.
@@ -75,10 +78,10 @@ BUILD :=
 COPY :=
 CFLAGS :=
 LDFLAGS :=
+SRCDIR := $(patsubst %/Makefile,%,$(1))
 
 include $(1)
 
-SRCDIR := $(patsubst %/Makefile,%,$(1))
 TARGETS += $$(foreach obj,$$(BUILD),$(OBJDIR)/$$(DIR)/$$(obj))
 TARGETS += $$(foreach obj,$$(COPY),$(OBJDIR)/$$(DIR)/$$(obj))
 
