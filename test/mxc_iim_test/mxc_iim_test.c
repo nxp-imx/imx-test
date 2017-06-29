@@ -32,7 +32,7 @@ static void print_usage(void)
 {
 	printf("Usage:\n"
 		"Read iim: mxc_iim_test read -d <addr>\n"
-		"Write iim: mxc_iim_test fuse -d <addr> -v <value>\n"
+		"Write iim: mxc_iim_test blow -d <addr> -v <value>\n"
 		"Note: All value are in hex format!\n");
 }
 
@@ -40,9 +40,9 @@ int main(int argc, char *argv[])
 {
 	int fd, ch;
 	int is_read = -1;
-	unsigned int bankaddr;
-	unsigned int value;
-	char ch_val;
+	int bankaddr = -1;
+	int value = -1;
+	unsigned char ch_val;
 	char *end_char = NULL;
 
 	print_name(argv);
@@ -82,7 +82,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (-1 == is_read)
+	if (is_read == -1 || bankaddr == -1)
+		goto invalid_param_out;
+
+	if (!is_read && value == -1)
 		goto invalid_param_out;
 
 	fd = open("/dev/mxc_iim", O_RDWR);
