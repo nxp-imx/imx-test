@@ -149886,6 +149886,7 @@ const module_t mx6q[] =
     { "MMDC1",           1, 0x021b0000, 79,   hw_mmdc },
     { "MMDC2",           2, 0x021b4000, 79,   hw_mmdc },
     { "OCOTP",           1, 0x021bc000, 41,   hw_ocotp },
+    { "PCIE",            1, 0x01000000, 46,   hw_pcie },
     { "PGC",             1, 0x020dc000, 12,   hw_pgc },
     { "PMU",             1, 0x020c8000, 7,    hw_pmu },
     { "PWM1",            1, 0x02080000, 6,    hw_pwm },
