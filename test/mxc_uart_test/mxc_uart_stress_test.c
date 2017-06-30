@@ -217,7 +217,7 @@ void* r_op(void *arg)
 				k++;
 		}
 	}
-	printf("\nread done : total : %d\n", total);
+	printf("\nread done : total : %zd\n", total);
 	if (k > 0) {
 		printf("too many errors or empty read\n");
 		res = -1;
@@ -228,7 +228,7 @@ void* r_op(void *arg)
 			CHUNKS, CHUNK_SIZE);
 	else
 		printf("\t%d read calls isued\n"
-			"\t total : %d\n",
+			"\t total : %zd\n",
 			i, total);
 	*(int*)arg = res;
 	return arg;
@@ -268,7 +268,7 @@ void* w_op(void *arg)
 				k++;
 		}
 	}
-	printf("\nwrite done : total : %d\n", total);
+	printf("\nwrite done : total : %zd\n", total);
 	if (k > 0) {
 		printf("too many errors or empty write\n");
 		res = -1;
@@ -279,7 +279,7 @@ void* w_op(void *arg)
 			CHUNKS, CHUNK_SIZE);
 	else
 		printf("\t%d write calls isued\n"
-			"\t total : %d\n",
+			"\t total : %zd\n",
 			i, total);
 	*(int*)arg = res;
 	return arg;
@@ -374,7 +374,7 @@ int real_op(int fd, char op)
 		} else {
 			count = write(fd, tmp, CHUNK_SIZE);
 			if (log_out)
-				printf("tx:%d\n", count);
+				printf("tx:%zd\n", count);
 		}
 
 #ifdef ANDROID
@@ -406,7 +406,7 @@ int real_op(int fd, char op)
 				}
 
 				if (count > 0 && (log_out || bad))
-					printf(":)[ %d ] READ is %s, count : %d\n",
+					printf(":)[ %d ] READ is %s, count : %zd\n",
 						i, bad ? "bad!!!" : "good.", count);
 				else if (count == 0)
 					printf("We read 0 byte\n");
@@ -415,7 +415,7 @@ int real_op(int fd, char op)
 				k++;
 		}
 	}
-	printf("\ndone : total : %d\n", total);
+	printf("\ndone : total : %zd\n", total);
 
 	if (k > 0) {
 		printf("too many errors or empty %ss\n", opstr);
@@ -427,7 +427,7 @@ int real_op(int fd, char op)
 			opstr, CHUNKS, CHUNK_SIZE);
 	else
 		printf("\t%d %s calls isued\n"
-			"\t total : %d\n",
+			"\t total : %zd\n",
 			i, opstr, total);
 	return 0;
 }

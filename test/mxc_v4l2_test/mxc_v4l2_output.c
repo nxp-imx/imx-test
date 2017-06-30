@@ -215,7 +215,7 @@ mxc_v4l_output_test(FILE *in)
 
 			buffers[i].length = buf.length;
 			buffers[i].offset = (size_t) buf.m.offset;
-			printf("VIDIOC_QUERYBUF: length = %d, offset = %d\n",
+			printf("VIDIOC_QUERYBUF: length = %d, offset = %zd\n",
 				buffers[i].length, buffers[i].offset);
 			buffers[i].start = mmap (NULL, buffers[i].length,
 					PROT_READ | PROT_WRITE, MAP_SHARED,
@@ -502,7 +502,7 @@ int memalloc(int buf_size, int buf_cnt)
 			ret = TFAIL;
 			goto err;
 		}
-		printf("USRP: alloc bufs offset 0x%x size %d\n", buffers[i].offset, buf_size);
+		printf("USRP: alloc bufs offset 0x%zx size %d\n", buffers[i].offset, buf_size);
 	}
 
 	return ret;

@@ -361,7 +361,7 @@ int fb_test_file(struct fb_info *fb, struct img_file* img, int first)
 	}
 	if (img->xres < 64 || img->yres < 64 ||
 		img->xres > max_res || img->yres > max_res) {
-		printf("Invalid resolution: %dx%d (file: %s)\n", img->xres, img->yres, img->fname);
+		printf("Invalid resolution: %zdx%zd (file: %s)\n", img->xres, img->yres, img->fname);
 		return ret;
 	}
 
@@ -398,7 +398,7 @@ int fb_test_file(struct fb_info *fb, struct img_file* img, int first)
 	}
 
 	if (fsize > fb->size) {
-		printf("FB size:%d is smaller than file size: %d!\n", fb->size, fsize);
+		printf("FB size:%d is smaller than file size: %zd!\n", fb->size, fsize);
 		return ret;
 	}
 	if (fb->id == 1) {
@@ -415,10 +415,10 @@ int fb_test_file(struct fb_info *fb, struct img_file* img, int first)
 			rdsize += read(fd, fb_ptr, (fb->screen_info.xres * (fb->screen_info.bits_per_pixel / 8)));
 			fb_ptr += (fb->screen_info.xres_virtual * (fb->screen_info.bits_per_pixel / 8));
 		}
-		fprintf(stderr, "Read %u, expected %u\n", rdsize, fsize);
+		fprintf(stderr, "Read %zd, expected %zd\n", rdsize, fsize);
 	} else {
 		if ((rdsize = read(fd, fb->fb, fsize)) != fsize)
-			fprintf(stderr, "Warning: Read %u, expected %u\n", rdsize, fsize);
+			fprintf(stderr, "Warning: Read %zd, expected %zd\n", rdsize, fsize);
 	}
 	if (fb->id == 1) {
 		if (first) {
