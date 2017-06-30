@@ -747,22 +747,20 @@ main(int argc, char **argv)
 
 			alpha_buf_size = fb0_var.xres * fb0_var.yres;
 
-			alpha_buf0 = (char *)mmap(0, alpha_buf_size,
-						 PROT_READ | PROT_WRITE,
-						 MAP_SHARED, fd_fb_0,
-						 loc_alpha_phy_addr0);
-			if ((int)alpha_buf0 == -1) {
+			alpha_buf0 = mmap(0, alpha_buf_size,
+					  PROT_READ | PROT_WRITE, MAP_SHARED,
+					  fd_fb_0, loc_alpha_phy_addr0);
+			if (alpha_buf0 == MAP_FAILED) {
 				printf("\nError: failed to map alpha buffer 0"
 				       " to memory.\n");
 				close(fd_fb_0);
 				close(g_fd_fb_fg);
 				return TFAIL;
 			}
-			alpha_buf1 = (char *)mmap(0, alpha_buf_size,
-						 PROT_READ | PROT_WRITE,
-						 MAP_SHARED, fd_fb_0,
-						 loc_alpha_phy_addr1);
-			if ((int)alpha_buf1 == -1) {
+			alpha_buf1 = mmap(0, alpha_buf_size,
+					  PROT_READ | PROT_WRITE, MAP_SHARED,
+					  fd_fb_0, loc_alpha_phy_addr1);
+			if (alpha_buf1 == MAP_FAILED) {
 				printf("\nError: failed to map alpha buffer 1"
 				       " to memory.\n");
 				munmap((void *)alpha_buf0, alpha_buf_size);
@@ -867,22 +865,20 @@ main(int argc, char **argv)
 
 			alpha_buf_size = fb_fg_var.xres * fb_fg_var.yres;
 
-			alpha_buf0 = (char *)mmap(0, alpha_buf_size,
-						 PROT_READ | PROT_WRITE,
-						 MAP_SHARED, g_fd_fb_fg,
-						 loc_alpha_phy_addr0);
-			if ((int)alpha_buf0 == -1) {
+			alpha_buf0 = mmap(0, alpha_buf_size,
+					  PROT_READ | PROT_WRITE, MAP_SHARED,
+					  g_fd_fb_fg, loc_alpha_phy_addr0);
+			if (alpha_buf0 == MAP_FAILED) {
 				printf("\nError: failed to map alpha buffer 0"
 				       " to memory.\n");
 				close(g_fd_fb_fg);
 				close(fd_fb_0);
 				return TFAIL;
 			}
-			alpha_buf1 = (char *)mmap(0, alpha_buf_size,
-						 PROT_READ | PROT_WRITE,
-						 MAP_SHARED, g_fd_fb_fg,
-						 loc_alpha_phy_addr1);
-			if ((int)alpha_buf1 == -1) {
+			alpha_buf1 = mmap(0, alpha_buf_size,
+					  PROT_READ | PROT_WRITE, MAP_SHARED,
+					  g_fd_fb_fg, loc_alpha_phy_addr1);
+			if (alpha_buf1 == MAP_FAILED) {
 				printf("\nError: failed to map alpha buffer 1"
 				       " to memory.\n");
 				munmap((void *)alpha_buf0, alpha_buf_size);

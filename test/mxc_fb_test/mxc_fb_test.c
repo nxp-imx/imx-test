@@ -104,7 +104,7 @@ int set_screen(struct fb_info *fb, int xres, int yres, int xres_virtual, int yre
 	if (new_size > fb->size) {
 		munmap(fb->fb, fb->size);
 		fb->fb = (unsigned short *)mmap(0, new_size, PROT_READ | PROT_WRITE, MAP_SHARED, fb->fd, 0);
-		if ((int)fb->fb <= 0) {
+		if (fb->fb == MAP_FAILED) {
 			fprintf(stderr, "@%s: Failed to remap framebuffer to memory (%d)\n", fb->name, errno);
 			munmap(fb->fb, new_size);
 			return errno;
@@ -635,7 +635,7 @@ int setup_fb(struct fb_info *fb, int id)
 	/* Map the device to memory*/
 	fb->size = fb->screen_info.xres_virtual * fb->screen_info.yres_virtual * fb->screen_info.bits_per_pixel / 8;
 	fb->fb = (unsigned short *)mmap(0, fb->size, PROT_READ | PROT_WRITE, MAP_SHARED, fb->fd, 0);
-	if ((int)fb->fb <= 0) {
+	if (fb->fb == MAP_FAILED) {
 		fprintf(stderr, "Error: failed mapping framebuffer %s to memory!\n", fb->name);
 		return TFAIL;
 	}
@@ -646,7 +646,7 @@ int setup_fb(struct fb_info *fb, int id)
 
 void cleanup_fb(struct fb_info *fb)
 {
-	if ((int)fb->fb > 0 && fb->size > 0)
+	if (fb->fb != MAP_FAILED && fb->size > 0)
 		munmap(fb->fb, fb->size);
 	if (fb->fd > 0)
 		close(fb->fd);

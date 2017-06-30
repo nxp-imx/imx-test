@@ -2032,7 +2032,7 @@ main(int argc, char **argv)
 
 	/* Map the device to memory*/
 	fb = (unsigned short *)mmap(0, g_fb_size,PROT_READ | PROT_WRITE, MAP_SHARED, fd_fb, 0);
-	if ((int)fb <= 0)
+	if (fb == MAP_FAILED)
 	{
 		printf("\nError: failed to map framebuffer device 0 to memory.\n");
 		goto err1;
