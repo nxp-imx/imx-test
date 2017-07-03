@@ -34,7 +34,8 @@ case $machine in
     # RXD pin is shared with NAND (see MLK-12482)
     stress_test["ttymxc2"]="disable"
     ;;
-'NXP i.MX7ULP EVK')
+'NXP i.MX7ULP EVK'|\
+'Freescale i.MX8QM ARM2')
     uart_ports="ttyLP0"
     ;;
 *)
