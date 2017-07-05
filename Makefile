@@ -37,7 +37,7 @@ export INC CROSS_COMPILE LINUXPATH PLATFORM TOPDIR OBJDIR Q
 
 all : test
 
-define do_make =
+define do_make
 	@echo "	MAKE	$(1) $(2)"
 	+$(Q)$(MAKE) $(if $(Q),--no-print-directory,) -C $(1) $(2)
 endef

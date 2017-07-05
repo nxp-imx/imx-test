@@ -18,7 +18,7 @@ ALL_OBJS :=
 # This creates the build and copy rules for one executable. Because we
 # have different source/destination directories we must customize it
 # for each executable and we can't use generic build rules.
-define do_build =
+define do_build
 
 exec := $(1)
 srcdir := $(2)
@@ -65,13 +65,13 @@ $$(OBJDIR)/$$(dstdir)/$$(exec): $$(srcdir)/$$(exec)
 	$(Q)$(STRIP) $$@
 endef
 
-define srcdir_wildcard =
+define srcdir_wildcard
 $(patsubst $(SRCDIR)/%,%,$(wildcard $(SRCDIR)/$(1)))
 endef
 
 # This creates rules to build and copy the targets to the output
 # directory.
-define do_makefile =
+define do_makefile
 
 DIR :=
 BUILD :=
