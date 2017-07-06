@@ -292,6 +292,11 @@ bat_read_temp() {
     echo $temp
 }
 
+bat_get_clk_rate()
+{
+    cat /sys/kernel/debug/clk/$1/clk_rate
+}
+
 if [[ -z `which ip 2>/dev/null` ]]; then
     pr_debug "Automatically added /sbin to PATH"
     export PATH="$PATH:/sbin"
