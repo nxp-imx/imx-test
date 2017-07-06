@@ -219,15 +219,13 @@ bat_stop_cpu_intensive_task_on_all_cpus()
 
 bat_get_cpu_freqs()
 {
-    local freqs=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies)
-    echo "Available CPU frequencies: $freqs"
-    if [ $(echo $freqs | wc -c) -lt 2 ]; then
-        echo "less then two frequencies"
+    cpu=${1:-0}
+    local freqs=$(cat /sys/devices/system/cpu/cpu$cpu/cpufreq/scaling_available_frequencies)
+    if [ $(echo $freqs | wc -w) -lt 2 ]; then
+        echo "less than two frequencies" >&2
         return 1;
     fi
-    min_cpu_freq=$(echo $freqs | cut -f1 -d ' ')
-    max_cpu_freq=$(echo $freqs | rev | cut -f1 -d ' ' | rev)
-    echo "Min and max freqs: $min_cpu_freq $max_cpu_freq"
+    echo "$freqs"
 }
 
 bat_wait_cpu_freq()
@@ -256,16 +254,6 @@ bat_kconfig_enabled()
         return 0
     fi
     [[ -n `zcat /proc/config.gz | grep "^$1=\(y\|m\)$"` ]]
-}
-
-bat_wait_min_cpu_freq()
-{
-    bat_wait_cpu_freq $min_cpu_freq $@
-}
-
-bat_wait_max_cpu_freq()
-{
-    bat_wait_cpu_freq $max_cpu_freq $@
 }
 
 # According to the temp driver, it may require up to ~17us to complete
