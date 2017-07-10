@@ -101,13 +101,18 @@ trap cleanup EXIT
 temp=$(bat_read_temp)
 echo "Current temp $temp"
 
-bat_get_cpu_freqs
+freqs=($(bat_get_cpu_freqs))
+echo "Available CPU frequencies: ${freqs[*]}"
+
+min=${freqs[0]}
+max=${freqs[-1]}
+echo "Min and max freqs: $min $max"
 
 echo "Run cpu-intensive task on all cpus ($(nproc) cpus) ..."
 # force increase the cpu temp
 bat_start_cpu_intensive_task_on_all_cpus
 
-if ! bat_wait_max_cpu_freq; then
+if ! bat_wait_cpu_freq $max; then
     echo "warning: cpu freq not maximum ($freq)"
 fi
 freq_high=$freq
