@@ -2,10 +2,11 @@
 
 #
 # Tests for the uart ports:
-#  - check that the uart ports are successfully registered
 #  - check that data is correctly transmitted and received in loopback mode
 #  - check that multiple bytes data is correctly transmitted and received in
 # loopback mode for various baud rates
+#
+# This test tries to be board-independent
 #
 
 set -e
@@ -14,34 +15,11 @@ batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 
 declare -A stress_test
 
+# RXD pin is shared with NAND (see MLK-12482)
 machine=`cat /sys/devices/soc0/machine`
-case $machine in
-'Freescale i.MX6 UltraLite 14x14 EVK Board'|\
-'Freescale i.MX6 ULL 14x14 EVK Board')
-    uart_ports="ttymxc0 ttymxc1"
-    ;;
-"Freescale i.MX6 SoloX SDB RevB Board")
-    uart_ports="ttymxc0 ttymxc4"
-    ;;
-'Freescale i.MX7 SabreSD Board'|\
-'Freescale i.MX7D SabreSD Board')
-    uart_ports="ttymxc0 ttymxc4 ttymxc5"
-    ;;
-'Freescale i.MX6 Quad SABRE Automotive Board'|\
-'Freescale i.MX6 Quad Plus SABRE Automotive Board'|\
-'Freescale i.MX6 DualLite/Solo SABRE Automotive Board')
-    uart_ports="ttymxc2 ttymxc3"
-    # RXD pin is shared with NAND (see MLK-12482)
+if [[ machine = "Freescale i.MX6 * SABRE Automotive Board" ]]; then
     stress_test["ttymxc2"]="disable"
-    ;;
-'NXP i.MX7ULP EVK'|\
-'Freescale i.MX8QM ARM2')
-    uart_ports="ttyLP0"
-    ;;
-*)
-    uart_ports="ttymxc0"
-    ;;
-esac
+fi
 
 function cleanup
 {
@@ -82,14 +60,8 @@ function signal_processes()
 current_pid=$$
 test_baud_rates="9600 19200 115200 576000 1152000 3000000"
 
-# Check that the uart dev nodes exist
-echo "Test: check if $machine has uart ports $uart_ports"
-for port in $uart_ports; do
-    if ! [ -e /dev/${port} ]; then
-        echo "No device /dev/${port}"
-        exit 1
-    fi
-done
+# Test on all uart
+uart_ports=$(find /sys/class/tty \( -iname ttymxc* -o -iname ttyLP* \) -printf '%f\n')
 
 # Make sure we restore stopped processes at error
 trap cleanup EXIT
