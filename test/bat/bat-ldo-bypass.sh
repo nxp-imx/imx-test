@@ -15,13 +15,10 @@ i.MX6Q*|i.MX6D*|i.MX6SL)
     echo "Platform $platform should have vddpu"
     have_vddpu=1
     ;;
-i.MX7*|i.MX6SLL)
-    echo "Platform $platform does not have digital LDO regulators"
+*)
+    echo "Non-applicable platform $platform, skip"
     exit $BAT_EXITCODE_SKIP
     ;;
-*)
-    echo "Assume platform $platform has no vddpu"
-    have_vddpu=0
 esac
 
 # read a firmware property file (binary) and return an integer
