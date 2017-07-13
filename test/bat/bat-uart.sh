@@ -70,6 +70,9 @@ trap cleanup EXIT
 for port in $uart_ports; do
     pids=$(lsof /dev/${port})
 
+    driver=$(basename $(readlink -f "/sys/class/tty/$port/device/driver"))
+    echo "checking uart $port driver $driver"
+
     # Don't run test from serial console
     for pid in $pids; do
         if [ "$current_pid" == "$pid" ]; then
@@ -94,7 +97,7 @@ for port in $uart_ports; do
 
     # Run test with various baud rates. Don't use more then FIFO size
     # chunks as the loopback test does not use flow control.
-    if [ "${stress_test[$port]}" != "disable" ]; then
+    if [ "${stress_test[$port]}" != "disable" -a "$driver" == "imx-uart" ]; then
 	for baud in $test_baud_rates; do
             echo "Test: loopback test for /dev/${port} at baud $baud"
             $batdir/../UART/mxc_uart_stress_test.out /dev/${port} $baud D L 5 31 N
