@@ -12,30 +12,46 @@
 
 set -e
 
-platform=`cat /sys/devices/soc0/soc_id`
-case $platform in
-i.MX6SX*)
-    BACKLIGHT_NAME=backlight1
-    ;;
-*)
-    BACKLIGHT_NAME=backlight
-    ;;
-esac
+batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+. "$batdir/bat_utils.sh"
 
-BACKLIGHT_SYSFS_PATH=/sys/class/backlight/$BACKLIGHT_NAME
-
-# $1: brightness value to set
+# $1: backlight name
+# $2: brightness value to set
 function set_brightness
 {
-    brightness=$1
+    backlight=$1
+    backlight_sysfs_path=/sys/class/backlight/$backlight
+    brightness=$2
 
-    echo "Set brightness for $BACKLIGHT_NAME to $brightness"
-    echo $brightness > $BACKLIGHT_SYSFS_PATH/brightness
-    cur_brightness=$(cat $BACKLIGHT_SYSFS_PATH/brightness)
+    echo "Set brightness for $backlight to $brightness"
+    echo $brightness > $backlight_sysfs_path/brightness
+    cur_brightness=$(cat $backlight_sysfs_path/brightness)
     if [ $cur_brightness -ne $brightness ]; then
-	echo "Could not set brightness  for $BACKLIGHT_NAME to $brightness"
+	echo "Could not set brightness for $backlight to $brightness"
 	exit 1
     fi
+}
+
+backlight_test() {
+    backlight=$1
+    backlight_sysfs_path=/sys/class/backlight/$backlight
+
+    echo "Testing backlight '$backlight'"
+
+    default_brightness=$(cat $backlight_sysfs_path/brightness)
+    max_brightness=$(cat $backlight_sysfs_path/max_brightness)
+
+    # try to change brightness to 100%
+    set_brightness $backlight $max_brightness
+
+    # try to change brightness to an intermediate value
+    set_brightness $backlight $((max_brightness / 2))
+
+    # try to change brightness to 0%
+    set_brightness $backlight 0
+
+    # change brightness back to default value
+    set_brightness $backlight $default_brightness
 }
 
 # we should have at least one pwm chip
@@ -44,23 +60,14 @@ if ! [ -d /sys/class/pwm/pwmchip0 ]; then
     exit 1
 fi
 
+BACKLIGHT_LIST=$(ls /sys/class/backlight)
+
 # we should have at least one backlight
-if ! [ -d $BACKLIGHT_SYSFS_PATH ]; then
+if [ -z "$BACKLIGHT_LIST" ]; then
     echo "No backlight device registered"
-    exit 1
+    exit $BAT_EXITCODE_SKIP
 fi
 
-default_brightness=$(cat $BACKLIGHT_SYSFS_PATH/brightness)
-max_brightness=$(cat $BACKLIGHT_SYSFS_PATH/max_brightness)
-
-# try to change brightness to 100%
-set_brightness $max_brightness
-
-# try to change brightness to an intermediate value
-set_brightness $[$max_brightness/2]
-
-# try to change brightness to 0%
-set_brightness 0
-
-# change brightness back to default value
-set_brightness $default_brightness
+for backlight in $BACKLIGHT_LIST; do
+    backlight_test "$backlight"
+done
