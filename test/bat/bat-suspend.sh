@@ -10,6 +10,9 @@ case $soc in
 i.MX7ULP)
     type=standby
     ;;
+i.MX8*)
+    exit $BAT_EXITCODE_SKIP
+    ;;
 *)
     type=mem
     ;;
