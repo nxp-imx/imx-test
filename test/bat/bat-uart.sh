@@ -17,9 +17,11 @@ declare -A stress_test
 
 # RXD pin is shared with NAND (see MLK-12482)
 machine=`cat /sys/devices/soc0/machine`
-if [[ machine = "Freescale i.MX6 * SABRE Automotive Board" ]]; then
+case $machine in
+"Freescale i.MX6 "*" SABRE Automotive Board")
     stress_test["ttymxc2"]="disable"
-fi
+    ;;
+esac
 
 function cleanup
 {
