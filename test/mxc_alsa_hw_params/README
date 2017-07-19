@@ -1,0 +1,10 @@
+Alsa tool to get audio sound card parameters.
+
+Usage: mxc_alsa_hw_params.out <device> <substream> <attribute>
+<device>    : the audio device like hw:0,0
+<substeam>  : p is the playback substream
+            : c is the capture substream
+<attribute> : f to get the supported format list;
+              r to get the supported rate list;
+              c to get the supported channel list
+For example: mxc_alsa_hw_params.out hw:0,0 p r
