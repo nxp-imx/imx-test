@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
 {
 	int ret, flags;
 	char test_case_str[10] = { 0 };
-	char *soc_list[] = {"i.MX6SX", "i.MX6QP", "i.MX6Q", "i.MX6DL",  " "};
+	char *soc_list[] = {"i.MX6SX", "i.MX6QP", "i.MX6Q", "i.MX6DL", "i.MX8QXP", "i.MX8QM",  " "};
 
 	print_name(argv);
 
