@@ -46,20 +46,37 @@ done < <(find /sys/firmware/devicetree/base/ -name compatible -printf '%h\n' | s
 echo "devicetree contains $count_total devices, $count_disabled disabled" >&2
 find /sys/devices -name of_node | xargs readlink -f | sort -u > $TMPDIR/bound_devices.txt
 
+machine=$(cat /sys/devices/soc0/machine)
+
 count_unbound=0
 while read -r item; do
+    item_compat=$(cat $item/compatible|xargs -0 echo)
+
+    if [[ $item == */ethernet@*/mdio/*phy@1 && $machine == *MX8Q* ]]; then
+        echo "accept unbound $item compat $item_compat on '$machine'; maybe baseboard not connected"
+        continue
+    fi
+
+    if [[ $item == */lpspi@*/* && $machine == *MX8QM* ]]; then
+        echo "accept unbound $item compat $item_compat on '$machine'; not yet enabled. TODO?"
+        continue
+    fi
+
     case $item in
     /sys/firmware/devicetree/base) ;;
 
     # Some of these items don't always have device nodes
     # but if they are truly broken then other "real" devices will break
-    */clocks/*|*/base/clock-*|*/ccm@*|*/scg*@*|*/interrupt-controller@*|*/gpc@*|*linux,cma)
+    */clocks/*|*/base/clock-*|*/ccm@*|*/scg*@*|*/interrupt-controller@*|*/gpc@*|*linux,cma|*/cpus/l2-cache*)
         echo "accept unbound $item"
         ;;
     *)
-        item_compat=$(cat $item/compatible|xargs -0 echo)
         # coresight is a debug feature we don't enable by default
         if [[ $item_compat == arm,coresight* ]]; then
+            echo "accept unbound $item compat $item_compat"
+        elif [[ $item_compat == nxp,imx8-pd ]]; then
+            echo "accept unbound $item compat $item_compat"
+        elif [[ $item_compat == arm,idle-state ]]; then
             echo "accept unbound $item compat $item_compat"
         elif [[ $item_compat == micron* ]] && kernel_is_version 4.1; then
             echo "accept unbound $item compat $item_compat (4.1 does not bound mtd nodes)"
