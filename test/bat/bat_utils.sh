@@ -221,8 +221,8 @@ bat_get_cpu_freqs()
 {
     cpu=${1:-0}
     local freqs=$(cat /sys/devices/system/cpu/cpu$cpu/cpufreq/scaling_available_frequencies)
-    if [ $(echo $freqs | wc -w) -lt 2 ]; then
-        echo "less than two frequencies" >&2
+    if [ $(echo $freqs | wc -w) -lt 1 ]; then
+        echo "no available frequencies" >&2
         return 1;
     fi
     echo "$freqs"
