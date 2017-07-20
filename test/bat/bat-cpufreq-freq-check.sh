@@ -25,9 +25,11 @@ get_arm_clk_name()
         if [ "$cpu_part" = "0xd08" ]; then
             echo "a72_div";
         elif [ "$cpu_part" = "0xd03" ]; then
-             echo "a53_div"
+            echo "a53_div"
+        elif [ "$cpu_part" = "0xd04" ]; then
+            echo "a35_div"
         else
-            echo "Unknown ARMv8 part, could not find clock" >&2
+            echo "Unknown ARMv8 part $cpu_part, could not find clock" >&2
             return 1
         fi
     else
