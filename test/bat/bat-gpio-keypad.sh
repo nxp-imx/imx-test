@@ -13,6 +13,11 @@ machine=$(cat /sys/devices/soc0/machine)
 case $machine in
 'Freescale i.MX6 SoloLite EVK Board')
     gpio_possible_devs="kpp"
+    ;;
+'Freescale i.MX8'*)
+    echo "Platform $machine does not have gpio keys support"
+    exit $BASH_EXITCODE_SKIP
+    ;;
 esac
 
 gpio_possible_devs="snvs-powerkey gpio-keys rpmsg-keys $gpio_possible_devs"
