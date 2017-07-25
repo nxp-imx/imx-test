@@ -240,6 +240,7 @@ bat_wait_cpu_freq()
         if [ $freq -eq $wait_freq ]; then
             return 0
         fi
+        echo "Still waiting for freq $wait_freq current scaling_cur_freq=$freq"
         ps axr
     done
     return 1

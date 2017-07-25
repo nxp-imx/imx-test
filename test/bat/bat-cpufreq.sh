@@ -14,8 +14,10 @@ echo "Min and max freqs: $min $max"
 
 #force transition to min frequency
 if ! bat_wait_cpu_freq $min; then
-    echo "current freq ($freq) not minimum ($min_cpu_freq)"
+    echo "current freq ($freq) not minimum ($min)"
     exit 1
+else
+    echo "current freq ($freq) is minimum ($min)"
 fi
 
 function cleanup
@@ -28,6 +30,8 @@ trap cleanup EXIT
 bat_start_cpu_intensive_task_on_cpu 0
 
 if ! bat_wait_cpu_freq $max; then
-    echo "current freq ($freq) not maximum ($min_cpu_freq)"
+    echo "current freq ($freq) not maximum ($max)"
     exit 1
+else
+    echo "current freq ($freq) is maximum ($max)"
 fi
