@@ -7,6 +7,11 @@ batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 
 # we should have at least one idle state
 if ! [ -d /sys/devices/system/cpu/cpu0/cpuidle/state0 ]; then
+    socid=$(cat /sys/devices/soc0/soc_id)
+    if [ "$socid" = "i.MX8QXP" ]; then
+	echo "Skipping, $socid not supported yet"
+	exit $BAT_EXITCODE_SKIP
+    fi
     echo "no idle state"
     exit 1
 fi
