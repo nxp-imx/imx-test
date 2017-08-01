@@ -9,14 +9,13 @@
 
 set -e
 
+batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+. $batdir/bat_utils.sh
+
 machine=$(cat /sys/devices/soc0/machine)
 case $machine in
 'Freescale i.MX6 SoloLite EVK Board')
     gpio_possible_devs="kpp"
-    ;;
-'Freescale i.MX8'*)
-    echo "Platform $machine does not have gpio keys support"
-    exit $BASH_EXITCODE_SKIP
     ;;
 esac
 

@@ -12,6 +12,7 @@
 set -e
 
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+. $batdir/bat_utils.sh
 
 declare -A stress_test
 

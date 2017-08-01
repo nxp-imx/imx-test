@@ -5,14 +5,6 @@ set -e
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 . $batdir/bat_utils.sh
 
-soc=$(cat /sys/devices/soc0/soc_id)
-case $soc in
-i.MX7ULP|i.MX6SLL)
-    echo "Skipping, not yet implemented"
-    exit $BAT_EXITCODE_SKIP
-    ;;
-esac
-
 if [ ! -d /proc/device-tree/soc/busfreq ]; then
     echo "Missing busfreq node in device-tree, seems not implemented"
     exit "$BAT_EXITCODE_SKIP"

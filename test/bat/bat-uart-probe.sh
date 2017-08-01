@@ -8,6 +8,7 @@
 set -e
 
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+. $batdir/bat_utils.sh
 
 machine=`cat /sys/devices/soc0/machine`
 case $machine in

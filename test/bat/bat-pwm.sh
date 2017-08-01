@@ -15,14 +15,6 @@ set -e
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 . "$batdir/bat_utils.sh"
 
-platform=`cat /sys/devices/soc0/soc_id`
-case $platform in
-i.MX8*)
-    echo "No pwm support implemented yet on $platform"
-    exit $BASH_EXITCODE_SKIP
-    ;;
-esac
-
 # $1: backlight name
 # $2: brightness value to set
 function set_brightness

@@ -2,6 +2,14 @@
 
 BAT_EXITCODE_SKIP=2
 
+# skip not (yet) implemented features
+declare -A skip=(\
+["i.MX6SLL"]="bat-busfreq.sh" \
+["i.MX8QXP"]="bat-cpuidle.sh bat-gpio-keypad.sh bat-pwm.sh bat-suspend.sh bat-thermal-trip.sh" \
+["i.MX8QM"]="bat-gpio-keypad.sh bat-pwm.sh bat-suspend.sh bat-thermal-trip.sh" \
+["i.MX8MQ"]="bat-gpio-keypad.sh bat-pwm.sh bat-suspend.sh bat-thermal-trip.sh bat-rtc.sh bat-cpufreq.sh bat-uart.sh" \
+)
+
 # Check if running with nfsroot
 bat_running_with_nfsroot() {
     cat /proc/cmdline|grep -q root=/dev/nfs
@@ -305,4 +313,16 @@ fi
 if [[ -z `which chroot 2>/dev/null` ]]; then
     pr_debug "Automatically added /usr/sbin to PATH"
     export PATH="$PATH:/usr/sbin"
+fi
+
+machine=$(cat /sys/devices/soc0/machine)
+soc_id=$(cat /sys/devices/soc0/soc_id)
+test_script=$(basename $0)
+
+if [[ "${skip[$machine]}" =~ "$test_script" ]]; then
+    echo "Skipping $test_script for ${machine}"
+    exit $BAT_EXITCODE_SKIP
+elif [[ "${skip[$soc_id]}" =~ "$test_script" ]]; then
+    echo "Skipping $test_script for ${soc_id}"
+    exit $BAT_EXITCODE_SKIP
 fi

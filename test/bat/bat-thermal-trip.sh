@@ -29,10 +29,6 @@ i.MX7ULP)
     echo "Platform '$soc' does not have tempmon"
     exit $BAT_EXITCODE_SKIP
     ;;
-i.MX8*)
-    echo "No DVFS support implemented yet on $soc"
-    exit $BASH_EXITCODE_SKIP
-    ;;
 esac
 
 function cleanup

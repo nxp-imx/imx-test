@@ -3,6 +3,7 @@
 set -e
 
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+. $batdir/bat_utils.sh
 
 function find_irq()
 {

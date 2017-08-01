@@ -1,5 +1,8 @@
 #!/bin/bash
 
+batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+. $batdir/bat_utils.sh
+
 procs=$(grep processor /proc/cpuinfo | wc -l)
 
 for((i=1;i<=$procs-1;i++)); do
