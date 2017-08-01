@@ -25,7 +25,11 @@ get_arm_clk_name()
         if [ "$cpu_part" = "0xd08" ]; then
             echo "a72_div";
         elif [ "$cpu_part" = "0xd03" ]; then
-            echo "a53_div"
+            if [ -d /sys/kernel/debug/clk/arm_a53_div ]; then
+                echo "arm_a53_div"
+            else
+                echo "a53_div"
+            fi
         elif [ "$cpu_part" = "0xd04" ]; then
             echo "a35_div"
         else
