@@ -1,6 +1,7 @@
 #! /bin/bash
 
 BAT_EXITCODE_SKIP=2
+BAT_EXITCODE_TODO=3
 
 # skip not (yet) implemented features
 declare -A skip=(\
