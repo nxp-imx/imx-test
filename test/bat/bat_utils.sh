@@ -3,12 +3,20 @@
 BAT_EXITCODE_SKIP=2
 BAT_EXITCODE_TODO=3
 
-# skip not (yet) implemented features
-declare -A skip=(\
+# skip not yet implemented features or not yet fixed bugs
+# (for unsupported features use the skip array below)
+declare -A todo=(\
 ["i.MX6SLL"]="bat-busfreq.sh" \
-["i.MX8QXP"]="bat-audio.sh bat-cpuidle.sh bat-gpio-keypad.sh bat-pwm.sh bat-suspend.sh bat-thermal-trip.sh" \
-["i.MX8QM"]="bat-audio.sh bat-gpio-keypad.sh bat-pwm.sh bat-suspend.sh bat-thermal-trip.sh" \
-["i.MX8MQ"]="bat-pwm.sh bat-uart.sh" \
+["i.MX8QXP"]="bat-audio.sh bat-cpuidle.sh bat-suspend.sh bat-thermal-trip.sh" \
+["i.MX8QM"]="bat-audio.sh bat-suspend.sh bat-thermal-trip.sh" \
+["i.MX8MQ"]="bat-cpufreq.sh bat-uart.sh" \
+)
+
+# skip unsupported features
+declare -A skip=(\
+["i.MX8QXP"]="bat-gpio-keypad.sh bat-pwm.sh" \
+["i.MX8QM"]="bat-gpio-keypad.sh bat-pwm.sh" \
+["i.MX8MQ"]="bat-pwm.sh" \
 )
 
 # Check if running with nfsroot
@@ -319,6 +327,14 @@ fi
 machine=$(cat /sys/devices/soc0/machine)
 soc_id=$(cat /sys/devices/soc0/soc_id)
 test_script=$(basename $0)
+
+if [[ "${todo[$machine]}" =~ "$test_script" ]]; then
+    echo "Skipping $test_script for ${machine}, not yet implemented"
+    exit $BAT_EXITCODE_TODO
+elif [[ "${todo[$soc_id]}" =~ "$test_script" ]]; then
+    echo "Skipping $test_script for ${soc_id}, not yet implemented"
+    exit $BAT_EXITCODE_TODO
+fi
 
 if [[ "${skip[$machine]}" =~ "$test_script" ]]; then
     echo "Skipping $test_script for ${machine}"
