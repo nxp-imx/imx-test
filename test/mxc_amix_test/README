@@ -1,0 +1,186 @@
+AMIX README
+~~~~~~~~~~~
+
+test-input1.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test AMIX when playing and recording on primary SAI.
+
+| Automated |
+NO
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_AMIX=y
+CONFIG_MXC_AMIX=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/AMIX# ./test-input1.sh <wav file>
+
+| Expected Result |
+. Output is recorded in "test-input1.wav"
+|====================================================================
+
+<<<
+
+test-input2.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test AMIX when playing on secondary SAI, and record on primary SAI
+
+| Automated |
+NO
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_AMIX=y
+CONFIG_MXC_AMIX=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+  /unit_tests/AMIX# ./test-input2.sh <wav file> 
+
+| Expected Result |
+. Output is recorded in "test-input2.wav"
+|====================================================================
+
+<<<
+
+test-mixed-output.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test AMIX when playing on both SAIs, and record on primary SAI
+
+| Automated |
+NO
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_AMIX=y
+CONFIG_MXC_AMIX=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Prepare:
+
+  Make sure both input wav files (see below) have the same duration.
+  Adjust the script "sleep" constansts as function of input wav files duration.
+
+. Run:
+
+  /unit_tests/AMIX# ./test-mixed-output.sh <first wav file> <secord wav file>
+
+| Expected Result |
+. Output is recorded in "test-mixed-output.wav"
+. Output shall contain the mixed first and second wav files.
+|====================================================================
+
+<<<
+
+test-output-source.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test AMIX when playing on both SAIs, and record on primary SAI
+
+| Automated |
+NO
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_AMIX=y
+CONFIG_MXC_AMIX=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Prepare:
+
+  Make sure both input wav files (see below) have the same duration.
+  Adjust the script "sleep" constansts as function of input wav files duration.
+
+. Run:
+
+  /unit_tests/AMIX# ./test-output-source.sh <first wav file> <secord wav file>
+
+| Expected Result |
+. Output is recorded in "test-output-source.wav"
+. Output shall contain non-overlapping sequencies of first and second wav files.
+|====================================================================
+
+<<<
+
+test-attenuation-tdm1.sh - test AMIX attenuation on primary SAI
+    
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Test AMIX attenuation functionality on primary SAI
+
+| Automated |
+NO
+
+| Kernel Config Option |
+CONFIG_IMX_HAVE_PLATFORM_IMX_AMIX=y
+CONFIG_MXC_AMIX=y
+
+| Software Dependency |
+N/A
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Prepare:
+
+  Make sure both input wav files (see below) have the same duration.
+  Adjust the script "sleep" constansts and AMIX attenuation parameters
+  as function of input wav files duration.
+
+. Run:
+
+  /unit_tests/AMIX# ./test-attenuation-tdm1.sh <first wav file> <secord wav file>
+
+| Expected Result |
+. Output is recorded in "test-attenuation-tdm1.wav"
+. Output shall contain the mixed first and second wav files, attenuation being
+  observed on first wav file.
+|====================================================================
+
