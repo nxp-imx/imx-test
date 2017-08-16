@@ -92,8 +92,7 @@ N/A
 | Test Procedure |
 . Prepare:
 
-  Make sure both input wav files (see below) have the same duration.
-  Adjust the script "sleep" constansts as function of input wav files duration.
+  Make sure both input wav files (see below) have the same duration and rate.
 
 . Run:
 
@@ -131,7 +130,7 @@ N/A
 | Test Procedure |
 . Prepare:
 
-  Make sure both input wav files (see below) have the same duration.
+  Make sure both input wav files (see below) have the same duration and rate.
   Adjust the script "sleep" constansts as function of input wav files duration.
 
 . Run:
@@ -170,7 +169,7 @@ N/A
 | Test Procedure |
 . Prepare:
 
-  Make sure both input wav files (see below) have the same duration.
+  Make sure both input wav files (see below) have the same duration and rate.
   Adjust the script "sleep" constansts and AMIX attenuation parameters
   as function of input wav files duration.
 
