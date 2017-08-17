@@ -253,7 +253,7 @@ bat_wait_cpu_freq()
 
     for((i=0;i<$secs;i++)); do
         sleep 1
-        freq=$(cat /sys/devices/system/cpu/cpu$cpu/cpufreq/scaling_cur_freq)
+        read -r freq < /sys/devices/system/cpu/cpu$cpu/cpufreq/scaling_cur_freq
         if [ $freq -eq $wait_freq ]; then
             return 0
         fi
