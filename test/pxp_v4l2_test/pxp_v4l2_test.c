@@ -2,6 +2,7 @@
  * pxp_test - V4L2 test application for the PxP
  *
  * Copyright (C) 2009-2016 Freescale Semiconductor, Inc.
+ * Copyright (C) 2017 NXP
  * Copyright 2008-2009 Embedded Alley Solutions
  * Matt Porter <mporter@embeddedalley.com>
  *
@@ -843,7 +844,7 @@ int main(int argc, char **argv)
 	struct pxp_control *pxp;
 	pthread_t sigtid;
 	int ret;
-	char *soc_list[] = {"i.MX6SLL", "i.MX6UL",
+	char *soc_list[] = {"i.MX6SLL", "i.MX6ULL", "i.MX6UL"
 				"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
 
 	print_name(argv);
