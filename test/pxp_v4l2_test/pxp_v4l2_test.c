@@ -844,7 +844,7 @@ int main(int argc, char **argv)
 	struct pxp_control *pxp;
 	pthread_t sigtid;
 	int ret;
-	char *soc_list[] = {"i.MX6SLL", "i.MX6ULL", "i.MX6UL"
+	char *soc_list[] = {"i.MX6SLL", "i.MX6ULL", "i.MX6UL",
 				"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
 
 	print_name(argv);
