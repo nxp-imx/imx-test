@@ -2225,6 +2225,17 @@ static int test_stress(void)
 		}
 	}
 
+	printf("Change back to non-inverted RGB565\n");
+	screen_info.rotate = FB_ROTATE_UR;
+	screen_info.bits_per_pixel = 16;
+	screen_info.grayscale = 0;
+	retval = ioctl(fd_fb, FBIOPUT_VSCREENINFO, &screen_info);
+	if (retval < 0)
+	{
+		printf("Back to normal failed\n");
+		return TFAIL;
+	}
+
 	return retval;
 }
 
