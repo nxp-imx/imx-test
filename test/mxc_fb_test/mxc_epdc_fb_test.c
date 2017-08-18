@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2010-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
+ * Copyright (C) 2017 NXP
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -2293,11 +2295,20 @@ main(int argc, char **argv)
 	struct mxcfb_waveform_modes wv_modes;
 	char fb_dev[10] = "/dev/fb";
 	int fb_num = 0;
+	int tfd;
 	struct fb_fix_screeninfo screen_info_fix;
 
 	int i, rt;
 
 	print_name(argv);
+
+	tfd = open("/dev/tty0", O_RDWR);
+	if (tfd < 0) {
+		printf("OPen /dev/tty0 fail\n");
+	} else {
+		write(tfd, "\033[9;0]", 7);
+		close(tfd);
+	}
 
 	if ((retval = mxc_epdc_con_init()) < 0)
 		goto err0;
