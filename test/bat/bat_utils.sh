@@ -9,7 +9,7 @@ declare -A todo=(\
 ["i.MX6SLL"]="bat-busfreq.sh" \
 ["i.MX8QXP"]="bat-cpuidle.sh bat-suspend.sh bat-thermal-trip.sh" \
 ["i.MX8QM"]="bat-suspend.sh bat-thermal-trip.sh" \
-["i.MX8MQ"]="bat-suspend.sh bat-uart.sh" \
+["i.MX8MQ"]="bat-suspend.sh" \
 )
 
 # skip unsupported features
