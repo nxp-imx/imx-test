@@ -288,30 +288,30 @@ void* w_op(void *arg)
 int real_op_loop(int fd)
 {
 	pthread_t rid, wid;
-	int ret, arg = fd;
+	int ret, arg_r = fd, arg_w = fd;
 	int *res;
 
-	ret = pthread_create(&wid, NULL, &w_op, &arg);
-	if (ret != 0) {
-		printf("Create write thread failed\n");
-		return -1;
-	}
-
-	ret = pthread_create(&rid, NULL, &r_op, &arg);
+	ret = pthread_create(&rid, NULL, &r_op, &arg_r);
 	if (ret != 0) {
 		printf("Create read thread failed\n");
 		return -1;
 	}
 
-	ret = pthread_join(wid, (void**)&res);
-	if (ret || *res) {
-		printf("Write thread had failures\n");
+	ret = pthread_create(&wid, NULL, &w_op, &arg_w);
+	if (ret != 0) {
+		printf("Create write thread failed\n");
 		return -1;
 	}
 
 	ret = pthread_join(rid, (void**)&res);
 	if (ret || *res) {
 		printf("Read thread had failures\n");
+		return -1;
+	}
+
+	ret = pthread_join(wid, (void**)&res);
+	if (ret || *res) {
+		printf("Write thread had failures\n");
 		return -1;
 	}
 
