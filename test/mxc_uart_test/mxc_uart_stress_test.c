@@ -79,6 +79,11 @@ int set_speed(int fd, struct termios *ti, int speed)
 		perror("Can't set speed");
 		return -1;
 	}
+
+	/* wait baud rate stable */
+	if (speed < 230400)
+		usleep(500000);
+
 	printf("Speed set to %d\n", speed);
 	return 0;
 }
@@ -507,14 +512,14 @@ int main(int argc, char* argv[])
 		return fd;
 	}
 
-	ret = set_speed(fd, &ti, atoi(argv[2]));
+	ret = set_flow_control(fd, &ti, flow_control);
 	if (ret) {
 		close(fd);
 		print_result(argv);
 		return ret;
 	}
 
-	ret = set_flow_control(fd, &ti, flow_control);
+	ret = set_speed(fd, &ti, atoi(argv[2]));
 	if (ret) {
 		close(fd);
 		print_result(argv);
