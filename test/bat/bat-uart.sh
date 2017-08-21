@@ -40,8 +40,7 @@ function lsof()
 
     all_pids=$(find /proc -maxdepth 1 -name "[0-9]*")
     for pid in $all_pids; do
-        uses_file=$(ls -l ${pid}/fd 2>/dev/null | grep "${filename}")
-        if [ "$uses_file" != "" ]; then
+        if ls -l ${pid}/fd 2>/dev/null | grep -q "${filename}"; then
             echo "${pid#/proc/}"
         fi
     done
