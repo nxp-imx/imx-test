@@ -234,6 +234,42 @@ bat_stop_cpu_intensive_task_on_all_cpus()
     done
 }
 
+# Wait at most $1 for a bunch of pids
+bat_wait_timeout()
+{
+    local result timeout tmptimedout killpid
+
+    if [[ $# -lt 2 ]]; then
+        echo "bat_wait_timeout: Needs at least 2 arguments" >&2
+        exit -1
+    fi
+
+    timeout=$1
+    shift
+
+    tmptimedout=`mktemp`
+    echo 0 > $tmptimedout
+
+    # Start a killer in background
+    (
+        sleep $timeout
+        echo "kill -9 $@">&2
+        echo 1 > $tmptimedout
+        kill -9 $@
+    ) &
+    killpid=$!
+
+    # wait
+    wait $@ &> /dev/null || true
+
+    # kill the killer if not already dead
+    kill $killpid &> /dev/null || true
+    wait $killpid &> /dev/null || true
+    read -r result < $tmptimedout
+    rm -f $tmptimedout
+    return $result
+}
+
 bat_get_cpu_freqs()
 {
     cpu=${1:-0}

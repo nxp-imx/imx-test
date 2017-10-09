@@ -38,7 +38,17 @@ function sum_irqs()
 }
 
 start_irqs=$(sum_irqs)
-$batdir/../SRTC/rtctest.out --no-periodic --alarm-timeout 1 --uie-count 1 2>&1 | tee $tmp_file
+
+ALARM_TIMEOUT=1
+$batdir/../SRTC/rtctest.out --no-periodic --alarm-timeout $ALARM_TIMEOUT --uie-count 1 &> $tmp_file &
+rtctest_pid=$!
+if ! bat_wait_timeout $((ALARM_TIMEOUT + 5)) $rtctest_pid; then
+    echo "Timeout out rtctest.out:"
+    cat $tmp_file
+    # Do not attempt to parse rtctest output on timeout
+    exit 1
+fi
+
 end_irqs=$(sum_irqs)
 
 expected_irqs=$(tail -n2 $tmp_file | egrep -o '[0-9]*')
