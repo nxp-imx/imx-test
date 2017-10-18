@@ -10,12 +10,12 @@ duration=1
 
 # check available audio cards
 case $machine in
+'Freescale i.MX8MQ EVK'|\
 'Freescale i.MX6 DualLite/Solo SABRE Automotive Board'|\
 'Freescale i.MX6 Quad Plus SABRE Automotive Board'\
 )
     expected_cards_no=3
     ;;
-'Freescale i.MX8MQ EVK'|\
 'Freescale i.MX8QM ARM2'|\
 'Freescale i.MX6 Quad SABRE Automotive Board'|\
 'Freescale i.MX6 SoloX SDB RevB Board'|\
