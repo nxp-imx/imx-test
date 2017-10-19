@@ -18,11 +18,14 @@ else
 fi
 
 procs=(
-	"arecord -D hw:${devices[0]} -f S32_LE -c 8 -t wav $sample_name.wav"
-	"aplay -D hw:${devices[0]} $1"
-	"aplay -D hw:${devices[1]} $2"
+	"arecord -q -D hw:${devices[0]} -f S32_LE -c 2 -t wav $sample_name.wav"
+	"aplay -q -D hw:${devices[0]} $1"
+	"aplay -q -D hw:${devices[1]} $2"
 )
 pids=()
+
+# Use TDM1 as mixer clock
+prepare_tdm TDM1
 
 echo " =============================="
 echo " AMIX Test Play on both hw:${devices[0]} and hw:${devices[1]}"
@@ -38,11 +41,11 @@ do
 	$cmd &
 	pids+=($!)
 done
-
-#####################################
-# Let the play and record start properly
-#####################################
-sleep 5
+####################################
+# Test starts here
+####################################
+sleep 0.01
+amixer -q -c $card cset name="Output Source" Mixed
 
 #####################################
 # Configure attenuation parametes
@@ -57,7 +60,7 @@ sleep 5
 # ...
 # 3FFFFh = 0.999996185 (default)
 #####################################
-amixer -c $card cset name='TDM1 Attenuation Initial Value' 100%
+amixer -q -c $card cset name='TDM1 Attenuation Initial Value' 100%
 
 #####################################
 # Attenuation Step Divider
@@ -66,7 +69,7 @@ amixer -c $card cset name='TDM1 Attenuation Initial Value' 100%
 # consecutive steps of calculation of new attenuation value.
 # Zero means calculation happens in every frame.
 #####################################
-amixer -c $card cset name='TDM1 Attenuation Step Divider' 10%
+amixer -q -c $card cset name='TDM1 Attenuation Step Divider' 10%
 
 #####################################
 # Attenuation Step Target Value
@@ -75,7 +78,7 @@ amixer -c $card cset name='TDM1 Attenuation Step Divider' 10%
 # value will be calculated for one direction. This is an unsigned
 # integer value. Default is set to 16
 #####################################
-amixer -c $card cset name='TDM1 Attenuation Step Target' 64
+amixer -q -c $card cset name='TDM1 Attenuation Step Target' 64
 
 #####################################
 # Attenuation Step Up Factor, set to 51%
@@ -95,7 +98,7 @@ amixer -c $card cset name='TDM1 Attenuation Step Target' 64
 # ...
 # 3FFFFh = 0.999996185
 #####################################
-amixer -c $card cset name='TDM1 Attenuation Step Up Factor' 51%
+amixer -q -c $card cset name='TDM1 Attenuation Step Up Factor' 51%
 
 #####################################
 # Attenuation Step Down Factor, set to 98%
@@ -113,25 +116,26 @@ amixer -c $card cset name='TDM1 Attenuation Step Up Factor' 51%
 # ...
 # 3FFFFh = 0.999996185
 #####################################
-amixer -c $card cset name='TDM1 Attenuation Step Down Factor' 98%
+amixer -q -c $card cset name='TDM1 Attenuation Step Down Factor' 98%
 
 ####################################
-# Test starts here
+# Lets play some attenuation
 ####################################
+sleep 2
+amixer -q -c $card cset name='TDM1 Attenuation Direction' Downward
+amixer -q -c $card cset name='TDM1 Attenuation' Enabled
 sleep 5
-amixer -c $card cset name='TDM1 Attenuation Direction' Downward
-amixer -c $card cset name='TDM1 Attenuation' Enabled
-sleep 30
-amixer -c $card cset name='TDM1 Attenuation Direction' Upward
-sleep 30
-amixer -c $card cset name='TDM1 Attenuation' Disabled
-amixer -c $card cset name='Output Source' TDM1
+amixer -q -c $card cset name='TDM1 Attenuation Direction' Upward
+sleep 5
+amixer -q -c $card cset name='TDM1 Attenuation' Disabled
+amixer -q -c $card cset name='Output Source' TDM1
 
 ####################################
 for pid in "${pids[@]}"
 do
 	wait $pid
 done
+
 echo " =============================="
 echo " AMIX Test finished, please check $sample_name.wav"
 exit 0

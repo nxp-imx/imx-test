@@ -18,10 +18,13 @@ else
 fi
 
 procs=(
-	"arecord -D hw:${devices[0]} -f S32_LE -c 8 -t wav $sample_name.wav"
-	"aplay -D hw:${devices[1]} $1"
+	"arecord -q -D hw:${devices[0]} -f S32_LE -c 2 -t wav $sample_name.wav"
+	"aplay -q -D hw:${devices[1]} $1"
 )
 pids=()
+
+# Use TDM2 as mixer clock
+prepare_tdm TDM2
 
 echo " =============================="
 echo " AMIX Test Play on hw:${devices[1]}"
@@ -36,7 +39,13 @@ do
 	$cmd &
 	pids+=($!)
 done
+####################################
+# Test starts here
+####################################
+sleep 0.01
+amixer -q -c $card cset name="Output Source" TDM2
 
+####################################
 for pid in "${pids[@]}"
 do
 	wait $pid
