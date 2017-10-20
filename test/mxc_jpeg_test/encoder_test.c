@@ -40,9 +40,9 @@ int main(int argc, char *argv[])
 	}
 
 	for (i = 1; i < 5; i += 2) {
-		if (strcmp(argv[i], "-d"))
+		if (strcmp(argv[i], "-d") == 0)
 			video_device = argv[i+1];
-		else if (strcmp(argv[i], "-f"))
+		else if (strcmp(argv[i], "-f") == 0)
 			test_file = argv[i+1];
 	}
 	if (video_device == 0 || test_file == 0) {
