@@ -76,6 +76,8 @@ while read -r item; do
             echo "accept unbound $item compat $item_compat"
         elif [[ $item_compat == nxp,imx8-pd ]]; then
             echo "accept unbound $item compat $item_compat"
+        elif [[ $item_compat == fsl,imx8-wu ]]; then
+            echo "accept unbound $item compat $item_compat"
         elif [[ $item_compat == arm,idle-state ]]; then
             echo "accept unbound $item compat $item_compat"
         elif [[ $item_compat == micron* ]] && kernel_is_version 4.1; then
