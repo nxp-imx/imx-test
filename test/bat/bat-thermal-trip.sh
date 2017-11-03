@@ -125,41 +125,54 @@ tp_passive_temp=$(( $temp + $THERMAL_TRIP_DELTA ))
 echo "Set passive trip point temp to $tp_passive_temp"
 echo $tp_passive_temp > $tp_passive_temp_file
 
-# wait for trip point to activate and cpufreq to lower freq
-# while keeping cpu busy
-for ((sec=0; sec<20; sec++)); do
-    freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq)
+pending_freq_lowered=1
+if [ $min -eq $max ]; then
+    pending_freq_lowered=0
+fi
+pending_cooling_device=1
 
+# wait for trip point to activate while keeping cpu busy
+for ((sec=0; sec<20; sec++)); do
     new_temp=$(bat_read_temp)
     echo "Curent temp $new_temp (delta $((new_temp - temp)))"
-    if [ $freq -lt $freq_high ]; then
-        any_cooling_device_enabled=0
+
+    if [[ $pending_freq_lowered == 1 ]]; then
+        freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq)
+        if [ $freq -lt $freq_high ]; then
+            echo "CPU frequency lowered from $freq_high to $freq"
+            pending_freq_lowered=0
+        fi
+    fi
+
+    if [[ $pending_cooling_device == 1 ]]; then
         for cooling_device in /sys/class/thermal/cooling_device*; do
             cur_state=`cat $cooling_device/cur_state`
             max_state=`cat $cooling_device/max_state`
             if [[ `cat $cooling_device/cur_state` -ne 0 ]]; then
                 echo "`basename $cooling_device` type `cat $cooling_device/type` enabled in state $cur_state/$max_state"
-                any_cooling_device_enabled=1
+                pending_cooling_device=0
             fi
         done
-        if [[ $any_cooling_device_enabled == 1 ]]; then
-            break
-        fi
     fi
+
+    # Check if all done
+    if [[ $pending_freq_lowered == 0 && $pending_cooling_device == 0 ]]; then
+        break
+    fi
+
     sleep 1
 done
 
 # check that cooling devices have been activated
-if [[ $any_cooling_device_enabled != 1 ]]; then
+if [[ $pending_cooling_device == 1 ]]; then
     echo "Cooling devices are not enabled after passing passive trip point"
     exit 1
 fi
 
 # check that cpu frequency was lowered
-if [ $freq -gt $freq_high ]; then
+if [[ $pending_freq_lowered == 1 ]]; then
     echo "CPU frequency $freq has not been decreased from $freq_high "\
          "after passing passive trip point"
     exit 1
 fi
 
-echo "CPU frequency lowered from $freq_high to $freq"
