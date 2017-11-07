@@ -40,12 +40,29 @@
 
 #include "../../include/soc_check.h"
 
+static int log_level = 6;
+
+#define DBG_LEVEL	6
+#define INFO_LEVEL	5
+#define ERR_LEVEL	4
+
+#define v4l2_printf(LEVEL, fmt, args...) \
+do {                                      \
+	if (LEVEL <= log_level)                \
+		printf(fmt, ##args);              \
+} while(0)
+
+#define v4l2_info(fmt, args...) v4l2_printf(INFO_LEVEL, fmt, ##args)
+#define v4l2_dbg(fmt, args...) v4l2_printf(DBG_LEVEL, fmt, ##args)
+#define v4l2_err(fmt, args...) v4l2_printf(ERR_LEVEL, fmt, ##args)
+
 #define TEST_BUFFER_NUM 3
 #define MAX_V4L2_DEVICE_NR     64
 
 sigset_t sigset;
 int quitflag;
 
+int start_streamon();
 struct testbuffer {
 	unsigned char *start;
 	size_t offset;
@@ -104,6 +121,7 @@ int g_camera_framerate = 30;	/* 30 fps */
 int g_loop = 0;
 int g_mem_type = V4L2_MEMORY_MMAP;
 int g_saved_to_file = 0;
+int g_performance_test = 0;
 
 char g_v4l_device[8][100] = {
 	"/dev/video0",
@@ -128,22 +146,24 @@ char g_saved_filename[8][100] = {
 };
 
 void show_device_cap_list(void);
+int prepare_capturing(int ch_id);
 
 static void print_pixelformat(char *prefix, int val)
 {
-	printf("%s: %c%c%c%c\n", prefix ? prefix : "pixelformat",
+	v4l2_dbg("%s: %c%c%c%c\n", prefix ? prefix : "pixelformat",
 	       val & 0xff,
 	       (val >> 8) & 0xff, (val >> 16) & 0xff, (val >> 24) & 0xff);
 }
 
 void print_help(void)
 {
-	printf("CSI Video4Linux capture Device Test\n"
+	v4l2_info("CSI Video4Linux capture Device Test\n"
 	       "Syntax: ./mx8_cap\n"
 	       " -t <time>\n"
 	       " -of save to file \n"
 	       " -l <device support list>\n"
 	       " -cam <device index> 0bxxxx,xxxx\n"
+	       " -log <log_level>   output all information, log_level should be 6"
 	       "example:\n"
 	       "./mx8_cap -cam 1      capture data from video0 and playback\n"
 	       "./mx8_cap -cam 3      capture data from video0/1 and playback\n"
@@ -170,6 +190,10 @@ int process_cmdline(int argc, char **argv)
 		} else if (strcmp(argv[i], "-l") == 0) {
 			show_device_cap_list();
 			return -1;
+		} else if (strcmp(argv[i], "-p") == 0) {
+			g_performance_test = 1;
+		} else if (strcmp(argv[i], "-log") == 0) {
+			log_level = atoi(argv[++i]);
 		} else {
 			print_help();
 			return -1;
@@ -198,6 +222,7 @@ static int signal_thread(void *arg)
 	return 0;
 }
 
+
 int init_video_channel(int ch_id)
 {
 	video_ch[ch_id].init = 1;
@@ -208,8 +233,86 @@ int init_video_channel(int ch_id)
 
 	strcpy(video_ch[ch_id].v4l_dev_name, g_v4l_device[ch_id]);
 	strcpy(video_ch[ch_id].save_file_name, g_saved_filename[ch_id]);
-	printf("%s, %s init %d\n", __func__,
+	v4l2_dbg("%s, %s init %d\n", __func__,
 	       video_ch[ch_id].v4l_dev_name, ch_id);
+	return 0;
+}
+
+static int mx8_capturing_prepare()
+{
+	unsigned int i;
+
+	for (i = 0; i < 8; i++)
+		if (video_ch[i].on) {
+			if (prepare_capturing(i) < 0) {
+				v4l2_err
+				    ("prepare_capturing failed, channel%d\n",
+				     i);
+				return -1;
+			}
+		}
+	return 0;
+}
+
+static int mx8_qbuf()
+{
+	unsigned int i;
+	unsigned int j;
+	struct v4l2_buffer buf;
+	struct v4l2_requestbuffers req;
+	struct v4l2_plane planes = { 0 };
+	for (j = 0; j < 8; j++) {
+		if (video_ch[j].on) {
+			int fd_v4l = video_ch[j].v4l_dev;
+			int mem_type = video_ch[j].mem_type;
+			for (i = 0; i < TEST_BUFFER_NUM; i++) {
+				memset(&buf, 0, sizeof(buf));
+				memset(&planes, 0, sizeof(planes));
+				buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+				buf.memory = mem_type;
+				buf.m.planes = &planes;
+				buf.index = i;
+				buf.m.planes->length = video_ch[j].buffers[i].length;
+				buf.length = 1;
+				if (mem_type == V4L2_MEMORY_USERPTR)
+					buf.m.planes->m.userptr =
+						(unsigned long)video_ch[j].buffers[i].start;
+				else
+					buf.m.planes->m.mem_offset =
+						video_ch[j].buffers[i].offset;
+
+				if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
+					v4l2_err("VIDIOC_QBUF error\n");
+					return -1;
+				}
+			}
+		}
+	}
+}
+
+static int free_buffer(int ch_id)
+{
+	struct v4l2_buffer buf;
+	struct v4l2_requestbuffers req;
+	int fd_v4l = video_ch[ch_id].v4l_dev;
+	int mem_type = video_ch[ch_id].mem_type;
+	int i;
+
+	for (i = 0; i < TEST_BUFFER_NUM; i++) {
+		munmap(video_ch[ch_id].buffers[i].start,
+				video_ch[ch_id].buffers[i].length);
+	}
+
+	memset(&req, 0, sizeof(req));
+	req.count = 0;
+	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	req.memory = mem_type;
+#if 1
+	if (ioctl(fd_v4l, VIDIOC_REQBUFS, &req) < 0) {
+		v4l2_err("free buffer failed (chan_ID:%d)\n", ch_id);
+		return -1;
+	}
+#endif
 	return 0;
 }
 
@@ -228,7 +331,12 @@ int prepare_capturing(int ch_id)
 	req.memory = mem_type;
 
 	if (ioctl(fd_v4l, VIDIOC_REQBUFS, &req) < 0) {
-		printf("VIDIOC_REQBUFS failed\n");
+		v4l2_err("VIDIOC_REQBUFS failed\n");
+		return -1;
+	}
+
+	if (req.count < TEST_BUFFER_NUM) {
+		v4l2_err("Can't alloc 3 buffers\n");
 		return -1;
 	}
 
@@ -243,7 +351,7 @@ int prepare_capturing(int ch_id)
 			buf.index = i;
 
 			if (ioctl(fd_v4l, VIDIOC_QUERYBUF, &buf) < 0) {
-				printf("VIDIOC_QUERYBUF error\n");
+				v4l2_err("VIDIOC_QUERYBUF error\n");
 				return -1;
 			}
 
@@ -259,37 +367,14 @@ int prepare_capturing(int ch_id)
 
 			memset(video_ch[ch_id].buffers[i].start, 0xFF,
 			       video_ch[ch_id].buffers[i].length);
-			printf
-			    ("buffer[%d] startAddr=0x%x, offset=0x%x, buf_size=%d\n",
-			     i,
-			     (unsigned int *)video_ch[ch_id].buffers[i].start,
-			     video_ch[ch_id].buffers[i].offset,
-			     video_ch[ch_id].buffers[i].length);
+			v4l2_dbg
+				("buffer[%d] startAddr=0x%x, offset=0x%x, buf_size=%d\n",
+				 i,
+				 (unsigned int *)video_ch[ch_id].buffers[i].start,
+				 video_ch[ch_id].buffers[i].offset,
+				 video_ch[ch_id].buffers[i].length);
 		}
 	}
-
-	for (i = 0; i < TEST_BUFFER_NUM; i++) {
-		memset(&buf, 0, sizeof(buf));
-		memset(&planes, 0, sizeof(planes));
-		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		buf.memory = mem_type;
-		buf.m.planes = &planes;
-		buf.index = i;
-		buf.m.planes->length = video_ch[ch_id].buffers[i].length;
-		buf.length = 1;
-		if (mem_type == V4L2_MEMORY_USERPTR)
-			buf.m.planes->m.userptr =
-			    (unsigned long)video_ch[ch_id].buffers[i].start;
-		else
-			buf.m.planes->m.mem_offset =
-			    video_ch[ch_id].buffers[i].offset;
-
-		if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
-			printf("VIDIOC_QBUF error\n");
-			return -1;
-		}
-	}
-
 	return 0;
 }
 
@@ -300,10 +385,10 @@ int start_capturing(int ch_id)
 	int fd_v4l = video_ch[ch_id].v4l_dev;
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	if (ioctl(fd_v4l, VIDIOC_STREAMON, &type) < 0) {
-		printf("VIDIOC_STREAMON error\n");
+		v4l2_err("VIDIOC_STREAMON error\n");
 		return -1;
 	}
-	printf("%s channel=%d, v4l_dev=0x%x\n", __func__, ch_id, fd_v4l);
+	v4l2_dbg("%s channel=%d, v4l_dev=0x%x\n", __func__, ch_id, fd_v4l);
 	return 0;
 }
 
@@ -313,7 +398,7 @@ int stop_capturing(int ch_id)
 	int fd_v4l = video_ch[ch_id].v4l_dev;
 	int nframe = video_ch[ch_id].frame_num;
 
-	printf("%s channel=%d, v4l_dev=0x%x, frames=%d\n", __func__,
+	v4l2_dbg("%s channel=%d, v4l_dev=0x%x, frames=%d\n", __func__,
 	       ch_id, fd_v4l, nframe);
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	return ioctl(fd_v4l, VIDIOC_STREAMOFF, &type);
@@ -333,15 +418,15 @@ void show_device_cap_list(void)
 		snprintf(v4l_name, sizeof(v4l_name), "/dev/video%d", i);
 
 		if ((fd_v4l = open(v4l_name, O_RDWR, 0)) < 0) {
-			printf
+			v4l2_err
 			    ("\nunable to open %s for capture device.\n",
 			     v4l_name);
 		} else
-			printf("\nopen video device %s \n", v4l_name);
+			v4l2_info("\nopen video device %s \n", v4l_name);
 
 		if (ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap) == 0) {
 			if (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE) {
-				printf
+				v4l2_info
 				    ("Found v4l2 MPLANE capture device %s\n",
 				     v4l_name);
 				fmtdesc.index = 0;
@@ -371,7 +456,7 @@ void show_device_cap_list(void)
 						       (fd_v4l,
 							VIDIOC_ENUM_FRAMEINTERVALS,
 							&frmival) >= 0) {
-							printf
+							v4l2_dbg
 							    ("CaptureMode=%d, Width=%d, Height=%d %.3f fps\n",
 							     frmsize.index,
 							     frmival.width,
@@ -388,7 +473,7 @@ void show_device_cap_list(void)
 					fmtdesc.index++;
 				}
 			} else
-				printf
+				v4l2_err
 				    ("Video device %s not support v4l2 capture\n",
 				     v4l_name);
 		}
@@ -405,22 +490,23 @@ int v4l_capture_setup(int ch_id)
 	int fd_v4l;
 	int i;
 
-	printf("Try to open device %s\n", video_ch[ch_id].v4l_dev_name);
+	v4l2_dbg("Try to open device %s\n", video_ch[ch_id].v4l_dev_name);
 	if ((fd_v4l = open(video_ch[ch_id].v4l_dev_name, O_RDWR, 0)) < 0) {
-		printf("unable to open v4l2 %s for capture device.\n",
-		       video_ch[ch_id].v4l_dev_name);
+		v4l2_err("unable to open v4l2 %s for capture device.\n",
+			   video_ch[ch_id].v4l_dev_name);
 		return -1;
 	}
 
 	if (ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap) == 0) {
-		printf("cap=0x%x\n", cap.capabilities);
+		v4l2_dbg("cap=0x%x\n", cap.capabilities);
 		if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE)) {
-			printf("%s not support v4l2 capture device.\n",
-			       video_ch[ch_id].v4l_dev_name);
+			v4l2_err("%s not support v4l2 capture device.\n",
+				   video_ch[ch_id].v4l_dev_name);
 			return -1;
 		}
 	} else {
 		close(fd_v4l);
+		v4l2_err("VIDIOC_QUERYCAP fail, chan_ID:%d\n", ch_id);
 		return -1;
 	}
 
@@ -430,10 +516,10 @@ int v4l_capture_setup(int ch_id)
 	for (i = 0;; i++) {
 		fmtdesc.index = i;
 		if (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) < 0) {
-			printf("VIDIOC ENUM FMT failed, index=%d \n", i);
+			v4l2_err("VIDIOC ENUM FMT failed, index=%d \n", i);
 			break;
 		}
-		printf("index=%d\n", fmtdesc.index);
+		v4l2_dbg("index=%d\n", fmtdesc.index);
 		print_pixelformat("pixelformat (output by camera)",
 				  fmtdesc.pixelformat);
 	}
@@ -445,39 +531,40 @@ int v4l_capture_setup(int ch_id)
 	fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
 	fmt.fmt.pix_mp.num_planes = 1;	/* RGB */
 	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
-		printf("set format failed\n");
+		v4l2_err("set format failed, chan_ID:%d\n", ch_id);
 		goto fail;
 	}
 
 	memset(&fmt, 0, sizeof(fmt));
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0) {
-		printf("get format failed\n");
+		v4l2_err("get format failed, chan_ID:%d\n", ch_id);
 		goto fail;
 	}
-	printf("video_ch=%d, width=%d, height=%d, \n",
-	       ch_id, fmt.fmt.pix_mp.width, fmt.fmt.pix_mp.height);
+	v4l2_dbg("video_ch=%d, width=%d, height=%d, \n",
+		   ch_id, fmt.fmt.pix_mp.width, fmt.fmt.pix_mp.height);
 	print_pixelformat("pixelformat", fmt.fmt.pix_mp.pixelformat);
 
 	memset(&parm, 0, sizeof(parm));
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	if (ioctl(fd_v4l, VIDIOC_G_PARM, &parm) < 0) {
-		printf("VIDIOC_G_PARM failed\n");
+		v4l2_err("VIDIOC_G_PARM failed, chan_ID:%d\n", ch_id);
 		parm.parm.capture.timeperframe.denominator = g_camera_framerate;
 	}
 
-	printf("\t WxH@fps = %dx%d@%d", fmt.fmt.pix_mp.width,
-	       fmt.fmt.pix_mp.height,
-	       parm.parm.capture.timeperframe.denominator);
-	printf("\t Image size = %d\n", fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
+	v4l2_dbg("\t WxH@fps = %dx%d@%d", fmt.fmt.pix_mp.width,
+		   fmt.fmt.pix_mp.height,
+		   parm.parm.capture.timeperframe.denominator);
+	v4l2_dbg("\t Image size = %d\n", fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
 
 	video_ch[ch_id].frame_size = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
 
 	video_ch[ch_id].v4l_dev = fd_v4l;
 	video_ch[ch_id].on = 1;
 
-	printf("%s, Open v4l_dev=0x%x, channel=%d",
-	       __func__, video_ch[ch_id].v4l_dev, ch_id);
+	v4l2_dbg("%s, Open v4l_dev=0x%x, channel=%d\n",
+		   __func__, video_ch[ch_id].v4l_dev, ch_id);
+
 	return 0;
 
 fail:
@@ -494,15 +581,15 @@ int config_video_channel(void)
 	int cam_num, i;
 
 	if (g_cam_num < 1) {
-		printf("Error cam number %d\n", g_cam_num);
+		v4l2_err("Error cam number %d\n", g_cam_num);
 		return -1;
 	}
-	if (g_cam_num == 3 || g_cam_num == 6 || g_cam_num == 7) {
-		printf("Not support %d cam output\n", g_cam_num);
+	if (g_cam_num == 3 || g_cam_num == 5 || g_cam_num == 7) {
+		v4l2_err("Not support %d cam output\n", g_cam_num);
 		return -1;
 	}
 
-	printf("xres=%d, y_res=%d\n", fb_disp.x_res, fb_disp.y_res);
+	v4l2_info("xres=%d, y_res=%d\n", fb_disp.x_res, fb_disp.y_res);
 	x_offset[0] = 0;
 	y_offset[0] = 0;
 	if (g_cam_num == 2) {
@@ -562,7 +649,7 @@ int config_video_channel(void)
 			video_ch[i].out_width = x_out;
 			video_ch[i].x_offset = x_offset[cam_num];
 			video_ch[i].y_offset = y_offset[cam_num];
-			printf
+			v4l2_info
 			    ("ch_id=%d, w=%d, h=%d, x_offset=%d, y_offset=%d\n",
 			     i, x_out, y_out, x_offset[cam_num],
 			     y_offset[cam_num]);
@@ -581,12 +668,12 @@ int fb_display_setup(void)
 	int frame_size;
 
 	if ((fd_fb = open(fb_device, O_RDWR)) < 0) {
-		printf("Unable to open frame buffer\n");
+		v4l2_err("Unable to open frame buffer\n");
 		goto FAIL;
 	}
 
 	if (ioctl(fd_fb, FBIOGET_VSCREENINFO, var) < 0) {
-		printf("FBIOPUT_VSCREENINFO failed\n");
+		v4l2_err("FBIOPUT_VSCREENINFO failed\n");
 		goto FAIL;
 	}
 
@@ -594,7 +681,7 @@ int fb_display_setup(void)
 	var->yres_virtual = 3 * var->yres;
 
 	if (ioctl(fd_fb, FBIOPUT_VSCREENINFO, var) < 0) {
-		printf("FBIOPUT_VSCREENINFO failed\n");
+		v4l2_err("FBIOPUT_VSCREENINFO failed\n");
 		goto FAIL;
 	}
 
@@ -602,12 +689,12 @@ int fb_display_setup(void)
 	fb0_size = var->xres * var->yres_virtual * var->bits_per_pixel / 8;
 	frame_size = var->xres * var->yres * var->bits_per_pixel / 8;
 
-	printf("fb0_size = %d\n", fb0_size);
+	v4l2_info("fb0_size = %d\n", fb0_size);
 	fb_disp.fb0 = (unsigned char *)mmap(0, fb0_size,
 					    PROT_READ | PROT_WRITE,
 					    MAP_SHARED, fd_fb, 0);
 	if (fb_disp.fb0 == NULL) {
-		printf
+		v4l2_err
 		    ("Error: failed to map framebuffer device 0 to memory.\n");
 		goto FAIL;
 	}
@@ -621,7 +708,7 @@ int fb_display_setup(void)
 	fb_disp.bpp = var->bits_per_pixel;
 	fb_disp.bytesperline = var->xres * var->bits_per_pixel / 8;
 
-	printf("fb frame size, WxH=(%d, %d)\n", var->xres, var->yres);
+	v4l2_info("fb frame size, WxH=(%d, %d)\n", var->xres, var->yres);
 	close(fd_fb);
 	return 0;
 FAIL:
@@ -679,7 +766,7 @@ int get_video_channel_buffer(int ch_id)
 	buf.m.planes = &planes;
 	buf.length = 1;
 	if (ioctl(fd_v4l, VIDIOC_DQBUF, &buf) < 0) {
-		printf("VIDIOC_DQBUF failed.\n");
+		v4l2_err("VIDIOC_DQBUF failed.\n");
 		return -1;
 	}
 
@@ -707,7 +794,7 @@ int put_video_channel_buffer(int ch_id)
 	buf.length = 1;
 
 	if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
-		printf("VIDIOC_QBUF failed, video=%d\n", ch_id);
+		v4l2_err("VIDIOC_QBUF failed, video=%d\n", ch_id);
 		return -1;
 	}
 	return 0;
@@ -721,7 +808,7 @@ int open_save_file(void)
 		if (video_ch[i].init) {
 			if ((video_ch[i].pfile =
 			     fopen(video_ch[i].save_file_name, "wb")) == NULL) {
-				printf("Unable to create recording file, \n");
+				v4l2_err("Unable to create recording file, \n");
 				return -1;
 			}
 		}
@@ -740,7 +827,7 @@ int save_to_file(int ch_id)
 			       video_ch[ch_id].frame_size, 1,
 			       video_ch[ch_id].pfile);
 		if (wsize < 1) {
-			printf
+			v4l2_err
 			    ("No space left on device. Stopping after %d frames.\n",
 			     video_ch[ch_id].frame_num);
 			return -1;
@@ -754,10 +841,19 @@ int close_save_file(void)
 	int i;
 
 	for (i = 0; i < 8; i++)
-		if (video_ch[i].pfile)
+		if (video_ch[i].on && !video_ch[i].pfile)
 			fclose(video_ch[i].pfile);
 
 	return 0;
+}
+
+void close_vdev_file(void)
+{
+	int i;
+
+	for (i = 0; i < 8; i++)
+		if ((video_ch[i].v4l_dev > 0) && video_ch[i].on)
+			close(video_ch[i].v4l_dev);
 }
 
 int fb_pan_display(void)
@@ -768,17 +864,39 @@ int fb_pan_display(void)
 	if (var->yoffset == var->yres) {
 		/* fb buffer offset 1 frame */
 		if (ioctl(fd_fb, FBIOPAN_DISPLAY, var) < 0) {
-			printf("FBIOPAN_DISPLAY1 failed\n");
+			v4l2_err("FBIOPAN_DISPLAY1 failed\n");
 		}
 		var->yoffset += var->yres;
 		fb_disp.frame_num++;
 	} else {
 		/* fb buffer offset 2 frame  */
 		if (ioctl(fd_fb, FBIOPAN_DISPLAY, var) < 0) {
-			printf("FBIOPAN_DISPLAY2 failed\n");
+			v4l2_err("FBIOPAN_DISPLAY2 failed\n");
 		}
 		var->yoffset -= var->yres;
 		fb_disp.frame_num++;
+	}
+	return 0;
+}
+
+int set_vdev_parm(int ch_id)
+{
+	struct v4l2_format fmt;
+	int fd_v4l;
+
+	if (video_ch[ch_id].on) {
+		fd_v4l = video_ch[ch_id].v4l_dev;
+
+		memset(&fmt, 0, sizeof(fmt));
+		fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		fmt.fmt.pix_mp.pixelformat = video_ch[ch_id].cap_fmt;
+		fmt.fmt.pix_mp.width = video_ch[ch_id].out_width;
+		fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
+		fmt.fmt.pix_mp.num_planes = 1;	/* RGB */
+		if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
+			v4l2_err("set format failed\n");
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -789,8 +907,26 @@ int v4l_capture_test(void)
 	int i;
 	int ret;
 	struct fb_var_screeninfo *var = &fb_disp.var;
+	static int first_time_enter = 0;
 
 loop:
+	v4l2_dbg(" ===== first_time_enter:%d ===== \n", first_time_enter);
+	if (first_time_enter++ > 0) {
+		for (i = 0; i < g_cam_max; i++) {
+			if (set_vdev_parm(i) < 0)
+				return -1;
+		}
+		first_time_enter = 1;
+	}
+
+	if (mx8_capturing_prepare() < 0)
+		return -1;
+
+	if (mx8_qbuf() < 0)
+		return -1;
+
+	if (start_streamon() < 0)
+		return -1;
 
 	gettimeofday(&tv1, NULL);
 	do {
@@ -799,16 +935,18 @@ loop:
 			if (video_ch[i].on) {
 				ret = get_video_channel_buffer(i);
 				if (ret < 0)
-					goto FAIL;
+					return -1;
 				if (!g_saved_to_file) {
 					/* Copy video buffer to fb buffer */
 					ret = set_up_frame(i);
 					if (ret < 0)
-						goto FAIL;
+						return -1;
 				} else {
-					ret = save_to_file(i);
-					if (ret < 0)
-						goto FAIL;
+					/* Performance test, skip write file operation */
+					if (!g_performance_test)
+						ret = save_to_file(i);
+						if (ret < 0)
+							return -1;
 				}
 			}
 
@@ -823,46 +961,68 @@ loop:
 		gettimeofday(&tv2, NULL);
 	} while ((tv2.tv_sec - tv1.tv_sec < g_timeout) && !quitflag);
 
+	if (g_performance_test) {
+		for (i = 0; i < 8; i++) {
+			if (video_ch[i].on) {
+				v4l2_info("Channel[%d]: frame:%d\n", i, video_ch[i].frame_num);
+				v4l2_info("Channel[%d]: Performance = %d(fps)\n",
+							i, video_ch[i].frame_num / g_timeout);
+				video_ch[i].frame_num = 0;
+			}
+		}
+	}
+
 	/* Make sure pan display offset is zero before capture is stopped */
 	if (!g_saved_to_file) {
 		if (var->yoffset) {
 			var->yoffset = 0;
-			if (ioctl(fb_disp.fd_fb, FBIOPAN_DISPLAY, var) < 0)
-				printf("FBIOPAN_DISPLAY failed\n");
+			if (ioctl(fb_disp.fd_fb, FBIOPAN_DISPLAY, var) < 0) {
+				v4l2_err("FBIOPAN_DISPLAY failed\n");
+				return -1;
+			}
 		}
 	}
 
 	/* stop channels / stream off */
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < 8; i++) {
 		if (video_ch[i].on)
-			if (stop_capturing(i) < 0)
-				printf("stop_capturing failed, device %d\n", i);
+			if (stop_capturing(i) < 0) {
+				v4l2_err("stop_capturing failed, device %d\n", i);
+				return -1;
+			}
+	}
+
+	for (i = 0; i < 8; i++) {
+		if (video_ch[i].on)
+			if (free_buffer(i) < 0) {
+				v4l2_err("stop_capturing failed, device %d\n", i);
+				return -1;
+			}
+	}
 
 	if (g_loop > 0 && !quitflag) {
-		printf("loop %d done!\n", g_loop);
+		v4l2_info(" ======= loop %d done! ========\n", g_loop);
 		g_loop--;
 		goto loop;
 	}
 
-	/* close v4l device handle */
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on)
-			close(video_ch[i].v4l_dev);
-
-	/* close fb handle */
-	if (!g_saved_to_file)
-		close(fb_disp.fd_fb);
-
 	return 0;
-FAIL:
-	if (!g_saved_to_file)
-		close(fb_disp.fd_fb);
-
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on)
-			close(video_ch[i].v4l_dev);
-	return -1;
 }
+
+int start_streamon()
+{
+	int i;
+	for (i = 0; i < 8; i++)
+		if (video_ch[i].on) {
+			if (start_capturing(i) < 0) {
+				v4l2_err
+				    ("start_capturing failed, channel%d\n", i);
+				return -1;
+			}
+		}
+
+}
+
 
 int main(int argc, char **argv)
 {
@@ -873,7 +1033,7 @@ int main(int argc, char **argv)
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
-		printf("mx8_cap.out not supported on current soc\n");
+		v4l2_err("mx8_cap.out not supported on current soc\n");
 		return 0;
 	}
 
@@ -907,7 +1067,7 @@ int main(int argc, char **argv)
 		/* get fb info */
 		ret = fb_display_setup();
 		if (ret < 0) {
-			printf("fb_display_setup failed\n");
+			v4l2_err("fb_display_setup failed\n");
 			return -1;
 		}
 	} else {
@@ -922,7 +1082,7 @@ int main(int argc, char **argv)
 		/* config video channel according FB info */
 		ret = config_video_channel();
 		if (ret < 0) {
-			printf("config video failed\n");
+			v4l2_err("config video failed\n");
 			return -1;
 		}
 	} else {
@@ -938,35 +1098,26 @@ int main(int argc, char **argv)
 		}
 	}
 
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on) {
-			if (prepare_capturing(i) < 0) {
-				printf
-				    ("prepare_capturing failed, channel%d\n",
-				     i);
-				goto FAIL0;
-			}
-		}
+	if (v4l_capture_test() < 0)
+		goto FAIL0;
 
-	/* start channels / stream on */
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on) {
-			if (start_capturing(i) < 0) {
-				printf
-				    ("start_capturing failed, channel%d\n", i);
-				goto FAIL1;
-			}
-		}
+	v4l2_info("success!\n");
 
-	v4l_capture_test();
+	if (!g_saved_filename)
+		if (fb_disp.fd_fb > 0)
+			close(fb_disp.fd_fb);
+	else
+		close_save_file();
+	close_vdev_file();
 
-	printf("success!\n");
 	return 0;
-FAIL1:
-	for (i = 0; i < 8; i++)
-		stop_capturing(i);
+
 FAIL0:
-	for (i = 0; i < 8; i++)
-		close(video_ch[i].v4l_dev);
+	if (!g_saved_filename)
+		if (fb_disp.fd_fb > 0)
+			close(fb_disp.fd_fb);
+	else
+		close_save_file();
+	close_vdev_file();
 	return -1;
 }
