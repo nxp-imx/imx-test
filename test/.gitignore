@@ -1,0 +1,9 @@
+#
+# Normal rules
+#
+
+etm/etm
+memtool/memtool
+mmdc/mmdc2
+
+*.out
