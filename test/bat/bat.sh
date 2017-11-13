@@ -51,6 +51,11 @@ main() {
     count_skip=0
     count_todo=0
     count_fail=0
+    tests_ok=()
+    tests_todo=()
+    tests_skip=()
+    tests_fail=()
+
 
     index=0
     for test_script in "${test_scripts[@]}"; do
@@ -69,16 +74,46 @@ main() {
         if [[ $test_status == 0 ]]; then
             echo "ok $index $test_script"
             count_ok=$((count_ok + 1))
+	    tests_ok+="$index $test_script\n"
         elif [[ $test_status == $BAT_EXITCODE_SKIP ]]; then
             echo "ok $index $test_script #SKIP"
             count_skip=$((count_skip + 1))
+	    tests_skip+="$index $test_script\n"
         elif [[ $test_status == $BAT_EXITCODE_TODO ]]; then
             echo "not ok $index $test_script #TODO"
             count_todo=$((count_todo + 1))
+	    tests_todo+="$index $test_script\n"
         else
             echo "not ok $index $test_script"
             count_fail=$((count_fail + 1))
+	    tests_fail+="$index $test_script\n"
         fi
+    done
+
+    echo "# Results summary:"
+
+    echo "tests ok $count_ok:"
+    for i in "${tests_ok[@]}"
+    do
+        echo -e "$i"
+    done
+
+    echo "tests skipped $count_skip:"
+    for i in "${tests_skip[@]}"
+    do
+        echo -e "$i"
+    done
+
+    echo "tests todo $count_todo:"
+    for i in "${tests_todo[@]}"
+    do
+        echo -e "$i"
+    done
+
+    echo "tests failed $count_fail:"
+    for i in "${tests_fail[@]}"
+    do
+        echo -e "$i"
     done
 
     echo "# bat.sh summary $count_ok ok $count_skip skip $count_todo todo $count_fail fail"
