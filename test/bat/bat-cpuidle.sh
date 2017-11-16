@@ -5,6 +5,16 @@ set -e
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 . $batdir/bat_utils.sh
 
+revision=$(cat /sys/devices/soc0/revision)
+soc=$(cat /sys/devices/soc0/soc_id)
+
+# we should skip if the board is revision A0
+if ! [ -d /sys/firmware/devicetree/base/cpus/cpu@0/cpu-idle-states ] &&
+	[ $revision == "1.0" ] && [ $soc == "i.MX8MQ" ]; then
+    echo "board is i.MX8MQ revision A0, will skip this test"
+    exit $BAT_EXITCODE_SKIP
+fi
+
 # we should have at least one idle state
 if ! [ -d /sys/devices/system/cpu/cpu0/cpuidle/state0 ]; then
     echo "no idle state"
