@@ -1,0 +1,19 @@
+Alsa tool to capture raw PDM data from input mic over SAI interface
+
+Usage: mxc_pdm_test.out <options>
+<options>   -device  the pdm audio device like hw:4:0
+            -log     log debug info into output file
+            -output  output file name
+            -rate    sample rate
+            -seconds number of seconds to capture
+
+For example:
+
+Capture raw pdm data and convert to raw wav file:
+mxc_pdm_test.out -device hw:4,0 -output test-16k.raw -rate 16000 -seconds 60
+
+Capture raw pdm data and write debug info data in output file
+mxc_pdm_test.out -device hw:4,0 -output test-16k.raw -rate 16000 -seconds 60 -log
+
+Playback converted pdm to pcm raw audio file:
+aplay -t raw -c 1 -f S24_LE -r 16000 test-16k.raw
