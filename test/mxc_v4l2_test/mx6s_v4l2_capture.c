@@ -704,7 +704,7 @@ int main(int argc, char **argv)
 	quitflag = 0;
 	int ret;
 	char *soc_list[] = {"i.MX6SLL", "i.MX6ULL", "i.MX6UL",
-			"i.MX7D", "i.MX6SX", "i.MX6SL", " "};
+			"i.MX7D", "i.MX6SX", "i.MX6SL", "i.MX8MQ", " "};
 
 	print_name(argv);
 
