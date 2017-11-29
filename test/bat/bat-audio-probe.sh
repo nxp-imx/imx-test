@@ -21,7 +21,6 @@ case $machine in
 )
     expected_cards_no=3
     ;;
-'Freescale i.MX8QM ARM2'|\
 'Freescale i.MX6 Quad SABRE Automotive Board'|\
 'Freescale i.MX6 SoloX SDB RevB Board'|\
 'Freescale i.MX6 SoloLite EVK Board'|\
@@ -33,6 +32,7 @@ case $machine in
 )
     expected_cards_no=2
     ;;
+'Freescale i.MX8QM ARM2'|\
 'Freescale i.MX8QXP LPDDR4 ARM2'|\
 'NXP i.MX7ULP EVK'|\
 'Freescale i.MX6 UltraLite 14x14 EVK Board'|\
