@@ -16,7 +16,7 @@ if [[ ! -z $card_no ]]; then
 	done
 else
 	echo "imx pdm hifi device not found"
-	exit 1
+	exit $BAT_EXITCODE_SKIP
 fi
 
 exit 0
