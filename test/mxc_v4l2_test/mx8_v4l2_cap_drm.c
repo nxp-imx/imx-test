@@ -5,14 +5,12 @@
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
- * Version 2 or later at the following locations:
+ * Version 2 or late.
  *
- * http://www.opensource.org/licenses/gpl-license.html
- * http://www.gnu.org/copyleft/gpl.html
  */
 
 /*
- * @file mx8_v4l2_cap_fb.c
+ * @file mx8_v4l2_cap_drm.c
  *
  * @brief MX8 Video For Linux 2 driver test application
  *
@@ -37,6 +35,8 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <drm/drm.h>
+#include <drm/drm_mode.h>
 
 #include "../../include/soc_check.h"
 
@@ -58,6 +58,7 @@ do {                                      \
 
 #define TEST_BUFFER_NUM 3
 #define MAX_V4L2_DEVICE_NR     64
+#define MAX_SIZE	3
 
 sigset_t sigset;
 int quitflag;
@@ -92,19 +93,17 @@ struct video_channel {
 	int y_offset;
 };
 
-struct fb_disp_info {
-	int x_res;
-	int y_res;
-	int bpp;
-	int bytesperline;
+struct drm_kms {
+	void *fb_base;
+	__u32 width;
+	__u32 height;
+	__u32 bits_per_pixel;
+	__u32 bpp;
+	__u32 screen_buf_size;
 	int fd_fb;
-	int frame_num;
-	int frame_size;
-	int fb0_size;
-	unsigned char *fb0;
-	struct fb_var_screeninfo var;
 };
-struct fb_disp_info fb_disp;
+
+struct drm_kms kms;
 
 struct video_channel video_ch[8];
 
@@ -236,6 +235,222 @@ int init_video_channel(int ch_id)
 	v4l2_dbg("%s, %s init %d\n", __func__,
 	       video_ch[ch_id].v4l_dev_name, ch_id);
 	return 0;
+}
+
+int drm_setup(struct drm_kms *kms)
+{
+	int fd_drm = -1;
+	const char dev_name[] = "/dev/dri/card1";
+	void *fb_base[MAX_SIZE];
+	int fb_w[MAX_SIZE];
+	int fb_h[MAX_SIZE];
+	int ret;
+
+	// step1: open dri device /dev/dri/card1
+	fd_drm = open(dev_name, O_RDWR | O_CLOEXEC);
+	if (fd_drm < 0) {
+		v4l2_err("Open %s fail\n", dev_name);
+		return -1;
+	}
+	v4l2_dbg("Open %s success\n", dev_name);
+
+	// step2: to be master
+	ret = ioctl(fd_drm, DRM_IOCTL_SET_MASTER, 0);
+	if (ret < 0) {
+		v4l2_err("DRM_IOCTL_SET_MASTER fail\n");
+		goto err;
+	}
+
+	struct drm_mode_card_res card_res;
+	uint64_t crtc_id_buf[MAX_SIZE] = {0};
+	__u64 encoder_id_buf[MAX_SIZE] = {0};
+	__u64 connector_id_buf[MAX_SIZE] = {0};
+	__u64 fb_id_buf[MAX_SIZE] = {0};
+
+	memset(&card_res, 0, sizeof(card_res));
+	ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETRESOURCES, &card_res);
+	if (ret < 0) {
+		v4l2_err("DRM_IOCTL_MODE_GETRESOURCES fail\n");
+		goto err;
+	}
+
+	if (!card_res.count_connectors) {
+		v4l2_dbg(" Erro: card resource connectors is zeros\n");
+		goto err;
+	}
+
+	card_res.fb_id_ptr = (__u64)fb_id_buf;
+	card_res.crtc_id_ptr = (__u64)crtc_id_buf;
+	card_res.encoder_id_ptr = (__u64)encoder_id_buf;
+	card_res.connector_id_ptr = (__u64)connector_id_buf;
+
+	ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETRESOURCES, &card_res);
+	if (ret < 0) {
+		v4l2_err("DRM_IOCTL_MODE_GETRESOURCES fail\n");
+		goto err;
+	}
+	v4l2_dbg("num of fb:%d\n"
+		"num of crtc:%d\n"
+		"num of encoder:%d\n"
+		"num of connector:%d\n",
+		card_res.count_fbs,
+		card_res.count_crtcs,
+		card_res.count_encoders,
+		card_res.count_connectors);
+
+	// step4: iterate every connectors
+	int index;
+	struct drm_mode_create_dumb create_dumb;
+	struct drm_mode_map_dumb map_dumb;
+	struct drm_mode_fb_cmd fb_cmd;
+
+	for (index = 0; index < card_res.count_connectors; index++) {
+		struct drm_mode_get_connector connector;
+		struct drm_mode_modeinfo modes[MAX_SIZE+20] = {0};
+		__u64 encoders_ptr_buf[MAX_SIZE] = {0};
+		__u64 props_ptr_buf[MAX_SIZE] = {0};
+		__u64 prop_values_ptr_buf[MAX_SIZE] = {0};
+
+		memset(&connector, 0, sizeof(connector));
+		connector.connector_id = connector_id_buf[index];
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETCONNECTOR, &connector);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_GETCONNECTOR fail\n");
+			goto err;
+		}
+
+		connector.encoders_ptr = (__u64)encoders_ptr_buf;
+		connector.modes_ptr = (__u64)modes;
+		connector.props_ptr = (__u64)props_ptr_buf;
+		connector.prop_values_ptr = (__u64)prop_values_ptr_buf;
+
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETCONNECTOR, &connector);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_GETCONNECTOR fail\n");
+			goto err;
+		}
+
+		if (!connector.connection || connector.count_modes < 1 ||
+			connector.count_encoders < 1 || !connector.encoder_id) {
+			v4l2_dbg("Not found connection\n");
+			continue;
+		}
+		v4l2_dbg("num of modes = %d\n"
+			"num of encoders = %d\n"
+			"num of props = %d\n",
+			connector.count_modes,
+			connector.count_encoders,
+			connector.count_props);
+		int j;
+		for (j = 0; j < connector.count_modes; j++)
+			v4l2_dbg("modes[%d] info:"
+				"resolution=%d*%d pixels\n", j,
+				modes[j].hdisplay, modes[j].vdisplay);
+
+		/*
+		 * Create dumb buffer
+		 */
+		memset(&create_dumb, 0, sizeof(create_dumb));
+		memset(&map_dumb, 0, sizeof(map_dumb));
+		memset(&fb_cmd, 0, sizeof(fb_cmd));
+
+		create_dumb.height = modes[index].vdisplay;
+		create_dumb.width = modes[index].hdisplay;
+		create_dumb.bpp = 32;
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_CREATE_DUMB, &create_dumb);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_CREATE_DUMB fail\n");
+			goto err;
+		}
+
+		fb_cmd.width = create_dumb.width;
+		fb_cmd.height = create_dumb.height;
+		fb_cmd.bpp = create_dumb.bpp;
+		fb_cmd.pitch = create_dumb.pitch;
+		fb_cmd.depth = 24;
+		fb_cmd.handle = create_dumb.handle;
+
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_ADDFB, &fb_cmd);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_ADDFB fail\n");
+			goto err;
+		}
+
+		map_dumb.handle = create_dumb.handle;
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_MAP_DUMB fail\n");
+			goto err;
+		}
+
+		fb_base[index] = mmap(0, create_dumb.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_drm, map_dumb.offset);
+		fb_w[index] = create_dumb.width;
+		fb_h[index] = create_dumb.height;
+
+		/*
+		 * Get encoder info
+		 */
+		struct drm_mode_get_encoder encoder;
+
+		memset(&encoder, 0, sizeof(encoder));
+		encoder.encoder_id = connector.encoder_id;
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETENCODER, &encoder);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_GETENCODER fail\n");
+			goto err;
+		}
+
+		/*
+		 * CRTC
+		 */
+		struct drm_mode_crtc crtc;
+
+		memset(&crtc, 0, sizeof(crtc));
+		crtc.crtc_id = encoder.crtc_id;
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETCRTC, &crtc);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_GETCRTC fail\n");
+			goto err;
+		}
+
+		crtc.fb_id = fb_cmd.fb_id;
+		crtc.set_connectors_ptr = (__u64)&connector_id_buf[index];
+		crtc.count_connectors = 1;
+		crtc.mode = modes[0];
+		crtc.mode_valid = 1;
+		ret = ioctl(fd_drm, DRM_IOCTL_MODE_SETCRTC, &crtc);
+		if (ret < 0) {
+			v4l2_err("DRM_IOCTL_MODE_SETCRTC fail\n");
+			goto err;
+		}
+	}
+
+	ret = ioctl(fd_drm, DRM_IOCTL_DROP_MASTER, 0);
+	if (ret < 0) {
+		v4l2_err("DRM_IOCTL_DROP_MASTER fail\n");
+		goto err;
+	}
+
+	kms->fb_base = fb_base[0];
+	kms->width = fb_w[0];
+	kms->height = fb_h[0];
+	kms->bits_per_pixel = create_dumb.bpp >> 3;
+	kms->bpp = create_dumb.bpp;
+	kms->screen_buf_size = fb_w[0] * fb_h[0] * kms->bits_per_pixel;
+	kms->fd_fb = fd_drm;
+
+	v4l2_dbg("kms info: fb_base = 0x%x\n"
+		"w/h=(%d,%d)\n"
+		"bits_per_pixel=%d\n"
+		"bpp=%d\n"
+		"screen_buf_size =%d\n",
+		kms->fb_base, kms->width, kms->height, kms->bits_per_pixel,
+		kms->bpp, kms->screen_buf_size);
+
+	return 0;
+err:
+	close(fd_drm);
+	return ret;
 }
 
 static int mx8_capturing_prepare()
@@ -572,13 +787,17 @@ fail:
 	return -1;
 }
 
-int config_video_channel(void)
+int config_video_channel(struct drm_kms *kms)
 {
 	int x_out;
 	int y_out;
 	int x_offset[8];
 	int y_offset[8];
 	int cam_num, i;
+	int x_res, y_res;
+
+	x_res = kms->width;
+	y_res = kms->height;
 
 	if (g_cam_num < 1) {
 		v4l2_err("Error cam number %d\n", g_cam_num);
@@ -589,17 +808,17 @@ int config_video_channel(void)
 		return -1;
 	}
 
-	v4l2_info("xres=%d, y_res=%d\n", fb_disp.x_res, fb_disp.y_res);
+	v4l2_info("xres=%d, y_res=%d\n", x_res, y_res);
 	x_offset[0] = 0;
 	y_offset[0] = 0;
 	if (g_cam_num == 2) {
-		x_out = fb_disp.x_res / 2;
-		y_out = fb_disp.y_res / 2;
+		x_out = x_res / 2;
+		y_out = y_res / 2;
 		x_offset[1] = x_out;
 		y_offset[1] = 0;
 	} else if (g_cam_num == 4) {
-		x_out = fb_disp.x_res / 2;
-		y_out = fb_disp.y_res / 2;
+		x_out = x_res / 2;
+		y_out = y_res / 2;
 		x_offset[1] = x_out;
 		y_offset[1] = 0;
 		x_offset[2] = 0;
@@ -607,8 +826,8 @@ int config_video_channel(void)
 		x_offset[3] = x_out;
 		y_offset[3] = y_out;
 	} else if (g_cam_num == 6) {
-		x_out = fb_disp.x_res / 3;
-		y_out = fb_disp.y_res / 2;
+		x_out = x_res / 3;
+		y_out = y_res / 2;
 		x_offset[1] = x_out;
 		y_offset[1] = 0;
 		x_offset[2] = x_out * 2;
@@ -620,8 +839,8 @@ int config_video_channel(void)
 		x_offset[4] = x_out * 2;
 		y_offset[4] = y_out;
 	} else if (g_cam_num == 8) {
-		x_out = fb_disp.x_res / 4;
-		y_out = fb_disp.y_res / 2;
+		x_out = x_res / 4;
+		y_out = y_res / 2;
 		x_offset[1] = x_out;
 		y_offset[1] = 0;
 		x_offset[2] = x_out * 2;
@@ -659,97 +878,31 @@ int config_video_channel(void)
 	return 0;
 }
 
-int fb_display_setup(void)
-{
-	struct fb_var_screeninfo *var = &fb_disp.var;
-	char fb_device[100] = "/dev/fb0";
-	int fd_fb = 0;
-	int fb0_size;
-	int frame_size;
-
-	if ((fd_fb = open(fb_device, O_RDWR)) < 0) {
-		v4l2_err("Unable to open frame buffer\n");
-		goto FAIL;
-	}
-
-	if (ioctl(fd_fb, FBIOGET_VSCREENINFO, var) < 0) {
-		v4l2_err("FBIOPUT_VSCREENINFO failed\n");
-		goto FAIL;
-	}
-
-	var->xres_virtual = var->xres;
-	var->yres_virtual = 3 * var->yres;
-
-	if (ioctl(fd_fb, FBIOPUT_VSCREENINFO, var) < 0) {
-		v4l2_err("FBIOPUT_VSCREENINFO failed\n");
-		goto FAIL;
-	}
-
-	/* Map the device to memory */
-	fb0_size = var->xres * var->yres_virtual * var->bits_per_pixel / 8;
-	frame_size = var->xres * var->yres * var->bits_per_pixel / 8;
-
-	v4l2_info("fb0_size = %d\n", fb0_size);
-	fb_disp.fb0 = (unsigned char *)mmap(0, fb0_size,
-					    PROT_READ | PROT_WRITE,
-					    MAP_SHARED, fd_fb, 0);
-	if (fb_disp.fb0 == NULL) {
-		v4l2_err
-		    ("Error: failed to map framebuffer device 0 to memory.\n");
-		goto FAIL;
-	}
-
-	var->yoffset = var->yres;
-	fb_disp.fd_fb = fd_fb;
-	fb_disp.fb0_size = fb0_size;
-	fb_disp.frame_size = frame_size;
-	fb_disp.x_res = var->xres;
-	fb_disp.y_res = var->yres;
-	fb_disp.bpp = var->bits_per_pixel;
-	fb_disp.bytesperline = var->xres * var->bits_per_pixel / 8;
-
-	v4l2_info("fb frame size, WxH=(%d, %d)\n", var->xres, var->yres);
-	close(fd_fb);
-	return 0;
-FAIL:
-	close(fd_fb);
-	return -1;
-}
-
-int set_up_frame(int ch_id)
+int set_up_frame_drm(int ch_id, struct drm_kms *kms)
 {
 	int out_h, out_w;
 	int stride;
 	int bufoffset;
 	int j;
+	int bytes_per_line;
 	int buf_id = video_ch[ch_id].cur_buf_id;
-	struct fb_var_screeninfo *var = &fb_disp.var;
-	int frame_size = fb_disp.frame_size;
+	int frame_size = kms->screen_buf_size;
 
-	bufoffset = video_ch[ch_id].x_offset * fb_disp.bpp / 8 +
-	    video_ch[ch_id].y_offset * fb_disp.bytesperline;
+	bytes_per_line = kms->bits_per_pixel * kms->width;
+	bufoffset = video_ch[ch_id].x_offset * kms->bits_per_pixel / 8 +
+	    video_ch[ch_id].y_offset * bytes_per_line;
 
 	out_h = video_ch[ch_id].out_height;
 	out_w = video_ch[ch_id].out_width;
 	stride = out_w * 4;
 
-	if (var->yoffset == var->yres) {
-		/* fb buffer offset 1 frame */
-		bufoffset += frame_size;
-		for (j = 0; j < out_h; j++)
-			memcpy(fb_disp.fb0 + bufoffset +
-			       j * fb_disp.bytesperline,
-			       video_ch[ch_id].buffers[buf_id].start +
-			       j * stride, stride);
-	} else {
-		/* fb buffer offset 2 frame  */
-		bufoffset += fb_disp.frame_size * 2;
-		for (j = 0; j < out_h; j++)
-			memcpy(fb_disp.fb0 + bufoffset +
-			       j * fb_disp.bytesperline,
-			       video_ch[ch_id].buffers[buf_id].start +
-			       j * stride, stride);
-	}
+	/* fb buffer offset 1 frame */
+	/*bufoffset += 0;*/
+	for (j = 0; j < out_h; j++)
+		memcpy(kms->fb_base + bufoffset +
+			   j * bytes_per_line,
+			   video_ch[ch_id].buffers[buf_id].start +
+			   j * stride, stride);
 	return 0;
 }
 
@@ -856,29 +1009,6 @@ void close_vdev_file(void)
 			close(video_ch[i].v4l_dev);
 }
 
-int fb_pan_display(void)
-{
-	struct fb_var_screeninfo *var = &fb_disp.var;
-	int fd_fb = fb_disp.fd_fb;
-
-	if (var->yoffset == var->yres) {
-		/* fb buffer offset 1 frame */
-		if (ioctl(fd_fb, FBIOPAN_DISPLAY, var) < 0) {
-			v4l2_err("FBIOPAN_DISPLAY1 failed\n");
-		}
-		var->yoffset += var->yres;
-		fb_disp.frame_num++;
-	} else {
-		/* fb buffer offset 2 frame  */
-		if (ioctl(fd_fb, FBIOPAN_DISPLAY, var) < 0) {
-			v4l2_err("FBIOPAN_DISPLAY2 failed\n");
-		}
-		var->yoffset -= var->yres;
-		fb_disp.frame_num++;
-	}
-	return 0;
-}
-
 int set_vdev_parm(int ch_id)
 {
 	struct v4l2_format fmt;
@@ -904,19 +1034,19 @@ int set_vdev_parm(int ch_id)
 int v4l_capture_test(void)
 {
 	struct timeval tv1, tv2;
+	struct timeval t1, t2;
 	int i;
 	int ret;
-	struct fb_var_screeninfo *var = &fb_disp.var;
 	static int first_time_enter = 0;
 
 loop:
-	v4l2_dbg(" ===== first_time_enter:%d ===== \n", first_time_enter);
 	if (first_time_enter++ > 0) {
+	v4l2_dbg(" ===== first_time_enter:%d ===== \n", first_time_enter);
 		for (i = 0; i < g_cam_max; i++) {
 			if (set_vdev_parm(i) < 0)
 				return -1;
 		}
-		first_time_enter = 1;
+		first_time_enter = 2;
 	}
 
 	if (mx8_capturing_prepare() < 0)
@@ -931,27 +1061,26 @@ loop:
 	gettimeofday(&tv1, NULL);
 	do {
 		/* DQBuf  */
-		for (i = 0; i < 8; i++)
+		for (i = 0; i < 8; i++) {
 			if (video_ch[i].on) {
 				ret = get_video_channel_buffer(i);
 				if (ret < 0)
 					return -1;
 				if (!g_saved_to_file) {
 					/* Copy video buffer to fb buffer */
-					ret = set_up_frame(i);
+					ret = set_up_frame_drm(i, &kms);
 					if (ret < 0)
 						return -1;
 				} else {
 					/* Performance test, skip write file operation */
-					if (!g_performance_test)
+					if (!g_performance_test) {
 						ret = save_to_file(i);
 						if (ret < 0)
 							return -1;
+					}
 				}
 			}
-
-		if (!g_saved_to_file)
-			fb_pan_display();
+		}
 
 		/* QBuf  */
 		for (i = 0; i < 8; i++)
@@ -972,32 +1101,23 @@ loop:
 		}
 	}
 
-	/* Make sure pan display offset is zero before capture is stopped */
-	if (!g_saved_to_file) {
-		if (var->yoffset) {
-			var->yoffset = 0;
-			if (ioctl(fb_disp.fd_fb, FBIOPAN_DISPLAY, var) < 0) {
-				v4l2_err("FBIOPAN_DISPLAY failed\n");
+	/* stop channels / stream off */
+	for (i = 0; i < 8; i++) {
+		if (video_ch[i].on) {
+			if (stop_capturing(i) < 0) {
+				v4l2_err("stop_capturing failed, device %d\n", i);
 				return -1;
 			}
 		}
 	}
 
-	/* stop channels / stream off */
 	for (i = 0; i < 8; i++) {
-		if (video_ch[i].on)
-			if (stop_capturing(i) < 0) {
-				v4l2_err("stop_capturing failed, device %d\n", i);
-				return -1;
-			}
-	}
-
-	for (i = 0; i < 8; i++) {
-		if (video_ch[i].on)
+		if (video_ch[i].on) {
 			if (free_buffer(i) < 0) {
 				v4l2_err("stop_capturing failed, device %d\n", i);
 				return -1;
 			}
+		}
 	}
 
 	if (g_loop > 0 && !quitflag) {
@@ -1020,7 +1140,6 @@ int start_streamon()
 				return -1;
 			}
 		}
-
 }
 
 
@@ -1064,10 +1183,9 @@ int main(int argc, char **argv)
 	}
 
 	if (!g_saved_to_file) {
-		/* get fb info */
-		ret = fb_display_setup();
+		ret = drm_setup(&kms);
 		if (ret < 0) {
-			v4l2_err("fb_display_setup failed\n");
+			v4l2_err("drm setup failed\n");
 			return -1;
 		}
 	} else {
@@ -1080,7 +1198,7 @@ int main(int argc, char **argv)
 
 	if (!g_saved_to_file) {
 		/* config video channel according FB info */
-		ret = config_video_channel();
+		ret = config_video_channel(&kms);
 		if (ret < 0) {
 			v4l2_err("config video failed\n");
 			return -1;
@@ -1103,19 +1221,21 @@ int main(int argc, char **argv)
 
 	v4l2_info("success!\n");
 
-	if (!g_saved_filename)
-		if (fb_disp.fd_fb > 0)
-			close(fb_disp.fd_fb);
-	else
+	if (!g_saved_to_file) {
+		if (kms.fd_fb > 0)
+			close(kms.fd_fb);
+	}
+	else {
 		close_save_file();
+	}
 	close_vdev_file();
 
 	return 0;
 
 FAIL0:
-	if (!g_saved_filename)
-		if (fb_disp.fd_fb > 0)
-			close(fb_disp.fd_fb);
+	if (!g_saved_to_file)
+		if (kms.fd_fb > 0)
+			close(kms.fd_fb);
 	else
 		close_save_file();
 	close_vdev_file();
