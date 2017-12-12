@@ -240,21 +240,24 @@ int init_video_channel(int ch_id)
 int drm_setup(struct drm_kms *kms)
 {
 	int fd_drm = -1;
-	const char dev_name[] = "/dev/dri/card1";
+	char dev_name[15];
 	void *fb_base[MAX_SIZE];
 	int fb_w[MAX_SIZE];
 	int fb_h[MAX_SIZE];
 	int ret;
+	int i = 0;
 
-	// step1: open dri device /dev/dri/card1
+loop:
+	sprintf(dev_name, "/dev/dri/card%d", i++);
+
+	/* step1: open dri device /dev/dri/card* */
 	fd_drm = open(dev_name, O_RDWR | O_CLOEXEC);
 	if (fd_drm < 0) {
 		v4l2_err("Open %s fail\n", dev_name);
 		return -1;
 	}
-	v4l2_dbg("Open %s success\n", dev_name);
 
-	// step2: to be master
+	/* step2: to be master */
 	ret = ioctl(fd_drm, DRM_IOCTL_SET_MASTER, 0);
 	if (ret < 0) {
 		v4l2_err("DRM_IOCTL_SET_MASTER fail\n");
@@ -270,9 +273,11 @@ int drm_setup(struct drm_kms *kms)
 	memset(&card_res, 0, sizeof(card_res));
 	ret = ioctl(fd_drm, DRM_IOCTL_MODE_GETRESOURCES, &card_res);
 	if (ret < 0) {
-		v4l2_err("DRM_IOCTL_MODE_GETRESOURCES fail\n");
-		goto err;
+		ret = ioctl(fd_drm, DRM_IOCTL_DROP_MASTER, 0);
+		close(fd_drm);
+		goto loop;
 	}
+	v4l2_dbg("Open %s success\n", dev_name);
 
 	if (!card_res.count_connectors) {
 		v4l2_dbg(" Erro: card resource connectors is zeros\n");
@@ -298,7 +303,7 @@ int drm_setup(struct drm_kms *kms)
 		card_res.count_encoders,
 		card_res.count_connectors);
 
-	// step4: iterate every connectors
+	 /* step4: iterate every connectors */
 	int index;
 	struct drm_mode_create_dumb create_dumb;
 	struct drm_mode_map_dumb map_dumb;
