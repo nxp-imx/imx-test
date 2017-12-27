@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
 	unsigned int protocol = SIM_PROTOCOL_T0;
 	sim_baud_t baud_data;
 	unsigned char rx_buffer[BUFFER_LEN] = {0};
-	char *soc_list[] = {"i.MX6UL", "i.MX7D", " "};
+	char *soc_list[] = {"i.MX6UL", "i.MX7D", "i.MX8QM", " "};
 
 	printf("\n---- Running < %s > test ----\n\n", argv[0]);
 
