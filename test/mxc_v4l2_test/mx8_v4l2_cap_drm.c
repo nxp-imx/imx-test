@@ -911,7 +911,7 @@ int set_up_frame_drm(int ch_id, struct drm_kms *kms)
 	int frame_size = kms->screen_buf_size;
 
 	bytes_per_line = kms->bits_per_pixel * kms->width;
-	bufoffset = video_ch[ch_id].x_offset * kms->bits_per_pixel / 8 +
+	bufoffset = video_ch[ch_id].x_offset * kms->bpp / 8 +
 	    video_ch[ch_id].y_offset * bytes_per_line;
 
 	out_h = video_ch[ch_id].out_height;
