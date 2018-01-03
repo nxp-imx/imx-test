@@ -508,6 +508,8 @@ static int mx8_qbuf()
 			}
 		}
 	}
+
+	return 0;
 }
 
 static int free_buffer(int ch_id)
@@ -930,8 +932,8 @@ int get_video_channel_buffer(int ch_id)
 
 	video_ch[ch_id].frame_num++;
 	video_ch[ch_id].cur_buf_id = buf.index;
-	return 0;
 
+	return 0;
 }
 
 int put_video_channel_buffer(int ch_id)
@@ -1145,8 +1147,9 @@ int start_streamon()
 				return -1;
 			}
 		}
-}
 
+	return 0;
+}
 
 int main(int argc, char **argv)
 {
