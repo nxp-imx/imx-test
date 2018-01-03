@@ -237,6 +237,20 @@ int init_video_channel(int ch_id)
 	return 0;
 }
 
+void dump_drm_clients(const int dev_num)
+{
+	char cmd[50];
+
+	sprintf(cmd, "cat /sys/kernel/debug/dri/%d/clients", dev_num);
+
+	printf("========================================================\n");
+	system(cmd);
+	printf("========================================================\n");
+	printf("Please ensure there is no other master client\n");
+	printf("========================================================\n");
+}
+
+
 int drm_setup(struct drm_kms *kms)
 {
 	int fd_drm = -1;
@@ -261,6 +275,7 @@ loop:
 	ret = ioctl(fd_drm, DRM_IOCTL_SET_MASTER, 0);
 	if (ret < 0) {
 		v4l2_err("DRM_IOCTL_SET_MASTER fail\n");
+		dump_drm_clients(i - 1);
 		goto err;
 	}
 
