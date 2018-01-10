@@ -914,8 +914,8 @@ int set_up_frame_drm(int ch_id, struct drm_kms *kms)
 	bufoffset = video_ch[ch_id].x_offset * kms->bpp / 8 +
 	    video_ch[ch_id].y_offset * bytes_per_line;
 
-	out_h = video_ch[ch_id].out_height;
-	out_w = video_ch[ch_id].out_width;
+	out_h = video_ch[ch_id].out_height - 1;
+	out_w = video_ch[ch_id].out_width - 1;
 	stride = out_w * 4;
 
 	/* fb buffer offset 1 frame */
