@@ -229,6 +229,8 @@ int init_video_channel(int ch_id)
 	video_ch[ch_id].out_height = g_out_height;
 	video_ch[ch_id].cap_fmt = g_cap_fmt;
 	video_ch[ch_id].mem_type = g_mem_type;
+	video_ch[ch_id].x_offset = 0;
+	video_ch[ch_id].y_offset = 0;
 
 	strcpy(video_ch[ch_id].v4l_dev_name, g_v4l_device[ch_id]);
 	strcpy(video_ch[ch_id].save_file_name, g_saved_filename[ch_id]);
@@ -544,12 +546,12 @@ static int free_buffer(int ch_id)
 	req.count = 0;
 	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	req.memory = mem_type;
-#if 1
+
 	if (ioctl(fd_v4l, VIDIOC_REQBUFS, &req) < 0) {
 		v4l2_err("free buffer failed (chan_ID:%d)\n", ch_id);
 		return -1;
 	}
-#endif
+
 	return 0;
 }
 
@@ -916,7 +918,7 @@ int set_up_frame_drm(int ch_id, struct drm_kms *kms)
 
 	out_h = video_ch[ch_id].out_height - 1;
 	out_w = video_ch[ch_id].out_width - 1;
-	stride = out_w * 4;
+	stride = out_w * kms->bpp >> 3;
 
 	/* fb buffer offset 1 frame */
 	/*bufoffset += 0;*/
@@ -1245,8 +1247,10 @@ int main(int argc, char **argv)
 	v4l2_info("success!\n");
 
 	if (!g_saved_to_file) {
-		if (kms.fd_fb > 0)
+		if (kms.fd_fb > 0) {
+			munmap(kms.fb_base, kms.screen_buf_size);
 			close(kms.fd_fb);
+		}
 	}
 	else {
 		close_save_file();
