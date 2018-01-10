@@ -1016,7 +1016,7 @@ int close_save_file(void)
 	int i;
 
 	for (i = 0; i < 8; i++)
-		if (video_ch[i].on && !video_ch[i].pfile)
+		if (video_ch[i].on && video_ch[i].pfile)
 			fclose(video_ch[i].pfile);
 
 	return 0;
