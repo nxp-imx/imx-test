@@ -5,7 +5,9 @@ source /unit_tests/test-utils.sh
 print_name
 
 if [[ $(platform) != i.MX6Q* ]] && [[ $(platform) != i.MX6D* ]] \
-&& [[ $(platform) != i.MX6SX ]] && [[ $(platform) != i.MX6SL ]]; then
+&& [[ $(platform) != i.MX6SX ]] && [[ $(platform) != i.MX6SL ]] \
+&& [[ $(platform) != i.MX8QM ]] && [[ $(platform) != i.MX8MQ ]] \
+&& [[ $(platform) != i.MX8QXP ]]; then
 	echo gpu.sh not supported on current soc
 	exit $STATUS
 fi
@@ -21,11 +23,14 @@ pushd .
 #
 #run tests
 #
-cd /opt/viv_samples/vdk/ && ./tutorial3 -f 100
-cd /opt/viv_samples/vdk/ && ./tutorial4_es20 -f 100
-cd /opt/viv_samples/tiger/ &&./tiger
+cd /opt/viv_samples/vdk/ && ./tutorial3 -f 100 && cd - &>/dev/null
+cd /opt/viv_samples/vdk/ && ./tutorial4_es20 -f 100 && cd - &>/dev/null
+cd /opt/viv_samples/tiger/ &&./tiger && cd - &>/dev/null
 echo press ESC to escape...
-cd /opt/viv_samples/hal/ && ./tvui
+if [ -d /opt/viv_samples/hal ]; then
+	cd /opt/viv_samples/hal/ && ./tvui
+	cd - &>/dev/null
+fi
 #
 #remove gpu modules
 #
