@@ -193,6 +193,10 @@ int process_cmdline(int argc, char **argv)
 			g_performance_test = 1;
 		} else if (strcmp(argv[i], "-log") == 0) {
 			log_level = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-m") == 0) {
+			g_capture_mode = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-fr") == 0) {
+			g_camera_framerate = atoi(argv[++i]);
 		} else {
 			print_help();
 			return -1;
@@ -461,6 +465,8 @@ loop:
 	kms->screen_buf_size = fb_w[0] * fb_h[0] * kms->bits_per_pixel;
 	kms->fd_fb = fd_drm;
 
+	memset(kms->fb_base, 0, kms->screen_buf_size);
+
 	v4l2_dbg("kms info: fb_base = 0x%x\n"
 		"w/h=(%d,%d)\n"
 		"bits_per_pixel=%d\n"
@@ -604,7 +610,7 @@ int prepare_capturing(int ch_id)
 				 PROT_READ | PROT_WRITE, MAP_SHARED,
 				 fd_v4l, video_ch[ch_id].buffers[i].offset);
 
-			memset(video_ch[ch_id].buffers[i].start, 0xFF,
+			memset(video_ch[ch_id].buffers[i].start, 0x55,
 			       video_ch[ch_id].buffers[i].length);
 			v4l2_dbg
 				("buffer[%d] startAddr=0x%x, offset=0x%x, buf_size=%d\n",
@@ -726,6 +732,7 @@ int v4l_capture_setup(int ch_id)
 	struct v4l2_streamparm parm;
 	struct v4l2_fmtdesc fmtdesc;
 	struct v4l2_capability cap;
+	struct v4l2_frmsizeenum frmsize;
 	int fd_v4l;
 	int i;
 
@@ -761,6 +768,28 @@ int v4l_capture_setup(int ch_id)
 		v4l2_dbg("index=%d\n", fmtdesc.index);
 		print_pixelformat("pixelformat (output by camera)",
 				  fmtdesc.pixelformat);
+	}
+
+	memset(&parm, 0, sizeof(parm));
+	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = g_camera_framerate;
+	parm.parm.capture.capturemode = g_capture_mode;
+	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0) {
+		v4l2_err("VIDIOC_S_PARM failed, chan_ID:%d\n", ch_id);
+		goto fail;
+	}
+
+	frmsize.pixel_format = g_cap_fmt;
+	frmsize.index = g_capture_mode;
+	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &frmsize) < 0) {
+		printf("get capture mode %d framesize failed\n", g_capture_mode);
+		goto fail;
+	}
+
+	if (g_cam_num == 1) {
+		video_ch[ch_id].out_width = frmsize.discrete.width;
+		video_ch[ch_id].out_height = frmsize.discrete.height;
 	}
 
 	memset(&fmt, 0, sizeof(fmt));
