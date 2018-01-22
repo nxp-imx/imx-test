@@ -1,0 +1,9 @@
+A simple test bed for ALSA DSD integration.
+
+Released under the GPLv2.
+
+Usage: mxc_alsa_dsd_player <device> <DSF or DFF file>
+<device>          : the audio device like hw:0,0
+<DSF or DFF file> : the DSD file to be played
+
+For example: mxc_alsa_dsd_player hw:4 test.dsf

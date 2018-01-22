@@ -1,0 +1,212 @@
+/*
+ * Copyright (c) 2013 Daniel Mack
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ */
+
+/*
+ * See README
+ */
+#include "bit_reverse.h"
+#include "read_utils.h"
+
+#define ALSA_FORMAT	SND_PCM_FORMAT_DSD_U32_LE
+#define FRAMECOUNT	(1024 * 128)
+
+static int open_stream(snd_pcm_t **handle, const char *name, int dir,
+		       unsigned int rate, unsigned int channels)
+{
+	snd_pcm_hw_params_t *hw_params;
+	snd_pcm_sw_params_t *sw_params;
+	snd_pcm_uframes_t period_size = 512;
+/*	snd_pcm_uframes_t buffer_size = 4096 * 4; */
+	const char *dirname = (dir == SND_PCM_STREAM_PLAYBACK) ? "PLAYBACK" : "CAPTURE";
+	int err;
+
+	if ((err = snd_pcm_open(handle, name, dir, 0)) < 0) {
+		fprintf(stderr, "%s (%s): cannot open audio device (%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
+		fprintf(stderr, "%s (%s): cannot allocate hardware parameter structure(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params_any(*handle, hw_params)) < 0) {
+		fprintf(stderr, "%s (%s): cannot initialize hardware parameter structure(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params_set_access(*handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set access type(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params_set_format(*handle, hw_params, ALSA_FORMAT)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set sample format(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params_set_rate_near(*handle, hw_params, &rate, NULL)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set sample rate(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params_set_period_size_near(*handle, hw_params, &period_size, 0)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set period time(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+/*
+	if ((err = snd_pcm_hw_params_set_buffer_size_near(*handle, hw_params, &buffer_size)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set period time(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+*/
+	if ((err = snd_pcm_hw_params_set_channels(*handle, hw_params, channels)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set channel count(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if ((err = snd_pcm_hw_params(*handle, hw_params)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set parameters(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	snd_pcm_hw_params_free(hw_params);
+
+	if ((err = snd_pcm_sw_params_malloc(&sw_params)) < 0) {
+		fprintf(stderr, "%s (%s): cannot allocate software parameters structure(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+	if ((err = snd_pcm_sw_params_current(*handle, sw_params)) < 0) {
+		fprintf(stderr, "%s (%s): cannot initialize software parameters structure(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+	if ((err = snd_pcm_sw_params_set_avail_min(*handle, sw_params, FRAMECOUNT / 2)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set minimum available count(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+	if ((err = snd_pcm_sw_params_set_start_threshold(*handle, sw_params, 0U)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set start mode(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+	if ((err = snd_pcm_sw_params(*handle, sw_params)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set software parameters(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	snd_output_t *log;
+
+	snd_output_stdio_attach(&log, stderr, 0);
+
+	snd_pcm_dump(*handle, log);
+
+	snd_output_close(log);
+	return 0;
+}
+
+int main(int argc, char *argv[])
+{
+	int fd, err, block_size;
+	unsigned int len;
+	snd_pcm_t *playback_handle;
+	char *name;
+	struct dsd_params params;
+	void (*interleave)(uint8_t*, const uint8_t*, unsigned, unsigned) = 0;
+
+	if (argc < 3) {
+		fprintf(stderr, "Usage: %s <device> <filename>\n", argv[0]);
+		return EXIT_FAILURE;
+	}
+
+	name = argv[2];
+	fd = open(name, O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "Unable to open file (%m)\n");
+		return fd;
+	}
+
+	printf("File: [%s]\n", name);
+	printf("===============================\n");
+
+	len = strlen(name);
+	if (len > 4) {
+		if (strcmp(name + len - 4, ".dff") == 0) {
+			err = read_dff_file(fd, &params);
+			if (err < 0)
+				return err;
+			interleave = &interleaveDffBlock;
+		} else if (strcmp(name + len - 4, ".dsf") == 0) {
+			err = read_dsf_file(fd, &params);
+			if (err < 0)
+				return err;
+			interleave = &interleaveDsfBlock;
+		} else {
+			fprintf(stderr, "%s format not supported !\n", name);
+			return EXIT_FAILURE;
+		}
+	}
+
+	if ((err = open_stream(&playback_handle, argv[1],
+				SND_PCM_STREAM_PLAYBACK,
+				params.sampling_freq / snd_pcm_format_width(ALSA_FORMAT),
+				params.channel_num) < 0))
+		return err;
+
+	if ((err = snd_pcm_prepare(playback_handle)) < 0) {
+		fprintf(stderr, "cannot prepare audio interface for use(%s)\n",
+			 snd_strerror(err));
+		return err;
+	}
+
+	block_size = params.channel_num * DSF_BLOCK_SIZE;
+
+	while (1) {
+		int r;
+		uint8_t buffer[block_size];
+		uint8_t interleaved_buffer[block_size];
+
+		r = read_full(fd, buffer, block_size);
+		if (r <= 0) {
+			fprintf(stderr, "read failed(%s)\n", strerror(errno));
+			break;
+		}
+
+		if (params.bits_per_sample == 8)
+			bit_reverse_buffer(buffer, buffer + block_size);
+
+		interleave(interleaved_buffer, buffer, params.channel_num, ALSA_FORMAT);
+
+		snd_pcm_writei(playback_handle, interleaved_buffer, block_size / (params.channel_num * snd_pcm_format_width(ALSA_FORMAT) / 8));
+	}
+
+	snd_pcm_close(playback_handle);
+	close(fd);
+
+	return 0;
+}
