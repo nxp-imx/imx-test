@@ -212,7 +212,7 @@ int read_dff_file(int fd, struct dsd_params *params)
 		return err;
 
 	params->sampling_freq   = form.prop.fs.sample_rate;
-	params->bits_per_sample = 1;
+	params->bits_per_sample = 8;
 	params->channel_num     = form.prop.chnl.num_channels;
 	params->dsd_chunk_size	= form.dsd_data.chunk_size;
 
