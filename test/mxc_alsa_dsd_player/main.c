@@ -18,6 +18,7 @@
  */
 #include "bit_reverse.h"
 #include "read_utils.h"
+#include <sys/time.h>
 
 #define ALSA_FORMAT	SND_PCM_FORMAT_DSD_U32_LE
 #define FRAMECOUNT	(1024 * 128)
@@ -130,9 +131,82 @@ static int open_stream(snd_pcm_t **handle, const char *name, int dir,
 	return 0;
 }
 
+/* I/O error handler */
+static void xrun(snd_pcm_t *handle)
+{
+	snd_pcm_status_t *status;
+	int res;
+
+	snd_pcm_status_alloca(&status);
+	if ((res = snd_pcm_status(handle, status)) < 0) {
+		fprintf(stderr, "status error: %s\n", snd_strerror(res));
+		exit(EXIT_FAILURE);
+	}
+
+	if (snd_pcm_status_get_state(status) == SND_PCM_STATE_XRUN) {
+		if ((res = snd_pcm_prepare(handle))<0) {
+			fprintf(stderr, "xrun: prepare error: %s", snd_strerror(res));
+			exit(EXIT_FAILURE);
+		}
+		return; /* ok, data should be accepted again */
+	}
+
+	fprintf(stderr, "read/write error, state = %s",
+		snd_pcm_state_name(snd_pcm_status_get_state(status)));
+	exit(EXIT_FAILURE);
+}
+
+
+/* I/O suspend handler */
+static void suspend(snd_pcm_t *handle)
+{
+	int res;
+
+	fprintf(stderr, "Suspended. Trying resume. "); fflush(stderr);
+
+	while ((res = snd_pcm_resume(handle)) == -EAGAIN)
+                sleep(1); /* wait until suspend flag is released */
+
+	if (res < 0) {
+		fprintf(stderr, "Failed. Restarting stream. "); fflush(stderr);
+		res = snd_pcm_prepare(handle);
+		if (res < 0) {
+			fprintf(stderr, "suspend: prepare error: %s", snd_strerror(res));
+			exit(EXIT_FAILURE);
+		}
+	}
+	fprintf(stderr, "Done.\n"); fflush(stderr);
+}
+
+static ssize_t pcm_write(snd_pcm_t *handle, uint8_t *data, size_t count, int bytes_per_frame)
+{
+	ssize_t r;
+	ssize_t result = 0;
+
+	while (count > 0) {
+		r = snd_pcm_writei(handle, data, count);
+		if (r == -EAGAIN || (r >= 0 && (size_t)r < count)) {
+			snd_pcm_wait(handle, 100);
+		} else if (r == -EPIPE) {
+			xrun(handle);
+		} else if (r == -ESTRPIPE) {
+			suspend(handle);
+		} else if (r < 0) {
+			fprintf(stderr, "write error: %s\n", snd_strerror(r));
+			exit(EXIT_FAILURE);
+		}
+		if (r > 0) {
+			result += r;
+			count -= r;
+			data += r * bytes_per_frame;
+		}
+	}
+	return result;
+}
+
 int main(int argc, char *argv[])
 {
-	int fd, err, block_size;
+	int fd, err, block_size, bytes_per_frame, frames;
 	unsigned int len;
 	snd_pcm_t *playback_handle;
 	char *name;
@@ -185,6 +259,8 @@ int main(int argc, char *argv[])
 	}
 
 	block_size = params.channel_num * DSF_BLOCK_SIZE;
+	bytes_per_frame = params.channel_num * snd_pcm_format_width(ALSA_FORMAT) / 8;
+	frames = block_size / bytes_per_frame;
 
 	while (1) {
 		int r;
@@ -202,7 +278,8 @@ int main(int argc, char *argv[])
 
 		interleave(interleaved_buffer, buffer, params.channel_num, ALSA_FORMAT);
 
-		snd_pcm_writei(playback_handle, interleaved_buffer, block_size / (params.channel_num * snd_pcm_format_width(ALSA_FORMAT) / 8));
+		r = pcm_write(playback_handle, interleaved_buffer,
+			frames, bytes_per_frame);
 	}
 
 	snd_pcm_close(playback_handle);
