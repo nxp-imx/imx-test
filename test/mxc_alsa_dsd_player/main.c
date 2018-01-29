@@ -212,6 +212,8 @@ int main(int argc, char *argv[])
 	char *name;
 	struct dsd_params params;
 	void (*interleave)(uint8_t*, const uint8_t*, unsigned, unsigned) = 0;
+	uint64_t readsize=0;
+	uint64_t leftsize=0;
 
 	if (argc < 3) {
 		fprintf(stderr, "Usage: %s <device> <filename>\n", argv[0]);
@@ -262,24 +264,38 @@ int main(int argc, char *argv[])
 	bytes_per_frame = params.channel_num * snd_pcm_format_width(ALSA_FORMAT) / 8;
 	frames = block_size / bytes_per_frame;
 
-	while (1) {
+	leftsize = params.dsd_chunk_size;
+
+	while (leftsize > 0) {
 		int r;
 		uint8_t buffer[block_size];
 		uint8_t interleaved_buffer[block_size];
 
-		r = read_full(fd, buffer, block_size);
+		if (leftsize >= block_size)
+			readsize = block_size;
+		else
+			readsize = leftsize;
+
+		r = read_full(fd, buffer, readsize);
 		if (r <= 0) {
 			fprintf(stderr, "read failed(%s)\n", strerror(errno));
 			break;
 		}
+
+		if (r < block_size) {
+			memset(buffer + r, 0x00, block_size - r);
+		}
+
+		leftsize = leftsize - readsize;
 
 		if (params.bits_per_sample == 8)
 			bit_reverse_buffer(buffer, buffer + block_size);
 
 		interleave(interleaved_buffer, buffer, params.channel_num, ALSA_FORMAT);
 
-		r = pcm_write(playback_handle, interleaved_buffer,
+		pcm_write(playback_handle, interleaved_buffer,
 			frames, bytes_per_frame);
+
 	}
 
 	snd_pcm_close(playback_handle);
