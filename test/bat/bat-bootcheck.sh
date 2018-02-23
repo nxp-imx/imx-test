@@ -18,4 +18,16 @@ if dmesg|grep -B5 -A20 "Internal error: Oops:"; then
     exitcode=$BAT_EXITCODE_FAIL
 fi
 
+# This means bad DTB:
+# OF: /soc/aips-bus@02000000/vpu_fsl@02040000: could not get #power-domain-cells for /soc/aips-bus@02000000/gpc@020dc000
+if dmesg|grep -U2 "OF: .* could not get .* for"; then
+    echo "Found OF iteration error" >&2
+    exitcode=$BAT_EXITCODE_FAIL
+fi
+
+if dmesg|grep -U2 "genpd_xlate_onecell: invalid domain index"; then
+    echo "Found power domain xlate failure" >&2
+    exitcode=$BAT_EXITCODE_FAIL
+fi
+
 exit $fail
