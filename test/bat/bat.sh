@@ -18,7 +18,7 @@ EOM
 }
 
 # Some tests can bring down the entire system on failure, run them at the end.
-BAT_TESTS_LATE=(bat-busfreq.sh bat-suspend.sh)
+BAT_TESTS_LATE=(bat-busfreq.sh bat-suspend.sh bat-cpuidle-sleeptime.sh)
 
 cd $(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 . bat_utils.sh
