@@ -27,10 +27,6 @@ cd /opt/viv_samples/vdk/ && ./tutorial3 -f 100 && cd - &>/dev/null
 cd /opt/viv_samples/vdk/ && ./tutorial4_es20 -f 100 && cd - &>/dev/null
 cd /opt/viv_samples/tiger/ &&./tiger && cd - &>/dev/null
 echo press ESC to escape...
-if [ -d /opt/viv_samples/hal ]; then
-	cd /opt/viv_samples/hal/ && ./tvui
-	cd - &>/dev/null
-fi
 #
 #remove gpu modules
 #
