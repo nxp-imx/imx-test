@@ -60,14 +60,25 @@ do {                                      \
 #define MAX_V4L2_DEVICE_NR     64
 #define MAX_SIZE	3
 
+#define NUM_PLANES 3
+
 sigset_t sigset;
 int quitflag;
 
 int start_streamon();
+
+struct plane_buffer {
+	unsigned char *start;
+	size_t offset;
+	unsigned int length;
+	unsigned int plane_size;
+};
+
 struct testbuffer {
 	unsigned char *start;
 	size_t offset;
 	unsigned int length;
+	struct plane_buffer planes[NUM_PLANES];
 };
 
 struct video_channel {
@@ -121,6 +132,8 @@ int g_loop = 0;
 int g_mem_type = V4L2_MEMORY_MMAP;
 int g_saved_to_file = 0;
 int g_performance_test = 0;
+int g_num_planes = 1;
+char g_fmt_name[10] = {"rgb32"};
 
 char g_v4l_device[8][100] = {
 	"/dev/video0",
@@ -134,14 +147,19 @@ char g_v4l_device[8][100] = {
 };
 
 char g_saved_filename[8][100] = {
-	"0.rgb32",
-	"1.rgb32",
-	"2.rgb32",
-	"3.rgb32",
-	"4.rgb32",
-	"5.rgb32",
-	"6.rgb32",
-	"7.rgb32",
+	"0.",
+	"1.",
+	"2.",
+	"3.",
+	"4.",
+	"5.",
+	"6.",
+	"7.",
+};
+
+static __u32 fmt_array[] = {
+	V4L2_PIX_FMT_RGB32,
+	V4L2_PIX_FMT_NV12,
 };
 
 void show_device_cap_list(void);
@@ -152,6 +170,45 @@ static void print_pixelformat(char *prefix, int val)
 	v4l2_dbg("%s: %c%c%c%c\n", prefix ? prefix : "pixelformat",
 	       val & 0xff,
 	       (val >> 8) & 0xff, (val >> 16) & 0xff, (val >> 24) & 0xff);
+}
+
+static int get_num_planes_by_fmt(__u32 fmt)
+{
+	int planes;
+
+	switch (fmt) {
+	case V4L2_PIX_FMT_RGB565:
+	case V4L2_PIX_FMT_RGB24:
+	case V4L2_PIX_FMT_RGB32:
+	case V4L2_PIX_FMT_BGR24:
+	case V4L2_PIX_FMT_ARGB32:
+	case V4L2_PIX_FMT_YUYV:
+	case V4L2_PIX_FMT_YUV32:
+		planes = 1;
+		break;
+	case V4L2_PIX_FMT_NV12:
+		planes = 2;
+		break;
+	default:
+		planes = 0;
+		printf("Not found support format, planes=%d\n", planes);
+	}
+
+	return planes;
+}
+
+static void get_fmt_name(__u32 fmt)
+{
+	switch (fmt) {
+	case V4L2_PIX_FMT_RGB32:
+		strcpy(g_fmt_name, "rgb32");
+		break;
+	case V4L2_PIX_FMT_NV12:
+		strcpy(g_fmt_name, "nv12");
+		break;
+	default:
+		strcpy(g_fmt_name, "null");
+	}
 }
 
 void print_help(void)
@@ -197,6 +254,8 @@ int process_cmdline(int argc, char **argv)
 			g_capture_mode = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-fr") == 0) {
 			g_camera_framerate = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-fmt") == 0) {
+			g_cap_fmt = fmt_array[atoi(argv[++i])];
 		} else {
 			print_help();
 			return -1;
@@ -503,35 +562,46 @@ static int mx8_qbuf()
 	unsigned int j;
 	struct v4l2_buffer buf;
 	struct v4l2_requestbuffers req;
-	struct v4l2_plane planes = { 0 };
+	struct v4l2_plane *planes = NULL;
+
+	planes = calloc(g_num_planes, sizeof(*planes));
+	if (!planes) {
+		v4l2_err("%s, alloc plane mem fail\n", __func__);
+		return -1;
+	}
+
 	for (j = 0; j < 8; j++) {
 		if (video_ch[j].on) {
 			int fd_v4l = video_ch[j].v4l_dev;
 			int mem_type = video_ch[j].mem_type;
 			for (i = 0; i < TEST_BUFFER_NUM; i++) {
 				memset(&buf, 0, sizeof(buf));
-				memset(&planes, 0, sizeof(planes));
 				buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 				buf.memory = mem_type;
-				buf.m.planes = &planes;
+				buf.m.planes = planes;
 				buf.index = i;
-				buf.m.planes->length = video_ch[j].buffers[i].length;
-				buf.length = 1;
-				if (mem_type == V4L2_MEMORY_USERPTR)
-					buf.m.planes->m.userptr =
-						(unsigned long)video_ch[j].buffers[i].start;
-				else
-					buf.m.planes->m.mem_offset =
-						video_ch[j].buffers[i].offset;
+				buf.length = g_num_planes;
+				for (int k = 0; k < g_num_planes; k++) {
+					buf.m.planes[k].length = video_ch[j].buffers[i].planes[k].length;
+
+					if (mem_type == V4L2_MEMORY_USERPTR)
+						buf.m.planes->m.userptr =
+							(unsigned long)video_ch[j].buffers[i].start;
+					else
+						buf.m.planes[k].m.mem_offset =
+							video_ch[j].buffers[i].planes[j].offset;
+				}
 
 				if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
 					v4l2_err("VIDIOC_QBUF error\n");
+					free(planes);
 					return -1;
 				}
 			}
 		}
 	}
 
+	free(planes);
 	return 0;
 }
 
@@ -544,8 +614,10 @@ static int free_buffer(int ch_id)
 	int i;
 
 	for (i = 0; i < TEST_BUFFER_NUM; i++) {
-		munmap(video_ch[ch_id].buffers[i].start,
-				video_ch[ch_id].buffers[i].length);
+		for (int k = 0; k < g_num_planes; k++) {
+			munmap(video_ch[ch_id].buffers[i].planes[k].start,
+					video_ch[ch_id].buffers[i].planes[k].length);
+		}
 	}
 
 	memset(&req, 0, sizeof(req));
@@ -566,9 +638,15 @@ int prepare_capturing(int ch_id)
 	unsigned int i;
 	struct v4l2_buffer buf;
 	struct v4l2_requestbuffers req;
-	struct v4l2_plane planes = { 0 };
+	struct v4l2_plane *planes = NULL;
 	int fd_v4l = video_ch[ch_id].v4l_dev;
 	int mem_type = video_ch[ch_id].mem_type;
+
+	planes = calloc(g_num_planes, sizeof(*planes));
+	if (!planes) {
+		v4l2_err("%s, alloc plane mem fail\n", __func__);
+		return -1;
+	}
 
 	memset(&req, 0, sizeof(req));
 	req.count = TEST_BUFFER_NUM;
@@ -577,50 +655,54 @@ int prepare_capturing(int ch_id)
 
 	if (ioctl(fd_v4l, VIDIOC_REQBUFS, &req) < 0) {
 		v4l2_err("VIDIOC_REQBUFS failed\n");
-		return -1;
+		goto err;
 	}
 
 	if (req.count < TEST_BUFFER_NUM) {
 		v4l2_err("Can't alloc 3 buffers\n");
-		return -1;
+		goto err;
 	}
 
 	if (mem_type == V4L2_MEMORY_MMAP) {
 		for (i = 0; i < TEST_BUFFER_NUM; i++) {
 			memset(&buf, 0, sizeof(buf));
-			memset(&planes, 0, sizeof(planes));
+
 			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 			buf.memory = mem_type;
-			buf.m.planes = &planes;
-			buf.length = 1;	/* plane num */
+			buf.m.planes = planes;
+			buf.length = g_num_planes;	/* plane num */
 			buf.index = i;
 
 			if (ioctl(fd_v4l, VIDIOC_QUERYBUF, &buf) < 0) {
 				v4l2_err("VIDIOC_QUERYBUF error\n");
-				return -1;
+				goto err;
 			}
 
-			video_ch[ch_id].buffers[i].length =
-			    buf.m.planes->length;
-			video_ch[ch_id].buffers[i].offset =
-			    (size_t) buf.m.planes->m.mem_offset;
-			video_ch[ch_id].buffers[i].start =
-			    mmap(NULL,
-				 video_ch[ch_id].buffers[i].length,
-				 PROT_READ | PROT_WRITE, MAP_SHARED,
-				 fd_v4l, video_ch[ch_id].buffers[i].offset);
+			for (int j = 0; j < g_num_planes; j++) {
+				video_ch[ch_id].buffers[i].planes[j].length = buf.m.planes[j].length;
+				video_ch[ch_id].buffers[i].planes[j].offset = (size_t)buf.m.planes[j].m.mem_offset;
+				video_ch[ch_id].buffers[i].planes[j].start =
+				mmap(NULL,
+					 video_ch[ch_id].buffers[i].planes[j].length,
+					 PROT_READ | PROT_WRITE, MAP_SHARED,
+					 fd_v4l, video_ch[ch_id].buffers[i].planes[j].offset);
 
-			memset(video_ch[ch_id].buffers[i].start, 0x55,
-			       video_ch[ch_id].buffers[i].length);
-			v4l2_dbg
-				("buffer[%d] startAddr=0x%x, offset=0x%x, buf_size=%d\n",
-				 i,
-				 (unsigned int *)video_ch[ch_id].buffers[i].start,
-				 video_ch[ch_id].buffers[i].offset,
-				 video_ch[ch_id].buffers[i].length);
+				v4l2_dbg
+					("buffer[%d]->planes[%d] startAddr=0x%x, offset=0x%x, buf_size=%d\n",
+					 i, j,
+					 (unsigned int *)video_ch[ch_id].buffers[i].planes[j].start,
+					 video_ch[ch_id].buffers[i].planes[j].offset,
+					 video_ch[ch_id].buffers[i].planes[j].length);
+			}
 		}
 	}
+
+	free(planes);
+
 	return 0;
+err:
+	free(planes);
+	return -1;
 }
 
 int start_capturing(int ch_id)
@@ -797,7 +879,7 @@ int v4l_capture_setup(int ch_id)
 	fmt.fmt.pix_mp.pixelformat = video_ch[ch_id].cap_fmt;
 	fmt.fmt.pix_mp.width = video_ch[ch_id].out_width;
 	fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
-	fmt.fmt.pix_mp.num_planes = 1;	/* RGB */
+	fmt.fmt.pix_mp.num_planes = g_num_planes;	/* RGB */
 	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
 		v4l2_err("set format failed, chan_ID:%d\n", ch_id);
 		goto fail;
@@ -820,12 +902,18 @@ int v4l_capture_setup(int ch_id)
 		parm.parm.capture.timeperframe.denominator = g_camera_framerate;
 	}
 
-	v4l2_dbg("\t WxH@fps = %dx%d@%d", fmt.fmt.pix_mp.width,
+	v4l2_dbg("\t WxH@fps = %dx%d@%d\n", fmt.fmt.pix_mp.width,
 		   fmt.fmt.pix_mp.height,
 		   parm.parm.capture.timeperframe.denominator);
-	v4l2_dbg("\t Image size = %d\n", fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
 
-	video_ch[ch_id].frame_size = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
+	for (int k = 0; k < TEST_BUFFER_NUM; k++) {
+		for (int i = 0; i < g_num_planes; i++) {
+			video_ch[ch_id].buffers[k].planes[i].plane_size =
+				fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
+			v4l2_dbg("\t buffer[%d]->plane[%d]->Image size = %d\n",
+						k, i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
+		}
+	}
 
 	video_ch[ch_id].v4l_dev = fd_v4l;
 	video_ch[ch_id].on = 1;
@@ -954,7 +1042,7 @@ int set_up_frame_drm(int ch_id, struct drm_kms *kms)
 	for (j = 0; j < out_h; j++)
 		memcpy(kms->fb_base + bufoffset +
 			   j * bytes_per_line,
-			   video_ch[ch_id].buffers[buf_id].start +
+			   video_ch[ch_id].buffers[buf_id].planes[0].start +
 			   j * stride, stride);
 	return 0;
 }
@@ -963,21 +1051,29 @@ int get_video_channel_buffer(int ch_id)
 {
 	int fd_v4l = video_ch[ch_id].v4l_dev;
 	struct v4l2_buffer buf;
-	struct v4l2_plane planes = { 0 };
+	struct v4l2_plane *planes = NULL;
+
+	planes = calloc(g_num_planes, sizeof(*planes));
+	if (!planes) {
+		v4l2_err("%s, alloc plane mem fail\n", __func__);
+		return -1;
+	}
 
 	memset(&buf, 0, sizeof(buf));
-	memset(&planes, 0, sizeof(planes));
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	buf.memory = video_ch[ch_id].mem_type;
-	buf.m.planes = &planes;
-	buf.length = 1;
+	buf.m.planes = planes;
+	buf.length = g_num_planes;
 	if (ioctl(fd_v4l, VIDIOC_DQBUF, &buf) < 0) {
 		v4l2_err("VIDIOC_DQBUF failed.\n");
+		free(planes);
 		return -1;
 	}
 
 	video_ch[ch_id].frame_num++;
 	video_ch[ch_id].cur_buf_id = buf.index;
+
+	free(planes);
 
 	return 0;
 }
@@ -986,23 +1082,33 @@ int put_video_channel_buffer(int ch_id)
 {
 	int fd_v4l = video_ch[ch_id].v4l_dev;
 	struct v4l2_buffer buf;
-	struct v4l2_plane planes = { 0 };
-
+	struct v4l2_plane *planes = NULL;
 	int buf_id = video_ch[ch_id].cur_buf_id;
 
+	planes = calloc(g_num_planes, sizeof(*planes));
+	if (!planes) {
+		v4l2_err("%s, alloc plane mem fail\n", __func__);
+		return -1;
+	}
+
 	memset(&buf, 0, sizeof(buf));
-	memset(&planes, 0, sizeof(planes));
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	buf.memory = g_mem_type;
-	buf.m.planes = &planes;
+	buf.m.planes = planes;
 	buf.index = buf_id;
-	buf.m.planes->length = video_ch[ch_id].buffers[buf_id].length;
-	buf.length = 1;
+
+	buf.length = g_num_planes;
+	for (int k = 0; k < buf.length; k++) {
+		buf.m.planes[k].length =
+			video_ch[ch_id].buffers[buf_id].planes[k].length;
+	}
 
 	if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
 		v4l2_err("VIDIOC_QBUF failed, video=%d\n", ch_id);
+		free(planes);
 		return -1;
 	}
+	free(planes);
 	return 0;
 }
 
@@ -1026,17 +1132,22 @@ int save_to_file(int ch_id)
 {
 	size_t wsize;
 	int buf_id = video_ch[ch_id].cur_buf_id;
+	int i;
+	unsigned long frame_size;
 
 	if (video_ch[ch_id].pfile) {
 		/* Save capture frame to file */
-		wsize = fwrite(video_ch[ch_id].buffers[buf_id].start,
-			       video_ch[ch_id].frame_size, 1,
-			       video_ch[ch_id].pfile);
-		if (wsize < 1) {
-			v4l2_err
-			    ("No space left on device. Stopping after %d frames.\n",
-			     video_ch[ch_id].frame_num);
-			return -1;
+		for (i = 0; i < g_num_planes; i++) {
+			wsize = fwrite(video_ch[ch_id].buffers[buf_id].planes[i].start,
+					   video_ch[ch_id].buffers[buf_id].planes[i].plane_size, 1,
+					   video_ch[ch_id].pfile);
+
+			if (wsize < 1) {
+				v4l2_err
+					("No space left on device. Stopping after %d frames.\n",
+					 video_ch[ch_id].frame_num);
+				return -1;
+			}
 		}
 	}
 	return 0;
@@ -1075,7 +1186,7 @@ int set_vdev_parm(int ch_id)
 		fmt.fmt.pix_mp.pixelformat = video_ch[ch_id].cap_fmt;
 		fmt.fmt.pix_mp.width = video_ch[ch_id].out_width;
 		fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
-		fmt.fmt.pix_mp.num_planes = 1;	/* RGB */
+		fmt.fmt.pix_mp.num_planes = g_num_planes;
 		if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
 			v4l2_err("set format failed\n");
 			return -1;
@@ -1227,11 +1338,15 @@ int main(int argc, char **argv)
 	if ((g_cam & 0xFF) == 0)
 		return -1;
 
+	g_num_planes = get_num_planes_by_fmt(g_cap_fmt);
+	get_fmt_name(g_cap_fmt);
+
 	/* init all video channel to default value */
 	g_cam_num = 0;
 	for (i = 0; i < g_cam_max; i++) {
 		if (g_cam >> i & 0x1) {
 			g_cam_num++;
+			strcat(g_saved_filename[i], g_fmt_name);
 			init_video_channel(i);
 		}
 	}
