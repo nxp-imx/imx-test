@@ -607,3 +607,85 @@ correct.
 |====================================================================
 
 <<<
+
+mx8_v4l2_cap_drm.out
+
+|====================================================================
+
+| Summary |
+Camera unit test for iMX8QXP and iMX8QM
+
+| Automated |
+NO
+
+| Kernel Config Option |
+N/A
+
+| Test Procedure |
+. Run:
+
+== Case 1 ==
+
+| Test Environment |
+DTB File: "fsl-imx8qxp-mek.dtb" for IMX8QXP
+          "fsl-imx8qm-mek.dtb" for IMX8QM
+Hardware Requirement: MX8XMIPI4CAM2 and MAX9286 bridge
+                      LVDS-TO-HDMI bridge
+
+
+| Run Command |
+"/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam num -of" for QXP
+"/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam num" for QM
+Note: num should be 1 ~ 15 for 1 to 4 camera test. It used to specify the
+number of camera sensors
+
+| Expected Result |
+For QXP, there will be one to four file created in current directory. If you
+want to display the camera image, you can use fsl-imx8qxp-mek-lvds0-it6263.dtb
+instead. For QM ,camera image will be displayed on screen and the number of
+camera sensor should be even.
+
+Note: Default camera output resolution is 1280*800 and output format is RGB32
+
+== Case 2 ==
+
+| Test Environment |
+DTB File: fsl-imx8qxp-mek-mipi-ov5640.dtb
+          fsl-imx8qm-mek-mipi-ov5640.dtb
+Hardware Requirement: miniSASToCSI connector and OV5640 sensor
+                      LVDS-TO-HDMI bridge
+
+| Run Command |
+/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam 1 -of
+/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam 1
+/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam 1 -m 0 -fr 30
+
+| Expected Result |
+0.rgb32 file will be created in current directory or camera iamge display on
+screen
+
+Note: Default camera output resolution is 640*480 and output format is RGB32.
+
+== Case 3 ==
+
+| Test Environment |
+DTB File: fsl-imx8qxp-mek-csi.dtb
+Hardware Requirement: OV5640 sensor
+                      LVDS-TO-HDMI bridge
+
+| Run Command |
+/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam 1 -of
+/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam 1
+/unit_tests/V4L2/mx8_v4l2_cap_drm.out -cam 1 -m 0 -fr 30
+
+| Expected Result |
+0.rgb32 file will be created in current directory or camera iamge display on
+screen
+
+Note: This case is used to test IMX8QXP parallel csi interface, IMX8QM not
+support this interface. Default camera output resolution is 640*480 and output
+format is RGB32
+
+|====================================================================
+
+<<<
