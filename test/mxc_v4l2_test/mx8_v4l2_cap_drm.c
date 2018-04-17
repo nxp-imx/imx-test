@@ -825,6 +825,15 @@ int v4l_capture_setup(int ch_id)
 		return -1;
 	}
 
+	/* Get chipident */
+	struct v4l2_dbg_chip_ident chipident;
+	memset(&chipident, 0, sizeof(chipident));
+	if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chipident) < 0) {
+		v4l2_err("get chip ident fail\n");
+		return -1;
+	}
+	v4l2_info("Get chip ident: %s\n", chipident.match.name);
+
 	if (ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap) == 0) {
 		v4l2_dbg("cap=0x%x\n", cap.capabilities);
 		if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE)) {
