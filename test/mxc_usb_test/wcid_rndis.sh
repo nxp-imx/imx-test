@@ -19,17 +19,16 @@ else
 	exit $STATUS;
 fi
 
-# Check if the pass-in udc name correct
-if [ -n "$1" -a ! -e $UDC_DIR/$1 ] ;then
-	STATUS=1
-	echo "The sepecified udc $1 does not exist."
-	exit $STATUS;
-fi
-
 #mount none /sys/kernel/config/ -t configfs
 
-mkdir /sys/kernel/config/usb_gadget/g1
-cd /sys/kernel/config/usb_gadget/g1/
+id=1;
+
+for udc_name in $(ls $UDC_DIR)
+do
+echo "WCID test is enabling udc:$udc_name"
+
+mkdir /sys/kernel/config/usb_gadget/g$id
+cd /sys/kernel/config/usb_gadget/g$id
 
 echo 0x15a3 > idVendor
 echo 0x0064 > idProduct
@@ -67,13 +66,8 @@ echo 1 > rndis.usb0/os_desc/interface.rndis/Label/type
 echo "MFG Device" > rndis.usb0/os_desc/interface.rndis/Label/data
 cd ..
 
-if [ -n "$1" ]; then
-echo $1 > UDC
-else
-for udc_name in $(ls $UDC_DIR)
-do
-echo "WCID test is using 1st udc:$udc_name"
 echo $udc_name > UDC
-break
+
+let ++id;
+
 done
-fi
