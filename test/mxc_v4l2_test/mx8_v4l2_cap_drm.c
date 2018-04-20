@@ -219,7 +219,8 @@ void print_help(void)
 	       " -of save to file \n"
 	       " -l <device support list>\n"
 	       " -cam <device index> 0bxxxx,xxxx\n"
-	       " -log <log_level>   output all information, log_level should be 6"
+	       " -log <log_level>   output all information, log_level should be 6\n"
+	       " -d \"/dev/videoX\" if user use this option, -cam should be 1\n"
 	       "example:\n"
 	       "./mx8_cap -cam 1      capture data from video0 and playback\n"
 	       "./mx8_cap -cam 3      capture data from video0/1 and playback\n"
@@ -256,6 +257,12 @@ int process_cmdline(int argc, char **argv)
 			g_camera_framerate = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-fmt") == 0) {
 			g_cap_fmt = fmt_array[atoi(argv[++i])];
+		} else if (strcmp(argv[i], "-d") == 0) {
+			if (g_cam != 1) {
+				print_help();
+				return -1;
+			}
+			strcpy(g_v4l_device[0], argv[++i]);
 		} else {
 			print_help();
 			return -1;
