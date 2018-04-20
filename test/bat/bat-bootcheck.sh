@@ -30,4 +30,4 @@ if dmesg|grep -U2 "genpd_xlate_onecell: invalid domain index"; then
     exitcode=$BAT_EXITCODE_FAIL
 fi
 
-exit $fail
+exit $exitcode

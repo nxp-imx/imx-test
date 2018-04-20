@@ -1,7 +1,10 @@
 #! /bin/bash
 
+# 0 means success
+BAT_EXITCODE_FAIL=1
 BAT_EXITCODE_SKIP=2
 BAT_EXITCODE_TODO=3
+# All other exitcodes not explicitly mentioned also mean "fail"
 
 # skip not yet implemented features or not yet fixed bugs
 # (for unsupported features use the skip array below)
