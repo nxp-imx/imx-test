@@ -150,7 +150,7 @@ pr_debug()
 kernel_is_version()
 {
     version=$(cat /proc/version | sed -s 's/Linux version \([1-9][.][0-9]*[.][0-9]*\).*/\1/')
-    if [[ $version == $1* ]]; then
+    if [[ $version == $1.* ]]; then
         return 0
     else
         return 1
