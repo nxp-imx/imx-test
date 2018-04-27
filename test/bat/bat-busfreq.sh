@@ -33,7 +33,7 @@ fi
 BUSFREQ_SLEEP_TIME=10
 
 echo "Sleep $BUSFREQ_SLEEP_TIME seconds waiting for busfreq" >&2
-$batdir/bat_netpause.sh 10
+$batdir/bat_netpause.sh $BUSFREQ_SLEEP_TIME
 echo "Sleep waiting for busfreq over" >&2
 
 busfreq=$(dmesg | grep "Bus freq set to" || true)
