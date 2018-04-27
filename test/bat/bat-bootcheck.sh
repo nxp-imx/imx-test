@@ -35,4 +35,10 @@ if dmesg|grep -U2 "genpd_xlate_onecell: invalid domain index"; then
     exitcode=$BAT_EXITCODE_FAIL
 fi
 
+# This means there are drivers with the same name!
+if dmesg|grep -U2 "Error: Driver .* is already registered"; then
+    echo "Found driver registration failure because of name conflict" >&2
+    exitcode=$BAT_EXITCODE_FAIL
+fi
+
 exit $exitcode
