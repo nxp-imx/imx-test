@@ -103,12 +103,22 @@ bat_reexec_ramroot() {
             ln -sf busybox $RAMROOT/bin/$applet
         done
 
+        local bat_connman_status=$(systemctl is-active connman)
+        if [ "$bat_connman_status" == active ]; then
+            systemctl stop connman
+        fi
+
         set +e
         chroot "$RAMROOT" "/bin/`basename $0`" $@
         chroot_exec_status=$?
         pr_debug "cleaning up ramroot"
         umount -R "$RAMROOT"
         rm -rf "$RAMROOT"
+
+        if [ "$bat_connman_status" == active ]; then
+            systemctl start connman
+        fi
+
         exit $chroot_exec_status
     fi
 }
