@@ -1,0 +1,24 @@
+NXP Software Content Register
+
+--------------------------------------------
+
+Package:                   imx-test-*.tar.gz
+Outgoing License:          Each test has its own license
+License File:              See source code.
+Package Category:          BSP
+Type of content:           Source code
+Description and comments:  Linux unit test applications
+Release Location:          i.MX Yocto Project mirror
+Origin:                    NXP (proprietary)
+                           Freescale Semiconductor, Inc. (proprietary)
+                           Linux Test Project (GPL-2.0+) - https://github.com/linux-test-project/ltp
+                           Chips and Media Resource (GPL2+)
+                           RTC Test in Linux Kernel (GPL-2.0+)
+                           BlueZ (GPL-2.0+) - http://www.bluez.org/
+                           Embedded Alley v4l2 test (GPL-2.0+)
+                           Android Open Source Project (BSD-2-Clause) - https://source.android.com/
+                           Hantro Memalloc in Linux (GPL-2.0+)
+                           Linux driver for Atheros AR5210 802.11a (GPL-2.0+) - http://sourceforge.net/projects/ar5k/
+                           Hannu Savolainen's soundcard.h (BSD-2-clause)
+
+--------------------------------------------
