@@ -237,7 +237,8 @@ void print_help(void)
 	       "./mx8_cap -cam 1      capture data from video0 and playback\n"
 	       "./mx8_cap -cam 3      capture data from video0/1 and playback\n"
 	       "./mx8_cap -cam 7 -of  capture data from video0~2 and save to 0~2.rgb32\n"
-	       "./mx8_cap -cam 255 -of  capture data from video0~7 and save to 0~7.rgb32\n");
+	       "./mx8_cap -cam 255  -of capture data from video0~7 and save to 0~7.rgb32\n"
+	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.rgb32\n");
 }
 
 int process_cmdline(int argc, char **argv)
@@ -246,7 +247,9 @@ int process_cmdline(int argc, char **argv)
 
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-cam") == 0) {
-			g_cam = atoi(argv[++i]);
+			unsigned long mask;
+			mask = strtoul(argv[++i], NULL, 0);
+			g_cam = mask;
 		} else if (strcmp(argv[i], "-t") == 0) {
 			g_timeout = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-loop") == 0) {
