@@ -960,10 +960,6 @@ int config_video_channel(struct drm_kms *kms)
 		v4l2_err("Error cam number %d\n", g_cam_num);
 		return -1;
 	}
-	if (g_cam_num == 3 || g_cam_num == 5 || g_cam_num == 7) {
-		v4l2_err("Not support %d cam output\n", g_cam_num);
-		return -1;
-	}
 
 	v4l2_info("xres=%d, y_res=%d\n", x_res, y_res);
 	x_offset[0] = 0;
@@ -973,7 +969,7 @@ int config_video_channel(struct drm_kms *kms)
 		y_out = y_res / 2;
 		x_offset[1] = x_out;
 		y_offset[1] = 0;
-	} else if (g_cam_num == 4) {
+	} else if ((g_cam_num == 3) || (g_cam_num == 4)) {
 		x_out = x_res / 2;
 		y_out = y_res / 2;
 		x_offset[1] = x_out;
@@ -982,7 +978,7 @@ int config_video_channel(struct drm_kms *kms)
 		y_offset[2] = y_out;
 		x_offset[3] = x_out;
 		y_offset[3] = y_out;
-	} else if (g_cam_num == 6) {
+	} else if ((g_cam_num == 5) || (g_cam_num == 6)) {
 		x_out = x_res / 3;
 		y_out = y_res / 2;
 		x_offset[1] = x_out;
@@ -995,7 +991,7 @@ int config_video_channel(struct drm_kms *kms)
 		y_offset[4] = y_out;
 		x_offset[4] = x_out * 2;
 		y_offset[4] = y_out;
-	} else if (g_cam_num == 8) {
+	} else if ((g_cam_num == 7) || (g_cam_num == 8)) {
 		x_out = x_res / 4;
 		y_out = y_res / 2;
 		x_offset[1] = x_out;
