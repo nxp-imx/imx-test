@@ -2,23 +2,71 @@ NXP Software Content Register
 
 --------------------------------------------
 
-Package:                   imx-test-*.tar.gz
-Outgoing License:          Each test has its own license
+Package:                   imx-test.git
+Outgoing License:          Each test has its own license.  It is one of GPL-2.0, LGPL-2.1 or Apache-2.0
 License File:              See source code.
 Package Category:          BSP
 Type of content:           Source code
 Description and comments:  Linux unit test applications
-Release Location:          i.MX Yocto Project mirror
-Origin:                    NXP (proprietary)
-                           Freescale Semiconductor, Inc. (proprietary)
-                           Linux Test Project (GPL-2.0+) - https://github.com/linux-test-project/ltp
-                           Chips and Media Resource (GPL2+)
-                           RTC Test in Linux Kernel (GPL-2.0+)
-                           BlueZ (GPL-2.0+) - http://www.bluez.org/
-                           Embedded Alley v4l2 test (GPL-2.0+)
-                           Android Open Source Project (BSD-2-Clause) - https://source.android.com/
-                           Hantro Memalloc in Linux (GPL-2.0+)
-                           Linux driver for Atheros AR5210 802.11a (GPL-2.0+) - http://sourceforge.net/projects/ar5k/
-                           Hannu Savolainen's soundcard.h (BSD-2-clause)
+Release Location:          https://source.codeaurora.org/external/imx/imx-test.git -b <release name>
+Origins for individual tests:
+                           module_test: NXP (GPL-2.0+)
+                               Hantro Products Oy. (GPL-2.0+)
+                           test/caam: NXP [instructions]
+                           test/can: NXP [instructions]
+                           test/etm: The Android Open Source Project (Apache-2.0) - unpublished
+                           test/gpu: NXP [instructions]
+                           test/memtool: NXP (GPL-2.0+)
+                           test/misc: NXP [instructions]
+                           test/mmdc: NXP (GPL-2.0+)
+                           test/mxc_als_test: NXP (GPL-2.0+)
+                           test/mxc_alsa_dsd_player: NXP (GPL-2.0+)
+                               The Music Player Daemon Project (GPL-2.0+) - http://www.musicpd.org
+                               Daniel Mack (GPL-2.0+) 
+                           test/mxc_alsa_hw_params: NXP (GPL-2.0+)
+                           test/mxc_amix_test: NXP (GPL-2.0+)
+                           test/mxc_asrc_test: NXP (GPL-2.0+)
+                           test/mxc_cec_test: NXP (GPL-2.0+)
+                           test/mxc_clock_test: NXP [scripts and instructions]
+                           test/mxc_dcic_test: NXP (GPL-2.0+)
+                           test/mxc_dcp_test: NXP [instructions]
+                           test/mxc_dryice_test: NXP [scripts and instructions]
+                           test/mxc_esai_test: NXP [instructions]
+                           test/mxc_fb_test: NXP (GPL-2.0+)
+                           test/mxc_firi_test: NXP [scripts and instructions]
+                           test/mxc_hdd_test: NXP [scripts and instructions]
+                           test/mxc_i2c_slave_test: NXP (GPL-2.0+)
+                           test/mxc_iim_test: NXP (GPL-2.0+)
+                           test/mxc_ipudev_test: NXP (LGPL-2.1+)
+                           test/mxc_jpeg_test: NXP (GPL-2.0+)
+                           test/mxc_keyb_test: NXP [scripts and instructions]
+                           test/mxc_mcc_tty_test: NXP (GPL-2.0+)
+                           test/mxc_mlb_test: NXP (GPL-2.0+)
+                           test/mxc_mmc_test: NXP [scripts and instructions]
+                           test/mxc_oprofile_test: NXP [scripts and instructions]
+                           test/mxc_owire_test: NXP [scripts and instructions]
+                           test/mxc_pdm_test: NXP (GPL-2.0+)
+                           test/mxc_rtc: NXP (GPL-2.0+)
+                               Paul Gortmaker (GPL-2.0+) - https://github.com/torvalds/linux/blob/master/tools/testing/selftests/timers/rtctest.c
+                           test/mxc_sdma_test: NXP (GPL-2.0+)
+                           test/mxc_secureboot: NXP [scripts and instructions]
+                           test/mxc_sensor_test: Vojtech Pavlik (GPL-2.0+)
+                           test/mxc_sim_test: NXP (GPL-2.0+)
+                           test/mxc_spdif_test: NXP [instructions]
+                           test/mxc_spi_test: NXP (GPL-2.0+)
+                           test/mxc_ssi_test: NXP [instructions]
+                           test/mxc_tuner_test: NXP (GPL-2.0+)
+                           test/mxc_uart_test: NXP (GPL-2.0+)
+                           test/mxc_usb_test: NXP [scripts and instructions]
+                           test/mxc_v4l2_test: NXP (GPL-2.0+)
+                           test/mxc_vpu_test: NXP (GPL-2.0+)
+                               Chips & Media (GPL-2.0+)
+                           test/pm: NXP [Instructions]
+                           test/pxp_lib_test: NXP (GPL-2.0+)
+                           test/pxp_v4l2_test: NXP (GPL-2.0+)
+                               Embedded Alley Solutions (GPL-2.0+)
+                           test/rpmsg: NXP (GPL-2.0+)
+                           test/wdog: NXP (GPL-2.0+)
 
 --------------------------------------------
+
