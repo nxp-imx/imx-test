@@ -204,6 +204,15 @@ static ssize_t pcm_write(snd_pcm_t *handle, uint8_t *data, size_t count, int byt
 	return result;
 }
 
+static struct file_parser {
+	char ext[4];
+	int (*read_file)(int fd, struct dsd_params *params);
+	void (*interleave)(uint8_t *dest, const uint8_t *src, unsigned ch, unsigned fmt);
+} parsers[] = {
+  { .ext = ".dsf", .read_file = read_dsf_file, .interleave = interleaveDsfBlock },
+  { .ext = ".dff", .read_file = read_dff_file, .interleave = interleaveDffBlock },
+};
+
 int main(int argc, char *argv[])
 {
 	int fd, err, block_size, bytes_per_frame, frames;
@@ -211,9 +220,10 @@ int main(int argc, char *argv[])
 	snd_pcm_t *playback_handle;
 	char *name;
 	struct dsd_params params;
-	void (*interleave)(uint8_t*, const uint8_t*, unsigned, unsigned) = 0;
 	uint64_t readsize=0;
 	uint64_t leftsize=0;
+	int i, n;
+	struct file_parser parser;
 
 	if (argc < 3) {
 		fprintf(stderr, "Usage: %s <device> <filename>\n", argv[0]);
@@ -231,22 +241,26 @@ int main(int argc, char *argv[])
 	printf("===============================\n");
 
 	len = strlen(name);
-	if (len > 4) {
-		if (strcmp(name + len - 4, ".dff") == 0) {
-			err = read_dff_file(fd, &params);
-			if (err < 0)
-				return err;
-			interleave = &interleaveDffBlock;
-		} else if (strcmp(name + len - 4, ".dsf") == 0) {
-			err = read_dsf_file(fd, &params);
-			if (err < 0)
-				return err;
-			interleave = &interleaveDsfBlock;
-		} else {
-			fprintf(stderr, "%s format not supported !\n", name);
-			return EXIT_FAILURE;
-		}
+	if (len <= 4) {
+		fprintf(stderr, "%s name too short!\n", name);
+		return EXIT_FAILURE;
 	}
+
+	for (i = 0, n = sizeof(parsers)/sizeof(parsers[0]); i < n; i++) {
+		if (strcmp(name + len - 4, parsers[i].ext) != 0)
+			continue;
+		parser = parsers[i];
+		break;
+	}
+
+	if (i == n) {
+		fprintf(stderr, "%s format not supported !\n", name);
+		return EXIT_FAILURE;
+	}
+
+	err = parser.read_file(fd, &params);
+	if (err < 0)
+		return err;
 
 	if ((err = open_stream(&playback_handle, argv[1],
 				SND_PCM_STREAM_PLAYBACK,
@@ -291,7 +305,7 @@ int main(int argc, char *argv[])
 		if (params.bits_per_sample == 8)
 			bit_reverse_buffer(buffer, buffer + block_size);
 
-		interleave(interleaved_buffer, buffer, params.channel_num, ALSA_FORMAT);
+		parser.interleave(interleaved_buffer, buffer, params.channel_num, ALSA_FORMAT);
 
 		pcm_write(playback_handle, interleaved_buffer,
 			frames, bytes_per_frame);
