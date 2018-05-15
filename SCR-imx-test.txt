@@ -21,8 +21,8 @@ Origins for individual tests:
                            test/mmdc: NXP (GPL-2.0+)
                            test/mxc_als_test: NXP (GPL-2.0+)
                            test/mxc_alsa_dsd_player: NXP (GPL-2.0+)
+                               alsa-dsd-player by Daniel Mack (GPL-2.0+) - https://github.com/zonque/alsa-dsd-player
                                The Music Player Daemon Project (GPL-2.0+) - http://www.musicpd.org
-                               Daniel Mack (GPL-2.0+) 
                            test/mxc_alsa_hw_params: NXP (GPL-2.0+)
                            test/mxc_amix_test: NXP (GPL-2.0+)
                            test/mxc_asrc_test: NXP (GPL-2.0+)
