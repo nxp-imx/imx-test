@@ -1,0 +1,27 @@
+VPU Linux unittest for V4L2 driver with video decoder and encoder
+
+For decoder
+The YUV frame is tiled NV12 pixel format (semi-planar, 2 planes 420 Y + UV)
+which is got from the decoder, and for the unittest the actual output is
+converted to linear YV12 3 planes 420 Y + U + V. The YUV frame buffer is hence
+You can try by use the command as follows
+./mxc_v4l2_vpu_dec.out ifile file_name ifmt fmt_num ofmt fmt_num ofile file_name
+
+For example:
+when decode the stream BasketballDrive_1920x1080_qp32_100.bin
+you can use the command like this
+./mxc_v4l2_vpu_dec.out ifile BasketballDrive_1920x1080_qp32_100.bin ifmt 13 ofmt 1 ofile test.yuv
+for h264 stream h_i_352x288.h264
+./mxc_v4l2_vpu_dec.out ifile h_i_352x288.h264 ifmt 1 ofmt 1 ofile test.yuv
+and you can read sdk_release_2f7d492015_gpl/README for more details
+
+For encoder:
+
+for the input file it is YV12 3 planes 420 Y + U + V, and it is converted to NV12 when passed to the driver in the unittest and the output file is compressed file, for the bitrate, the unit is k, when pass bitrate 300, it means 300k.
+
+run the command as follows：
+./mxc_v4l2_vpu_enc.out ifile file_name WIDTH width_num HEIGHT height_num OWIDTH output_width_num OHEIGHT output_height_num GOP gop_num QP qp_num MAXBR max_bitrate TARBR target_bitrate MINBR min_bitrate ofile file_name
+
+for example:
+./mxc_v4l2_vpu_enc.out ifile test.yuv WIDTH 1920 HEIGHT 1080 OWIDTH 1920 OHEIGHT 1080 GOP 3 QP 22 MAXBR 9000 TARBR 7000 MINBR 6000 ofile test.h264
+
