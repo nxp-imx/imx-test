@@ -67,7 +67,7 @@ static __u32  formats_compressed[] =
     V4L2_PIX_FMT_VC1_ANNEX_G,   //VPU_VIDEO_VC1 = 2,     ///< https://en.wikipedia.org/wiki/VC-1
     V4L2_PIX_FMT_MPEG2, //VPU_VIDEO_MPEG2 = 3,   ///< https://en.wikipedia.org/wiki/H.262/MPEG-2_Part_2
     VPU_PIX_FMT_AVS,    //VPU_VIDEO_AVS = 4,     ///< https://en.wikipedia.org/wiki/Audio_Video_Standard
-    VPU_PIX_FMT_ASP,    //VPU_VIDEO_ASP = 5,     ///< https://en.wikipedia.org/wiki/MPEG-4_Part_2
+    V4L2_PIX_FMT_MPEG4,    //VPU_VIDEO_ASP = 5,     ///< https://en.wikipedia.org/wiki/MPEG-4_Part_2
     V4L2_PIX_FMT_JPEG,  //VPU_VIDEO_JPEG = 6,    ///< https://en.wikipedia.org/wiki/JPEG
     VPU_PIX_FMT_RV8,    //VPU_VIDEO_RV8 = 7,     ///< https://en.wikipedia.org/wiki/RealVideo
     VPU_PIX_FMT_RV9,    //VPU_VIDEO_RV9 = 8,     ///< https://en.wikipedia.org/wiki/RealVideo
@@ -1214,14 +1214,6 @@ RETRY:
 					    pstV4lBuf->m.planes[i].bytesused = fread((void*)pBuf, 1, block_size, fpInput);
 					    pstV4lBuf->m.planes[i].data_offset = 0;
 						file_size -= pstV4lBuf->m.planes[i].bytesused;
-						if (file_size == 0)
-						{
-							v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
-							lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
-							if (lErr)
-								printf("VIDIOC_DECODER_CMD has error\n");
-						}
-
 						if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_IN].memory)
 						{
 							msync((void*)pBuf, block_size, MS_SYNC);
@@ -1309,7 +1301,14 @@ RETRY:
 						printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
 						break;
 					}
-
+					if (file_size == 0)
+					{
+						v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
+						lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
+						if (lErr)
+							printf("VIDIOC_DECODER_CMD has error\n");
+						file_size = -1;
+					}
 					usleep(1000);
 					goto RETRY;
 				}
