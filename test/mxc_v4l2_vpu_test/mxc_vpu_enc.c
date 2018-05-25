@@ -725,14 +725,6 @@ RETRY:
 						convert_feed_stream(pComponent, (unsigned char *)pBuf);
 					    pstV4lBuf->m.planes[i].data_offset = 0;
 						file_size -= pstV4lBuf->m.planes[i].bytesused;
-						if (file_size == 0)
-						{
-							v4l2cmd.cmd = V4L2_ENC_CMD_STOP;
-							lErr = ioctl(pComponent->hDev, VIDIOC_ENCODER_CMD, &v4l2cmd);
-							if (lErr)
-								printf("VIDIOC_ENCODER_CMD has error\n");
-						}
-
 						if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_IN].memory)
 						{
 							msync((void*)pBuf, block_size, MS_SYNC);
@@ -822,8 +814,16 @@ RETRY:
 						break;
 					}
 
+					if (file_size == 0)
+					{
+						v4l2cmd.cmd = V4L2_ENC_CMD_STOP;
+						lErr = ioctl(pComponent->hDev, VIDIOC_ENCODER_CMD, &v4l2cmd);
+						if (lErr)
+							printf("VIDIOC_ENCODER_CMD has error\n");
+						file_size = -1;
+					}
+
 					usleep(1000);
-					goto RETRY;
 				}
 
 				fflush(stdout);
