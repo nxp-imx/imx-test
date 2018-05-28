@@ -30,9 +30,12 @@
 
 struct cec_node {
 	int fd_cec;
+	char device_name[12];
 	int vendor;
 	int hdmi_id;
 	int cmd;
+	int log_addr;
+	int dst_addr;
 };
 
 int process_cmdline(struct cec_node *node, int argc, char **argv)
@@ -46,9 +49,16 @@ int process_cmdline(struct cec_node *node, int argc, char **argv)
 			node->vendor = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-c") == 0) {
 			node->cmd = atoi(argv[++i]);
-		} else if (strcmp(argv[i], "-h") == 0) {
+		} else if (strcmp(argv[i], "-la") == 0) {
+			node->log_addr = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-da") == 0) {
+			node->dst_addr = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-d") == 0) {
+			strcpy(node->device_name, argv[++i]);
+		} else if (strcmp(argv[i], "-h") == 0 ||
+				strcmp(argv[i], "--help") == 0) {
 			printf("*****************************************\n");
-			printf("mx8_cec_test -i <hdmi port> -v <tv brand> -c <test cmd>\n");
+			printf("mx8_cec_test -i <hdmi port> -v <tv brand> -c <test cmd> -d <device> -la <LA> -da <LA>\n");
 			printf("Port: which hdmi port connected in TV\n");
 			printf("       default port is 4\n");
 			printf("brand: default is sony\n");
@@ -57,6 +67,26 @@ int process_cmdline(struct cec_node *node, int argc, char **argv)
 			printf("CMD:  Only support two cmd\n");
 			printf("       192: 0xc0, start arc\n");
 			printf("       54:  0x36,  TV standby\n");
+			printf("       255: 0xff,  for HDMI CEC RX test\n");
+			printf("device, CEC device: /dev/cec0\n");
+			printf("LA:Log Address: Default is 5 Audio system\n");
+			printf("                0 TV\n");
+			printf("                1 Record\n");
+			printf("                3 Tuner\n");
+			printf("                4 Playback\n");
+			printf("DA:Log Address of destination. Default is 0 TV\n");
+			printf("                0 TV\n");
+			printf("                1 Record\n");
+			printf("                3 Tuner\n");
+			printf("                4 Playback\n");
+			printf("                5 Audio system\n");
+			printf("Example:\n");
+			printf("Standby MSG(0x36) send from Audio System device to TV device:\n");
+			printf("mx8_cec_test -c 54\n");
+			printf("Standby MSG(0x36) send from Playback device to TV device:\n");
+			printf("mx8_cec_test -c 54 -la 4 -da 0 -d /dev/cec1\n");
+			printf("HDMI CEC1 TV type, Ready to receive CEC MSG:\n");
+			printf("mx8_cec_test -c 255 -d /dev/cec1 -la 0 -i 0\n");
 			printf("*****************************************\n");
 			return -1;
 		}
@@ -72,11 +102,11 @@ int cec_transmit(struct cec_node *node,  struct cec_msg *msg)
 	char to     = cec_msg_destination(msg);
 	char opcode = cec_msg_opcode(msg);
 
-	printf("send  from %x to %x, %x\n", from, to, opcode);
+	printf("CEC Deivce[%s] MSG send from %x to %x, %x\n", node->device_name, from, to, opcode);
 
 	ret = ioctl(node->fd_cec, CEC_TRANSMIT, msg);
 	if (ret < 0)
-		printf("msg %d failed\n", msg->msg[1]);
+		printf("msg %d failed, ret=%d\n", msg->msg[1], ret);
 
 	return ret;
 }
@@ -151,7 +181,6 @@ int processmsg(struct cec_node *node, struct cec_msg *msg)
 int main(int argc, char *argv[])
 {
 	int    fd_cec = 0;
-	char   cec_device[12] = "/dev/cec0";
 	struct cec_caps caps;
 	struct cec_log_addrs log_addrs;
 	struct cec_msg msg, tx_msg;
@@ -161,18 +190,23 @@ int main(int argc, char *argv[])
 	int    ret;
 	int  time = 0;
 
+	/* Default CMD/LA/DA/Device */
 	node.hdmi_id = 4;
 	node.vendor  = 0;
 	node.cmd  = 0xc0;
+	node.log_addr = 0x5;
+	node.dst_addr = 0x0;
+	strcpy(node.device_name, "/dev/cec0");
 
 	if (process_cmdline(&node, argc, argv) < 0)
 		return -1;
 
-	node.fd_cec = open(cec_device, O_RDWR, 0);
+	node.fd_cec = open(node.device_name, O_RDWR, 0);
 	if (node.fd_cec < 0) {
-		printf("Unable to open %s\n", cec_device);
+		printf("Unable to open %s\n", node.device_name);
 		return -1;
 	}
+	printf("open device %s\n", node.device_name);
 
 	ret = ioctl(node.fd_cec, CEC_ADAP_G_CAPS, &caps);
 	if (ret < 0) {
@@ -186,7 +220,7 @@ int main(int argc, char *argv[])
 	if (ret)
 		printf("get phyaddr failed\n");
 
-	printf("phy %x\n", phyaddr);
+	printf("Get phyaddr=0x%x\n", phyaddr);
 
 	phyaddr = node.hdmi_id << 12;
 	ret = ioctl(node.fd_cec, CEC_ADAP_S_PHYS_ADDR, &phyaddr);
@@ -195,7 +229,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	printf("set phy addr success\n");
+	printf("Set phy addr success, phyaddr=0x%x\n", phyaddr);
 
 	if (node.vendor == 0)
 		log_addrs.vendor_id = 0xABCD;
@@ -203,23 +237,52 @@ int main(int argc, char *argv[])
 		log_addrs.vendor_id = 0xe091;
 
 	log_addrs.cec_version = CEC_OP_CEC_VERSION_1_4;
-	log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM;
-	log_addrs.log_addr_type[0] = CEC_LOG_ADDR_TYPE_AUDIOSYSTEM;
-	log_addrs.log_addr[0] = 0x5;
 	log_addrs.num_log_addrs = 1;
 	log_addrs.osd_name[0] = 'f';
 	log_addrs.osd_name[1] = 's';
 	log_addrs.osd_name[2] = 'l';
 	log_addrs.osd_name[3] = '\0';
-	log_addrs.all_device_types[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM;
 	log_addrs.features[0][0] =  0x2;
 	log_addrs.features[0][1] =  0x2;
 
+	if (node.log_addr == 0) {
+		log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_TV;
+		log_addrs.log_addr_type[0] = CEC_LOG_ADDR_TYPE_TV;
+		log_addrs.log_addr[0] = node.log_addr;
+		log_addrs.all_device_types[0] = CEC_OP_PRIM_DEVTYPE_TV;
+	} else if (node.log_addr == 1) {
+		log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_RECORD;
+		log_addrs.log_addr_type[0] = CEC_LOG_ADDR_TYPE_RECORD;
+		log_addrs.log_addr[0] = node.log_addr;
+		log_addrs.all_device_types[0] = CEC_OP_PRIM_DEVTYPE_RECORD;
+	} else if (node.log_addr == 3) {
+		log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_TUNER;
+		log_addrs.log_addr_type[0] = CEC_LOG_ADDR_TYPE_TUNER;
+		log_addrs.log_addr[0] = node.log_addr;
+		log_addrs.all_device_types[0] = CEC_OP_PRIM_DEVTYPE_TUNER;
+	} else if (node.log_addr == 4) {
+		log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_PLAYBACK;
+		log_addrs.log_addr_type[0] = CEC_LOG_ADDR_TYPE_PLAYBACK;
+		log_addrs.log_addr[0] = node.log_addr;
+		log_addrs.all_device_types[0] = CEC_OP_PRIM_DEVTYPE_PLAYBACK;
+	} else {
+		log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM;
+		log_addrs.log_addr_type[0] = CEC_LOG_ADDR_TYPE_AUDIOSYSTEM;
+		log_addrs.log_addr[0] = node.log_addr;
+		log_addrs.all_device_types[0] = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM;
+	}
+
 	ret = ioctl(node.fd_cec, CEC_ADAP_S_LOG_ADDRS, &log_addrs);
 	if (ret < 0)
-		printf("set cec log addr failed\n");
+		printf("Set cec log addr failed\n");
 	else
-		printf("set log_addr success\n");
+		printf("Set log_addr success\n");
+
+	ret = ioctl(node.fd_cec, CEC_ADAP_G_LOG_ADDRS, &log_addrs);
+	if (ret < 0)
+		printf("Get cec log addr failed\n");
+	else
+		printf("Get log_addr success, LA=[%d]\n", log_addrs.log_addr[0]);
 
 	ret = ioctl(node.fd_cec, CEC_S_MODE, &mode);
 	if (ret)
@@ -233,7 +296,7 @@ int main(int argc, char *argv[])
 			ret = ioctl(node.fd_cec, CEC_RECEIVE, &msg);
 			if (ret) {
 				if (node.vendor != 0 && time == 0) {
-					tx_msg.msg[0] = 0x50;
+					tx_msg.msg[0] = log_addrs.log_addr[0] << 4 | node.dst_addr;
 					cec_msg_initiate_arc(&tx_msg, 1);
 					cec_transmit(&node, &tx_msg);
 					time++;
@@ -251,9 +314,27 @@ int main(int argc, char *argv[])
 		break;
 
 	case 0x36:
-		tx_msg.msg[0] = 0x50;
+		tx_msg.msg[0] = log_addrs.log_addr[0] << 4 | node.dst_addr;
 		cec_msg_standby(&tx_msg);
 		cec_transmit(&node, &tx_msg);
+		break;
+
+	/* 0xff is reserved for testing purposes
+	 * Now is use to test hdmi CEC RX receive */
+	case 0xff:
+		while (1) {
+
+			msg.timeout = 1;
+			ret = ioctl(node.fd_cec, CEC_RECEIVE, &msg);
+			if (ret < 0)
+				continue;
+			char from = cec_msg_initiator(&msg);
+			char to   = cec_msg_destination(&msg);
+			char opcode = cec_msg_opcode(&msg);
+
+			printf("CEC Device[%s] Received MSG from %x to %x, %x, %x\n", node.device_name, from, to, opcode, msg.msg[2]);
+
+		}
 		break;
 	default:
 		break;
