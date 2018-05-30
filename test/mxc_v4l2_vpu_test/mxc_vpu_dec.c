@@ -966,10 +966,10 @@ void test_streamout(component_t *pComponent)
 						unsigned char *nBaseAddr[4];
 						unsigned char *dstbuf, *yuvbuf;
 						unsigned int uStride;
-						unsigned int uVertAlign = 512 - 1;
+						unsigned int uVertAlign = 256 - 1; //alignment is same with v4l2 driver
 						unsigned char *ybuf, *uvbuf;
 						zoe_bool_t b10format = 0;
-						unsigned int bField = 0;
+						unsigned int bField = stV4lBuf.reserved;
 						uStride = (( ulWidth  + uVertAlign ) & ~uVertAlign );
 						dstbuf = (unsigned char *)malloc(ulWidth * ulHeight*2*3/2);
 						if(!dstbuf)
