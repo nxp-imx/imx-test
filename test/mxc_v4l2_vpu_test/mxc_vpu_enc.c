@@ -64,6 +64,7 @@ unsigned int frame_count = 0;
 struct  timeval start;
 struct  timeval end;
 unsigned int TarBitrate = 0;
+unsigned int profile = 0;// BP = 0, MP = 2, HP = 4
 
 /**the function is used for to convert yuv420p to yuv420sp
  * yyyy yyyy
@@ -875,7 +876,7 @@ static void set_encoder_parameters(pMEDIAIP_ENC_PARAM pin_enc_param ,component_t
 
 	memset(&ctl, 0, sizeof(struct v4l2_control));
 	ctl.id = V4L2_CID_MPEG_VIDEO_H264_PROFILE;
-	ctl.value = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE;
+	ctl.value = profile;
 	lErr = ioctl(pComponent->hDev, VIDIOC_S_CTRL, &ctl);
  	if (lErr)
  	{
@@ -1095,6 +1096,15 @@ HAS_2ND_CMD:
             }
 			nArgNow++;
 			TarBitrate = atoi(argv[nArgNow++]);
+		}
+		else if(!strcasecmp(argv[nArgNow],"PROFILE"))
+		{
+			if (!HAS_ARG_NUM(argc, nArgNow, 1))
+			{
+				break;
+			}
+			nArgNow++;
+			profile = atoi(argv[nArgNow++]);
 		}
 		else
 		{
