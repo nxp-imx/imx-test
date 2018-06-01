@@ -233,12 +233,18 @@ void print_help(void)
 	       " -cam <device index> 0bxxxx,xxxx\n"
 	       " -log <log_level>   output all information, log_level should be 6\n"
 	       " -d \"/dev/videoX\" if user use this option, -cam should be 1\n"
+		   " -p test performance, need to combine with \"-of\" option\n"
+		   " -m <mode> specify camera sensor capture mode(mode:0, 1, 2, 3, 4)\n"
+		   " -fr <frame_rate> support 15fps and 30fps\n"
+		   " -fmt <format> support RGB32 and NV12, 0->RGB32, 1->NV12. NV12 not support playback\n"
 	       "example:\n"
 	       "./mx8_cap -cam 1      capture data from video0 and playback\n"
 	       "./mx8_cap -cam 3      capture data from video0/1 and playback\n"
 	       "./mx8_cap -cam 7 -of  capture data from video0~2 and save to 0~2.rgb32\n"
 	       "./mx8_cap -cam 255  -of capture data from video0~7 and save to 0~7.rgb32\n"
-	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.rgb32\n");
+	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.rgb32\n"
+	       "./mx8_cap -cam 1 -fmt 1 -of capture data from video0 and save to 0.nv12\n"
+	       "./mx8_cap -cam 1 -of -p test video0 performace\n");
 }
 
 int process_cmdline(int argc, char **argv)
