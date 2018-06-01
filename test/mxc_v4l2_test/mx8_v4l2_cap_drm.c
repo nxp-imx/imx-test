@@ -831,11 +831,10 @@ int v4l_capture_setup(int ch_id)
 	/* Get chipident */
 	struct v4l2_dbg_chip_ident chipident;
 	memset(&chipident, 0, sizeof(chipident));
-	if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chipident) < 0) {
-		v4l2_err("get chip ident fail\n");
-		goto fail;
-	}
-	v4l2_info("Get chip ident: %s\n", chipident.match.name);
+	if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chipident) < 0)
+		v4l2_info("get chip ident fail\n");
+	else
+		v4l2_info("Get chip ident: %s\n", chipident.match.name);
 
 	if (ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap) == 0) {
 		v4l2_dbg("cap=0x%x\n", cap.capabilities);
@@ -869,10 +868,8 @@ int v4l_capture_setup(int ch_id)
 	parm.parm.capture.timeperframe.numerator = 1;
 	parm.parm.capture.timeperframe.denominator = g_camera_framerate;
 	parm.parm.capture.capturemode = g_capture_mode;
-	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0) {
-		v4l2_err("VIDIOC_S_PARM failed, chan_ID:%d\n", ch_id);
-		goto fail;
-	}
+	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0)
+		v4l2_info("VIDIOC_S_PARM failed, chan_ID:%d\n", ch_id);
 
 	frmsize.pixel_format = g_cap_fmt;
 	frmsize.index = g_capture_mode;
