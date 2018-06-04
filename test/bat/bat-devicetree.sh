@@ -12,7 +12,11 @@ disabled_parent=
 
 # Examine devices
 while read -r item; do
-    status=$(cat "$item"/status 2>/dev/null)
+    if [[ -a "$item/status" ]]; then
+        read -r status < "$item/status"
+    else
+        status=''
+    fi
     count_total=$((count_total + 1))
 
     if [[ -n $disabled_parent ]]; then
