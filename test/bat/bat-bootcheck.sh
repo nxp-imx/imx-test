@@ -41,4 +41,10 @@ if dmesg|grep -U2 "Error: Driver .* is already registered"; then
     exitcode=$BAT_EXITCODE_FAIL
 fi
 
+# This means pin conflict:
+if dmesg|grep -A5 -B2 "Error applying setting, reverse things back"; then
+    echo "Found pinctrl conflict" >&2
+    exitcode=$BAT_EXITCODE_FAIL
+fi
+
 exit $exitcode
