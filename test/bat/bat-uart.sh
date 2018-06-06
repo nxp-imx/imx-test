@@ -28,7 +28,7 @@ function cleanup
 {
     if [ "$pids" != ""  ]; then
         echo "Resume processes using /dev/${port}: $pids"
-        signal_processes $pids CONT
+        kill -s CONT $pids
     fi
 }
 
@@ -43,19 +43,6 @@ function lsof()
         if ls -l ${pid}/fd 2>/dev/null | grep -q "${filename}"; then
             echo "${pid#/proc/}"
         fi
-    done
-}
-
-# sends signal $2 to given list of processes $1
-# $1: list of pids
-# $2: signal
-function signal_processes()
-{
-    pids="$1"
-    signal="$2"
-
-    for pid in $pids; do
-        kill -${signal} $pid
     done
 }
 
@@ -88,7 +75,7 @@ for port in $uart_ports; do
     # pause processes using this uart
     if [ "$pids" != ""  ]; then
         echo "Pause processes using /dev/${port}: $pids"
-        signal_processes $pids STOP
+        kill -s STOP $pids
 	# disable stress test for console uart
 	stress_test[$port]="disable"
     fi
@@ -109,6 +96,6 @@ for port in $uart_ports; do
     # resume processes using this uart
     if [ "$pids" != ""  ]; then
         echo "Resume processes using /dev/${port}: $pids"
-        signal_processes $pids CONT
+        kill -s CONT $pids
     fi
 done
