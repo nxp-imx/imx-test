@@ -128,6 +128,7 @@ bat_net_down()
     bat_eth0_status=$(ip link show up | grep eth0 | wc -l)
     bat_eth1_status=$(ip link show up | grep eth1 | wc -l)
     bat_eth0_saved_route=$(ip route show | grep '^default' | grep eth0 || true)
+    bat_eth1_saved_route=$(ip route show | grep '^default' | grep eth1 || true)
 
     if [ $bat_eth0_status -gt 0 ]; then
         ip link set eth0 down
@@ -149,6 +150,11 @@ bat_net_restore()
     fi
     if [ $bat_eth1_status -gt 0 ]; then
         ip link set eth1 up
+    fi
+    if [[ -n $bat_eth1_saved_route ]]; then
+        if ! ip route show | grep '^default' | grep eth1; then
+            ip route add $bat_eth1_saved_route
+        fi
     fi
 }
 
