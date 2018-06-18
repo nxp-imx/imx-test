@@ -18,7 +18,7 @@ declare -A todo=(\
 # skip unsupported features
 declare -A skip=(\
 ["i.MX8QXP"]="bat-gpio-keypad.sh bat-pwm.sh" \
-["i.MX8QM"]="bat-gpio-keypad.sh bat-pwm.sh" \
+["i.MX8QM"]="bat-gpio-keypad.sh" \
 ["i.MX8MQ"]="bat-pwm.sh" \
 ["i.MX7ULP"]="bat-cpufreq-freq-check.sh bat-rtc.sh bat-suspend.sh bat-uart.sh" \
 )
