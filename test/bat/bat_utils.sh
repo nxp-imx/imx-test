@@ -10,8 +10,8 @@ BAT_EXITCODE_TODO=3
 # (for unsupported features use the skip array below)
 declare -A todo=(\
 ["i.MX6SLL"]="bat-busfreq.sh" \
-["i.MX8QXP"]="bat-cpuidle.sh bat-suspend.sh bat-thermal-trip.sh" \
-["i.MX8QM"]="bat-suspend.sh bat-thermal-trip.sh" \
+["i.MX8QXP"]="bat-cpuidle.sh" \
+["i.MX8QM"]="" \
 ["i.MX8MQ"]="bat-suspend.sh" \
 )
 
