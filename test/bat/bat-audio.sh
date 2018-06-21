@@ -31,6 +31,10 @@ while read line; do
         echo "hw:$dev device is RPMSG. Skip aplay/arecord tests for now"
         continue
     fi
+    if grep -qi "micfil" <<< $line; then
+        echo "hw:$dev device is MICFIL. Skip arecord tests for now"
+        continue
+    fi
 
     # check if the device can perform playback and test it
     if [[ $line =~ "playback" ]]; then
