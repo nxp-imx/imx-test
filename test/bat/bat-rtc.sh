@@ -17,9 +17,14 @@ function find_irq()
     return 1
 }
 
-irq=$(find_irq "rtc imx8_mu_isr")
+soc=$(cat /sys/devices/soc0/soc_id)
+if [[ $soc == 'i.MX7ULP' ]]; then
+    irq=$(find_irq imx-mu-rpmsg)
+else
+    irq=$(find_irq "rtc imx8_mu_isr")
+fi
 
-if [ "$irq" = "imx8_mu_isr" ]; then
+if [[ "$irq" != "rtc" ]]; then
     check="-ge"
 else
     check="-eq"
