@@ -10,14 +10,6 @@ set -e
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 . $batdir/bat_utils.sh
 
-soc=$(cat /sys/devices/soc0/soc_id)
-case $soc in
-i.MX7ULP)
-    echo "Platform '$soc' does not have tempmon"
-    exit $BAT_EXITCODE_SKIP
-    ;;
-esac
-
 # get current temperature
 temp=$(bat_read_temp)
 echo "Current temp $temp"
