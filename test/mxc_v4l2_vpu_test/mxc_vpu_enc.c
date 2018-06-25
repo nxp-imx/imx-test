@@ -75,21 +75,18 @@ unsigned int profile = 0;// BP = 0, MP = 2, HP = 4
  **/
 void convert_feed_stream(component_t *pComponent, unsigned char *buf)
 {
-	unsigned char *y_start;
 	unsigned char *u_start;
 	unsigned char *v_start;
 	unsigned char *uv_temp;
 	unsigned int i, j;
 	unsigned int height = pComponent->ports[STREAM_DIR_IN].openFormat.yuv.nHeight;
 	unsigned int width = pComponent->ports[STREAM_DIR_IN].openFormat.yuv.nWidth;
-	unsigned int y_size, uv_size;
-	y_size = height * width;
+	unsigned int uv_size;
 	uv_size = height * width/2;
 	uv_temp = (unsigned char *)malloc(sizeof(unsigned char)*uv_size);
 
-	y_start = buf;
-	u_start = y_start + y_size;
-	v_start = y_start + y_size*5/4;
+	u_start = buf;
+	v_start = u_start + uv_size/2;
 	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
 		uv_temp[j] = u_start[i];
 		uv_temp[j+1] = v_start[i];
@@ -681,7 +678,7 @@ void test_streamin(component_t *pComponent)
 				stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 				stV4lBuf.memory = V4L2_MEMORY_MMAP;
                 stV4lBuf.m.planes = stV4lPlanes;
-	            stV4lBuf.length = 1;
+	            stV4lBuf.length = 2;
 				lErr = ioctl(pComponent->hDev, VIDIOC_DQBUF, &stV4lBuf);
 				if (!lErr)
 				{
@@ -723,7 +720,8 @@ RETRY:
 				        pBuf = stAppV4lBuf[pstV4lBuf->index].addr[i];
                         block_size = stAppV4lBuf[pstV4lBuf->index].size[i];
 					    pstV4lBuf->m.planes[i].bytesused = fread((void*)pBuf, 1, block_size, fpInput);
-						convert_feed_stream(pComponent, (unsigned char *)pBuf);
+						if (i==1)
+							convert_feed_stream(pComponent, (unsigned char *)pBuf);
 					    pstV4lBuf->m.planes[i].data_offset = 0;
 						file_size -= pstV4lBuf->m.planes[i].bytesused;
 						if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_IN].memory)
@@ -910,10 +908,17 @@ static void set_encoder_parameters(pMEDIAIP_ENC_PARAM pin_enc_param ,component_t
 	ctl.id = V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP;
 	ctl.value = pin_enc_param->uInitSliceQP;
 	lErr = ioctl(pComponent->hDev, VIDIOC_S_CTRL, &ctl);
- 	if (lErr)
+	if (lErr)
  	{
 		printf("%s() VIDIOC_S_CTRL ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
  	}
+	memset(&ctl, 0, sizeof(struct v4l2_control));
+	ctl.id = V4L2_CID_MIN_BUFFERS_FOR_OUTPUT;
+	lErr = ioctl(pComponent->hDev, VIDIOC_G_CTRL, &ctl);
+ 	if (lErr)
+	{
+		printf("%s() VIDIOC_S_CTRL ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+	}
 }
 
 #define MAX_SUPPORTED_COMPONENTS	5
@@ -1302,12 +1307,12 @@ HAS_2ND_CMD:
 		lErr = 11;
 		goto FUNC_END;
     }
- 
+
     // set v4l2 output format (yuv data input)
     memset(&format, 0, sizeof(struct v4l2_format));
     format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     format.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12;
-    format.fmt.pix_mp.num_planes = 1;
+    format.fmt.pix_mp.num_planes = 2;
 	format.fmt.pix_mp.width = enc_param.uSrcWidth;
 	format.fmt.pix_mp.height = enc_param.uSrcHeight;
 	pComponent->ports[STREAM_DIR_IN].openFormat.yuv.nWidth = enc_param.uSrcWidth;
@@ -1339,7 +1344,6 @@ HAS_2ND_CMD:
     req_bufs.count = pComponent->ports[STREAM_DIR_IN].buf_count;
     req_bufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     req_bufs.memory = V4L2_MEMORY_MMAP;
-
     lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs);
 	if (lErr)
 	{
@@ -1372,13 +1376,13 @@ HAS_2ND_CMD:
 		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.bytesused = 0;
 		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.memory = pComponent->ports[STREAM_DIR_IN].memory;
             pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes = pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lPlanes;
-		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.length = 1;
+		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.length = 2;
 
 			stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 			stV4lBuf.memory = V4L2_MEMORY_MMAP;
 			stV4lBuf.index = nV4lBufCnt;
             stV4lBuf.m.planes = stV4lPlanes;
-	        stV4lBuf.length = 1;
+	        stV4lBuf.length = 2;
 			lErr = ioctl(pComponent->hDev, VIDIOC_QUERYBUF, &stV4lBuf);
 			if (!lErr)
 			{
