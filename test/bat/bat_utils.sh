@@ -37,6 +37,26 @@ bat_skip_with_nfsroot() {
     fi
 }
 
+BAT_UNBOUND_IMX_USB=
+
+bat_unbind_imx_usb()
+{
+    local item
+    for item in /sys/bus/platform/drivers/imx_usb/*\.usb; do
+        item=$(basename $item)
+        echo "$item" > /sys/bus/platform/drivers/imx_usb/unbind
+        BAT_UNBOUND_IMX_USB+=" $item"
+    done
+}
+
+bat_rebind_imx_usb()
+{
+    for item in $BAT_UNBOUND_IMX_USB; do
+        echo "$item" > /sys/bus/platform/drivers/imx_usb/bind
+    done
+    BAT_UNBOUND_IMX_USB=
+}
+
 # reexecute the current script ($0) inside a temporary tmpfs root
 #
 # this makes it possible to run scripts which disable the network from a nfsroot
@@ -79,6 +99,8 @@ bat_reexec_ramroot() {
             which date
             which time
             which taskset
+            which sed
+            which awk
             echo "$batdir/bat_utils.sh"
             echo "$0"
         } | {
@@ -124,12 +146,43 @@ bat_reexec_ramroot() {
     fi
 }
 
+# Wait for ipv4 device $1 to be registered
+bat_net_dev_wait_registered()
+{
+    while [[ ! -d /sys/class/net/$1 ]]; do
+        echo "waiting for net device $1 ..."
+        sleep 1
+    done
+}
+
+# List ipv4 addresses for device $1
+bat_net_dev_list_ipaddr()
+{
+    ip -4 -o addr show dev $1 scope global | awk '{ print $4 }'
+}
+
+# Restore ip addresses for device $1
+# The list of ipaddr must be passed in $2
+bat_net_dev_restore_ipaddr()
+{
+    local dev=$1 curr_list ipaddr
+
+    curr_list=$(bat_net_dev_list_ipaddr $dev)
+    for ipaddr in $2; do
+        if echo "$curr_list" | grep -q -v "$ipaddr"; then
+            ip addr add $ipaddr dev $dev
+        fi
+    done
+}
+
 bat_net_down()
 {
     bat_eth0_status=$(ip link show up | grep eth0 | wc -l)
     bat_eth1_status=$(ip link show up | grep eth1 | wc -l)
     bat_eth0_saved_route=$(ip route show | grep '^default' | grep eth0 || true)
     bat_eth1_saved_route=$(ip route show | grep '^default' | grep eth1 || true)
+    bat_eth0_saved_ipaddr=$(bat_net_dev_list_ipaddr eth0)
+    bat_eth1_saved_ipaddr=$(bat_net_dev_list_ipaddr eth1)
 
     if [ $bat_eth0_status -gt 0 ]; then
         ip link set eth0 down
@@ -137,21 +190,30 @@ bat_net_down()
     if [ $bat_eth1_status -gt 0 ]; then
         ip link set eth1 down
     fi
+
+    bat_unbind_imx_usb
 }
 
 bat_net_restore()
 {
+    bat_rebind_imx_usb
+
     if [ $bat_eth0_status -gt 0 ]; then
+        bat_net_dev_wait_registered eth0
         ip link set eth0 up
     fi
+    bat_net_dev_restore_ipaddr eth0 "$bat_eth0_saved_ipaddr"
     if [[ -n $bat_eth0_saved_route ]]; then
         if ! ip route show | grep '^default' | grep eth0; then
             ip route add $bat_eth0_saved_route
         fi
     fi
+
     if [ $bat_eth1_status -gt 0 ]; then
+        bat_net_dev_wait_registered eth1
         ip link set eth1 up
     fi
+    bat_net_dev_restore_ipaddr eth1 "$bat_eth1_saved_ipaddr"
     if [[ -n $bat_eth1_saved_route ]]; then
         if ! ip route show | grep '^default' | grep eth1; then
             ip route add $bat_eth1_saved_route
