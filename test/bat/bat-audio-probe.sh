@@ -17,7 +17,8 @@ case $machine in
     expected_cards_no=4
     ;;
 'Freescale i.MX6 DualLite/Solo SABRE Automotive Board'|\
-'Freescale i.MX6 Quad Plus SABRE Automotive Board'\
+'Freescale i.MX6 Quad Plus SABRE Automotive Board'|\
+'FSL i.MX8MM EVK board'\
 )
     expected_cards_no=3
     ;;
