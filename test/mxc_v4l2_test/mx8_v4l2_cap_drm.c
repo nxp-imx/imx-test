@@ -98,7 +98,7 @@ struct video_channel {
 	char v4l_dev_name[100];
 	int mem_type;
 	char save_file_name[100];
-	FILE *pfile;
+	int file_fd;
 	int cur_buf_id;
 	struct testbuffer buffers[TEST_BUFFER_NUM];
 	int frame_num;
@@ -1122,8 +1122,8 @@ int open_save_file(void)
 
 	for (i = 0; i < 8; i++) {
 		if (video_ch[i].init) {
-			if ((video_ch[i].pfile =
-			     fopen(video_ch[i].save_file_name, "wb")) == NULL) {
+			if ((video_ch[i].file_fd =
+				 open(video_ch[i].save_file_name, O_RDWR | O_CREAT)) < 0) {
 				v4l2_err("Unable to create recording file, \n");
 				return -1;
 			}
@@ -1138,12 +1138,11 @@ int save_to_file(int ch_id)
 	int buf_id = video_ch[ch_id].cur_buf_id;
 	int i;
 
-	if (video_ch[ch_id].pfile) {
+	if (video_ch[ch_id].file_fd) {
 		/* Save capture frame to file */
 		for (i = 0; i < g_num_planes; i++) {
-			wsize = fwrite(video_ch[ch_id].buffers[buf_id].planes[i].start,
-					   video_ch[ch_id].buffers[buf_id].planes[i].plane_size, 1,
-					   video_ch[ch_id].pfile);
+			wsize = write(video_ch[ch_id].file_fd, video_ch[ch_id].buffers[buf_id].planes[i].start,
+					   video_ch[ch_id].buffers[buf_id].planes[i].plane_size);
 
 			if (wsize < 1) {
 				v4l2_err
@@ -1161,8 +1160,8 @@ int close_save_file(void)
 	int i;
 
 	for (i = 0; i < 8; i++)
-		if (video_ch[i].on && video_ch[i].pfile)
-			fclose(video_ch[i].pfile);
+		if (video_ch[i].on && video_ch[i].file_fd)
+			close(video_ch[i].file_fd);
 
 	return 0;
 }
