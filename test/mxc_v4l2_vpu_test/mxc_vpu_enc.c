@@ -1460,10 +1460,6 @@ HAS_2ND_CMD:
 		goto HAS_2ND_CMD;
 	}
 
-    
-
-	// wait for user input
-	changemode(1);
 
 CHECK_USER_INPUT:
 	while ((g_unCtrlCReceived == 0) && !kbhit())
@@ -1493,8 +1489,6 @@ CHECK_USER_INPUT:
 	time_total += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 	fps=frame_count*1000000.0/time_total;
 	printf("time_total=%f,frame_count=%d,fps=%f\n", time_total / 1000000.0, frame_count, fps);
-
-	changemode(0);
 
 FUNCTION_STOP:
 
