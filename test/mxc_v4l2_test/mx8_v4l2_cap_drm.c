@@ -17,282 +17,174 @@
  */
 
 /* Standard Include Files */
-#include <asm/types.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/fb.h>
-#include <linux/videodev2.h>
-#include <malloc.h>
-#include <pthread.h>
-#include <string.h>
-#include <stdint.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
 #include <signal.h>
-#include <sys/mman.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
+#include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <math.h>
+#include <poll.h>
+#include <pthread.h>
+
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <drm/drm.h>
 #include <drm/drm_mode.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-#include <errno.h>
-#include <string.h>
+#include <linux/videodev2.h>
 
 #include "../../include/soc_check.h"
 
-static int log_level = 6;
+/* Helper Macro */
+#define NUM_PLANES				3
+#define TEST_BUFFER_NUM			3
+#define NUM_SENSORS				8
+#define NUM_CARDS				8
+#define DEFAULT					4
+#define WIDTH					1280
+#define HEIGHT					800
 
-#define DBG_LEVEL	6
-#define INFO_LEVEL	5
-#define ERR_LEVEL	4
+#define INFO_LEVEL				4
+#define DBG_LEVEL				5
+#define ERR_LEVEL				6
 
-#define v4l2_printf(LEVEL, fmt, args...) \
+#define v4l2_printf(LEVEL, fmt, args...)  \
 do {                                      \
-	if (LEVEL <= log_level)                \
-		printf(fmt, ##args);              \
+	if (LEVEL <= log_level)               \
+		printf("(%s:%d): "fmt, __func__, __LINE__, ##args);   \
 } while(0)
 
-#define v4l2_info(fmt, args...) v4l2_printf(INFO_LEVEL, fmt, ##args)
-#define v4l2_dbg(fmt, args...) v4l2_printf(DBG_LEVEL, fmt, ##args)
-#define v4l2_err(fmt, args...) v4l2_printf(ERR_LEVEL, fmt, ##args)
+#define v4l2_info(fmt, args...)  \
+		v4l2_printf(INFO_LEVEL,"\x1B[36m"fmt"\e[0m", ##args)
+#define v4l2_dbg(fmt, args...)   \
+		v4l2_printf(DBG_LEVEL, "\x1B[33m"fmt"\e[0m", ##args)
+#define v4l2_err(fmt, args...)   \
+	    v4l2_printf(ERR_LEVEL, "\x1B[31m"fmt"\e[0m", ##args)
 
-#define TEST_BUFFER_NUM 3
-#define MAX_V4L2_DEVICE_NR     64
-#define MAX_SIZE	3
+/*
+ * DRM modeset releated data structure definition
+ */
+struct drm_buffer {
+	void *fb_base;
 
-#define NUM_PLANES 3
-#define MAX_NUM_CARD	8
+	__u32 width;
+	__u32 height;
+	__u32 stride;
+	__u32 size;
 
-sigset_t sigset;
-int quitflag;
+	__u32 handle;
+	__u32 buf_id;
+};
 
-static int start_streamon(void);
+struct drm_device {
+	int drm_fd;
 
+	__s32 crtc_id;
+	__s32 conn_id;
+	__s32 card_id;
+
+	__u32 bits_per_pixel;
+	__u32 bytes_per_pixel;
+
+	drmModeModeInfo mode;
+	drmModeCrtc *saved_crtc;
+
+	/* double buffering */
+	struct drm_buffer buffers[2];
+	__u32 nr_buffer;
+	__u32 front_buf;
+};
+
+/*
+ * V4L2 releated data structure definition
+ */
 struct plane_buffer {
-	unsigned char *start;
+	__u8 *start;
+	__u32 plane_size;
+	__u32 length;
 	size_t offset;
-	unsigned int length;
-	unsigned int plane_size;
 };
 
 struct testbuffer {
-	unsigned char *start;
-	size_t offset;
-	unsigned int length;
 	struct plane_buffer planes[NUM_PLANES];
+	__u32 nr_plane;
 };
 
 struct video_channel {
-	/* v4l2 info */
-	int init;
-	int on;
-	int index;		//video channel index
-	int out_width;
-	int out_height;
-	int cap_fmt;
-	int v4l_dev;
-	char v4l_dev_name[100];
-	int mem_type;
+	int v4l_fd;
+	int saved_file_fd;
+
+	__u32 init;
+	__u32 on;
+	__u32 index;
+	__u32 cap_fmt;
+	__u32 mem_type;
+	__u32 cur_buf_id;
+	__u32 frame_num;
+
+	__u32 out_width;
+	__u32 out_height;
+
 	char save_file_name[100];
-	int file_fd;
-	int cur_buf_id;
-	struct testbuffer buffers[TEST_BUFFER_NUM];
-	int frame_num;
+	char v4l_dev_name[100];
 
 	/* fb info */
-	int x_offset;
-	int y_offset;
+	__s32 x_offset;
+	__s32 y_offset;
+
+	struct testbuffer buffers[TEST_BUFFER_NUM];
+	__u32 nr_buffer;
+
+	struct timeval tv1;
+	struct timeval tv2;
 };
 
-struct drm_kms {
-	void *fb_base;
-	__u32 bytes_per_pixel;
-	__u32 bpp;
-
-	__u32 connector_id;
-	__u32 stride;
-	__u32 size;
-	__u32 handle;
-	__u32 buf_id;
-
-	__s32 width, height;
-	__s32 drm_fd;
-	__s32 crtc_id;
-
-	drmModeModeInfo *mode;
-	drmModeConnector *connector;
-	drmModeEncoder *encoder;
+struct v4l2_device {
+	struct video_channel video_ch[NUM_SENSORS];
 };
 
-struct video_channel video_ch[8];
-
-int g_cam_max = 8;		/* MAX support video channel */
-int g_cam_num = 0;		/* Current enablke video channel */
-int g_cam = 0;			/* video channel select */
-int g_out_width = 1280;
-int g_out_height = 800;
-int g_cap_fmt = V4L2_PIX_FMT_RGB32;
-int g_fb_fmt = V4L2_PIX_FMT_RGB32;
-int g_capture_mode = 0;
-int g_timeout = 10;
-int g_camera_framerate = 30;	/* 30 fps */
-int g_loop = 0;
-int g_mem_type = V4L2_MEMORY_MMAP;
-int g_saved_to_file = 0;
-int g_performance_test = 0;
-int g_num_planes = 1;
-char g_fmt_name[10] = {"rgb32"};
-
-char g_v4l_device[8][100] = {
-	"/dev/video0",
-	"/dev/video1",
-	"/dev/video2",
-	"/dev/video3",
-	"/dev/video4",
-	"/dev/video5",
-	"/dev/video6",
-	"/dev/video7"
+struct media_dev {
+	struct drm_device *drm_dev;
+	struct v4l2_device *v4l2_dev;
+	__u32 total_frames_cnt;
 };
 
-char g_saved_filename[8][100] = {
-	"0.",
-	"1.",
-	"2.",
-	"3.",
-	"4.",
-	"5.",
-	"6.",
-	"7.",
-};
+/*
+ * Global variable definition
+ */
+static sigset_t sigset;
+static uint32_t log_level;
+static uint32_t g_cam;
+static uint32_t g_cam_num;
+static uint32_t g_num_buffers;
+static uint32_t g_num_frames;
+static uint32_t g_num_planes;
+static uint32_t g_capture_mode;
+static uint32_t g_camera_framerate;
+static uint32_t g_cap_fmt;
+static uint32_t g_mem_type;
+static uint32_t g_out_width;
+static uint32_t g_out_height;
 
-static __u32 fmt_array[] = {
-	V4L2_PIX_FMT_RGB32,
-	V4L2_PIX_FMT_NV12,
-};
+static bool g_saved_to_file;
+static bool g_performance_test;
+static bool quitflag;
 
-void show_device_cap_list(void);
-int prepare_capturing(int ch_id);
+static char g_v4l_device[NUM_SENSORS][100];
+static char g_saved_filename[NUM_SENSORS][100];
+static char g_fmt_name[10];
 
-static void print_pixelformat(char *prefix, int val)
-{
-	v4l2_dbg("%s: %c%c%c%c\n", prefix ? prefix : "pixelformat",
-	       val & 0xff,
-	       (val >> 8) & 0xff, (val >> 16) & 0xff, (val >> 24) & 0xff);
-}
-
-static int get_num_planes_by_fmt(__u32 fmt)
-{
-	int planes;
-
-	switch (fmt) {
-	case V4L2_PIX_FMT_RGB565:
-	case V4L2_PIX_FMT_RGB24:
-	case V4L2_PIX_FMT_RGB32:
-	case V4L2_PIX_FMT_BGR24:
-	case V4L2_PIX_FMT_ARGB32:
-	case V4L2_PIX_FMT_YUYV:
-	case V4L2_PIX_FMT_YUV32:
-		planes = 1;
-		break;
-	case V4L2_PIX_FMT_NV12:
-		planes = 2;
-		break;
-	default:
-		planes = 0;
-		printf("Not found support format, planes=%d\n", planes);
-	}
-
-	return planes;
-}
-
-static void get_fmt_name(__u32 fmt)
-{
-	switch (fmt) {
-	case V4L2_PIX_FMT_RGB32:
-		strcpy(g_fmt_name, "rgb32");
-		break;
-	case V4L2_PIX_FMT_NV12:
-		strcpy(g_fmt_name, "nv12");
-		break;
-	default:
-		strcpy(g_fmt_name, "null");
-	}
-}
-
-void print_help(void)
-{
-	v4l2_info("CSI Video4Linux capture Device Test\n"
-	       "Syntax: ./mx8_cap\n"
-	       " -t <time>\n"
-	       " -of save to file \n"
-	       " -l <device support list>\n"
-	       " -cam <device index> 0bxxxx,xxxx\n"
-	       " -log <log_level>   output all information, log_level should be 6\n"
-	       " -d \"/dev/videoX\" if user use this option, -cam should be 1\n"
-		   " -p test performance, need to combine with \"-of\" option\n"
-		   " -m <mode> specify camera sensor capture mode(mode:0, 1, 2, 3, 4)\n"
-		   " -fr <frame_rate> support 15fps and 30fps\n"
-		   " -fmt <format> support RGB32 and NV12, 0->RGB32, 1->NV12. NV12 not support playback\n"
-	       "example:\n"
-	       "./mx8_cap -cam 1      capture data from video0 and playback\n"
-	       "./mx8_cap -cam 3      capture data from video0/1 and playback\n"
-	       "./mx8_cap -cam 7 -of  capture data from video0~2 and save to 0~2.rgb32\n"
-	       "./mx8_cap -cam 255  -of capture data from video0~7 and save to 0~7.rgb32\n"
-	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.rgb32\n"
-	       "./mx8_cap -cam 1 -fmt 1 -of capture data from video0 and save to 0.nv12\n"
-	       "./mx8_cap -cam 1 -of -p test video0 performace\n");
-}
-
-int process_cmdline(int argc, char **argv)
-{
-	int i;
-
-	for (i = 1; i < argc; i++) {
-		if (strcmp(argv[i], "-cam") == 0) {
-			unsigned long mask;
-			mask = strtoul(argv[++i], NULL, 0);
-			g_cam = mask;
-		} else if (strcmp(argv[i], "-t") == 0) {
-			g_timeout = atoi(argv[++i]);
-		} else if (strcmp(argv[i], "-loop") == 0) {
-			g_loop = atoi(argv[++i]);
-		} else if (strcmp(argv[i], "-help") == 0) {
-			print_help();
-			return -1;
-		} else if (strcmp(argv[i], "-of") == 0) {
-			g_saved_to_file = 1;
-		} else if (strcmp(argv[i], "-l") == 0) {
-			show_device_cap_list();
-			return -1;
-		} else if (strcmp(argv[i], "-p") == 0) {
-			g_performance_test = 1;
-		} else if (strcmp(argv[i], "-log") == 0) {
-			log_level = atoi(argv[++i]);
-		} else if (strcmp(argv[i], "-m") == 0) {
-			g_capture_mode = atoi(argv[++i]);
-		} else if (strcmp(argv[i], "-fr") == 0) {
-			g_camera_framerate = atoi(argv[++i]);
-		} else if (strcmp(argv[i], "-fmt") == 0) {
-			g_cap_fmt = fmt_array[atoi(argv[++i])];
-		} else if (strcmp(argv[i], "-d") == 0) {
-			if (g_cam != 1) {
-				print_help();
-				return -1;
-			}
-			strcpy(g_v4l_device[0], argv[++i]);
-		} else {
-			print_help();
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
+/*
+ *
+ */
 static int signal_thread(void *arg)
 {
 	int sig;
@@ -302,9 +194,9 @@ static int signal_thread(void *arg)
 	while (1) {
 		sigwait(&sigset, &sig);
 		if (sig == SIGINT) {
-			printf("Ctrl-C received. Exiting.\n");
+			v4l2_info("Ctrl-C received. Exiting.\n");
 		} else {
-			printf("Unknown signal. Still exiting\n");
+			v4l2_err("Unknown signal. Still exiting\n");
 		}
 		quitflag = 1;
 		break;
@@ -312,429 +204,63 @@ static int signal_thread(void *arg)
 	return 0;
 }
 
-
-int init_video_channel(int ch_id)
+static void global_vars_init(void)
 {
-	video_ch[ch_id].init = 1;
-	video_ch[ch_id].out_width = g_out_width;
-	video_ch[ch_id].out_height = g_out_height;
-	video_ch[ch_id].cap_fmt = g_cap_fmt;
-	video_ch[ch_id].mem_type = g_mem_type;
-	video_ch[ch_id].x_offset = 0;
-	video_ch[ch_id].y_offset = 0;
-
-	strcpy(video_ch[ch_id].v4l_dev_name, g_v4l_device[ch_id]);
-	strcpy(video_ch[ch_id].save_file_name, g_saved_filename[ch_id]);
-	v4l2_dbg("%s, %s init %d\n", __func__,
-	       video_ch[ch_id].v4l_dev_name, ch_id);
-	return 0;
-}
-
-static void dump_drm_clients(const int dev_num)
-{
-	char cmd[50];
-
-	sprintf(cmd, "cat /sys/kernel/debug/dri/%d/clients", dev_num);
-
-	printf("========================================================\n");
-	system(cmd);
-	printf("========================================================\n");
-	printf("Please ensure there is no other master client\n");
-	printf("========================================================\n");
-}
-
-static void drm_cleanup(struct drm_kms *kms)
-{
-	struct drm_mode_destroy_dumb dreq;
-
-	munmap(kms->fb_base, kms->size);
-
-	memset(&dreq, 0, sizeof(dreq));
-	dreq.handle = kms->handle;
-	drmIoctl(kms->buf_id, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
-
-	drmModeRmFB(kms->drm_fd, kms->buf_id);
-	drmModeFreeEncoder(kms->encoder);
-	drmModeFreeConnector(kms->connector);
-}
-
-static int drm_setup(struct drm_kms *kms)
-{
-	int i = 0, ret;
-	char dev_name[15];
-	uint64_t  has_dumb;
-
-loop:
-	sprintf(dev_name, "/dev/dri/card%d", i++);
-
-	kms->drm_fd = open(dev_name, O_RDWR | O_CLOEXEC | O_NONBLOCK);
-	if (kms->drm_fd < 0) {
-		v4l2_err("Open %s fail\n", dev_name);
-		return -1;
-	}
-
-	if (drmGetCap(kms->drm_fd, DRM_CAP_DUMB_BUFFER, &has_dumb) < 0 ||
-	    !has_dumb) {
-		v4l2_err("drm device '%s' does not support dumb buffers\n", dev_name);
-		close(kms->drm_fd);
-		goto loop;
-	}
-
-	ret = drmSetMaster(kms->drm_fd);
-	if (ret) {
-		dump_drm_clients(i - 1);
-		goto err0;
-	}
-
-	drmModeRes *res;
-	drmModeConnector *conn;
-	drmModeEncoder *encoder;
-
-	res = drmModeGetResources(kms->drm_fd);
-	if (!res) {
-		if (i > MAX_NUM_CARD) {
-			v4l2_err("Cannot retrieve DRM resources (%d)\n", errno);
-			goto err1;
-		}
-		drmDropMaster(kms->drm_fd);
-		close(kms->drm_fd);
-		goto loop;
-	}
-	v4l2_info("Open '%s' success\n", dev_name);
-
-	/* iterate all connectors */
-	for (i = 0; i < res->count_connectors; i++) {
-		/* get information for each connector */
-		conn = drmModeGetConnector(kms->drm_fd, res->connectors[i]);
-		if (!conn) {
-			v4l2_err("Cannot retrieve DRM connector %u:%u (%d)\n",
-				i, res->connectors[i], errno);
-			continue;
-		}
-
-		if (conn->connection == DRM_MODE_CONNECTED &&
-					conn->count_modes > 0)
-			break;
-
-		drmModeFreeConnector(conn);
-	}
-
-	if ((i == res->count_connectors) && (conn == NULL)) {
-		v4l2_info("No currently active connector found.\n");
-		ret = -errno;
-		goto err2;
-	}
-
-	/* Get Screen resoultion info */
-	kms->width = conn->modes[0].hdisplay;
-	kms->height = conn->modes[0].vdisplay;
-
-	v4l2_info("Screen resolution is %d*%d\n", kms->width, kms->height);
-
-	int crtc_id;
-	for (i = 0; i < conn->count_encoders; i++) {
-		encoder = drmModeGetEncoder(kms->drm_fd, conn->encoders[i]);
-		if (encoder == NULL)
-			continue;
-
-		int j;
-		for (j = 0; j < res->count_crtcs; j++) {
-			if (encoder->possible_crtcs & (1 << j)) {
-				crtc_id = res->crtcs[j];
-				drmModeFreeEncoder(encoder);
-				break;
-			}
-			crtc_id = -1;
-		}
-
-		if (j == res->count_crtcs && crtc_id == -1) {
-			v4l2_err("cannot find crtc\n");
-			drmModeFreeEncoder(encoder);
-		}
-	}
-	kms->crtc_id = crtc_id;
-
-	if (i == conn->count_encoders && encoder == NULL) {
-		v4l2_err("Cannot find encoder\n");
-		ret = -errno;
-		goto err3;
-	}
-
-	struct drm_mode_create_dumb creq;
-	struct drm_mode_destroy_dumb dreq;
-	struct drm_mode_map_dumb mreq;
-
-	memset(&creq, 0, sizeof(creq));
-	creq.width = kms->width;
-	creq.height = kms->height;
-	creq.bpp = 32;
-
-	ret = drmIoctl(kms->drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
-	if (ret < 0) {
-		printf("cannot create dumb buffer (%d)\n", errno);
-		return -errno;
-	}
-
-	kms->stride = creq.pitch;
-	kms->size = creq.size;
-	kms->handle = creq.handle;
-
-	ret = drmModeAddFB(kms->drm_fd, kms->width, kms->height, 24, 32,
-				kms->stride, kms->handle, &kms->buf_id); /* buf_id */
-	if (ret) {
-		v4l2_err("Add framebuffer (%d) fail\n", kms->buf_id);
-		goto err4;
-	}
-
-	memset(&mreq, 0, sizeof(mreq));
-	mreq.handle = creq.handle;
-	ret = drmIoctl(kms->drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq);
-	if (ret) {
-		v4l2_err("Map dump ioctl fail\n");
-		goto err5;
-	}
-
-	kms->fb_base = mmap(0, kms->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-				kms->drm_fd, mreq.offset);
-	if (kms->fb_base == MAP_FAILED) {
-		v4l2_err("Cannot mmap dumb buffer (%d)\n", errno);
-		goto err6;
-	}
-	memset(kms->fb_base, 0, kms->size);
-
-	ret = drmModeSetCrtc(kms->drm_fd, kms->crtc_id, kms->buf_id, 0, 0,
-				&conn->connector_id, 1, conn->modes);
-
-	/* free resources again */
-	drmModeFreeResources(res);
-	drmDropMaster(kms->drm_fd);
-
-	kms->bpp = creq.bpp;
-	kms->bytes_per_pixel = kms->bpp >> 3;
-	kms->bpp = kms->bpp;
-	kms->connector = conn;
-	kms->encoder = encoder;
-
-	v4l2_info("======== KMS INFO ========\n"
-		   "fb_base=%p\n"
-		   "w/h=(%d,%d)\n"
-		   "bytes_per_pixel=%d\n"
-		   "bpp=%d\n"
-		   "screen_size=%d\n"
-		   "======== KMS END =========\n", kms->fb_base, kms->width,
-		   kms->height, kms->bytes_per_pixel, kms->bpp, kms->size);
-
-	return 0;
-
-err6:
-	memset(&dreq, 0, sizeof(dreq));
-	dreq.handle = creq.handle;
-	drmIoctl(kms->buf_id, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
-err5:
-	drmModeRmFB(kms->drm_fd, kms->buf_id);
-err4:
-	drmModeFreeEncoder(encoder);
-err3:
-	drmModeFreeConnector(conn);
-err2:
-	drmModeFreeResources(res);
-err1:
-	drmDropMaster(kms->drm_fd);
-err0:
-	close(kms->drm_fd);
-	return ret;
-}
-
-static int mx8_capturing_prepare(void)
-{
-	unsigned int i;
-
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on) {
-			if (prepare_capturing(i) < 0) {
-				v4l2_err
-				    ("prepare_capturing failed, channel%d\n",
-				     i);
-				return -1;
-			}
-		}
-	return 0;
-}
-
-static int mx8_qbuf(void)
-{
-	unsigned int i;
-	unsigned int j;
-	struct v4l2_buffer buf;
-	struct v4l2_plane *planes = NULL;
-
-	planes = calloc(g_num_planes, sizeof(*planes));
-	if (!planes) {
-		v4l2_err("%s, alloc plane mem fail\n", __func__);
-		return -1;
-	}
-
-	for (j = 0; j < 8; j++) {
-		if (video_ch[j].on) {
-			int fd_v4l = video_ch[j].v4l_dev;
-			int mem_type = video_ch[j].mem_type;
-			for (i = 0; i < TEST_BUFFER_NUM; i++) {
-				memset(&buf, 0, sizeof(buf));
-				buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-				buf.memory = mem_type;
-				buf.m.planes = planes;
-				buf.index = i;
-				buf.length = g_num_planes;
-				for (int k = 0; k < g_num_planes; k++) {
-					buf.m.planes[k].length = video_ch[j].buffers[i].planes[k].length;
-
-					if (mem_type == V4L2_MEMORY_USERPTR)
-						buf.m.planes->m.userptr =
-							(unsigned long)video_ch[j].buffers[i].start;
-					else
-						buf.m.planes[k].m.mem_offset =
-							video_ch[j].buffers[i].planes[j].offset;
-				}
-
-				if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
-					v4l2_err("VIDIOC_QBUF error\n");
-					free(planes);
-					return -1;
-				}
-			}
-		}
-	}
-
-	free(planes);
-	return 0;
-}
-
-static int free_buffer(int ch_id)
-{
-	struct v4l2_requestbuffers req;
-	int fd_v4l = video_ch[ch_id].v4l_dev;
-	int mem_type = video_ch[ch_id].mem_type;
 	int i;
 
-	for (i = 0; i < TEST_BUFFER_NUM; i++) {
-		for (int k = 0; k < g_num_planes; k++) {
-			munmap(video_ch[ch_id].buffers[i].planes[k].start,
-					video_ch[ch_id].buffers[i].planes[k].length);
-		}
+	for (i = 0; i < NUM_SENSORS; i++) {
+		sprintf(g_v4l_device[i], "/dev/video%d", i);
+		sprintf(g_saved_filename[i], "%d.", i);
 	}
+	sprintf(g_fmt_name, "rgb32");
 
-	memset(&req, 0, sizeof(req));
-	req.count = 0;
-	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	req.memory = mem_type;
+	log_level = DEFAULT;
+	g_cam_num = 0;
+	g_num_planes = 1;
+	g_num_buffers = TEST_BUFFER_NUM;
+	g_num_frames = 300;
+	g_out_width = WIDTH;
+	g_out_height = HEIGHT;
+	g_capture_mode = 0;
+	g_camera_framerate = 30;
+	g_cap_fmt = V4L2_PIX_FMT_RGB32;
+	g_mem_type = V4L2_MEMORY_MMAP;
 
-	if (ioctl(fd_v4l, VIDIOC_REQBUFS, &req) < 0) {
-		v4l2_err("free buffer failed (chan_ID:%d)\n", ch_id);
-		return -1;
-	}
-
-	return 0;
+	quitflag = false;
+	g_saved_to_file = false;
+	g_performance_test = false;
 }
 
-int prepare_capturing(int ch_id)
+static void print_help(const char *name)
 {
-	unsigned int i;
-	struct v4l2_buffer buf;
-	struct v4l2_requestbuffers req;
-	struct v4l2_plane *planes = NULL;
-	int fd_v4l = video_ch[ch_id].v4l_dev;
-	int mem_type = video_ch[ch_id].mem_type;
-
-	planes = calloc(g_num_planes, sizeof(*planes));
-	if (!planes) {
-		v4l2_err("%s, alloc plane mem fail\n", __func__);
-		return -1;
-	}
-
-	memset(&req, 0, sizeof(req));
-	req.count = TEST_BUFFER_NUM;
-	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	req.memory = mem_type;
-
-	if (ioctl(fd_v4l, VIDIOC_REQBUFS, &req) < 0) {
-		v4l2_err("VIDIOC_REQBUFS failed\n");
-		goto err;
-	}
-
-	if (req.count < TEST_BUFFER_NUM) {
-		v4l2_err("Can't alloc 3 buffers\n");
-		goto err;
-	}
-
-	if (mem_type == V4L2_MEMORY_MMAP) {
-		for (i = 0; i < TEST_BUFFER_NUM; i++) {
-			memset(&buf, 0, sizeof(buf));
-
-			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-			buf.memory = mem_type;
-			buf.m.planes = planes;
-			buf.length = g_num_planes;	/* plane num */
-			buf.index = i;
-
-			if (ioctl(fd_v4l, VIDIOC_QUERYBUF, &buf) < 0) {
-				v4l2_err("VIDIOC_QUERYBUF error\n");
-				goto err;
-			}
-
-			for (int j = 0; j < g_num_planes; j++) {
-				video_ch[ch_id].buffers[i].planes[j].length = buf.m.planes[j].length;
-				video_ch[ch_id].buffers[i].planes[j].offset = (size_t)buf.m.planes[j].m.mem_offset;
-				video_ch[ch_id].buffers[i].planes[j].start =
-				mmap(NULL,
-					 video_ch[ch_id].buffers[i].planes[j].length,
-					 PROT_READ | PROT_WRITE, MAP_SHARED,
-					 fd_v4l, video_ch[ch_id].buffers[i].planes[j].offset);
-
-				v4l2_dbg
-					("buffer[%d]->planes[%d] startAddr=0x%x, offset=0x%x, buf_size=%d\n",
-					 i, j,
-					 (unsigned int *)video_ch[ch_id].buffers[i].planes[j].start,
-					 video_ch[ch_id].buffers[i].planes[j].offset,
-					 video_ch[ch_id].buffers[i].planes[j].length);
-			}
-		}
-	}
-
-	free(planes);
-
-	return 0;
-err:
-	free(planes);
-	return -1;
+	v4l2_info("CSI Video4Linux capture Device Test\n"
+	       "Syntax: %s\n"
+	       " -num <numbers of frame need to be captured>\n"
+	       " -of save to file \n"
+	       " -l <device support list>\n"
+	       " -log <log level, 6 will show all message>\n"
+	       " -cam <device index> 0bxxxx,xxxx\n"
+	       " -d \"/dev/videoX\" if user use this option, -cam should be 1\n"
+		   " -p test performance, need to combine with \"-of\" option\n"
+		   " -m <mode> specify camera sensor capture mode(mode:0, 1, 2, 3, 4)\n"
+		   " -fr <frame_rate> support 15fps and 30fps\n"
+		   " -fmt <format> support RGB32 and NV12, 0->RGB32, 1->NV12. NV12 not support playback\n"
+	       "example:\n"
+	       "./mx8_cap -cam 1        capture data from video0 and playback\n"
+	       "./mx8_cap -cam 3        capture data from video0/1 and playback\n"
+	       "./mx8_cap -cam 7 -of    capture data from video0~2 and save to 0~2.rgb32\n"
+	       "./mx8_cap -cam 255 -of  capture data from video0~7 and save to 0~7.rgb32\n"
+	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.rgb32\n"
+	       "./mx8_cap -cam 1 -fmt 1 -of capture data from video0 and save to 0.nv12\n"
+	       "./mx8_cap -cam 1 -of -p test video0 performace\n", name);
 }
 
-int start_capturing(int ch_id)
-{
-	enum v4l2_buf_type type;
+static uint32_t fmt_array[] = {
+	V4L2_PIX_FMT_RGB32,
+	V4L2_PIX_FMT_NV12,
+};
 
-	int fd_v4l = video_ch[ch_id].v4l_dev;
-	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	if (ioctl(fd_v4l, VIDIOC_STREAMON, &type) < 0) {
-		v4l2_err("VIDIOC_STREAMON error\n");
-		return -1;
-	}
-	v4l2_dbg("%s channel=%d, v4l_dev=0x%x\n", __func__, ch_id, fd_v4l);
-	return 0;
-}
-
-int stop_capturing(int ch_id)
-{
-	enum v4l2_buf_type type;
-	int fd_v4l = video_ch[ch_id].v4l_dev;
-	int nframe = video_ch[ch_id].frame_num;
-
-	v4l2_dbg("%s channel=%d, v4l_dev=0x%x, frames=%d\n", __func__,
-	       ch_id, fd_v4l, nframe);
-	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	return ioctl(fd_v4l, VIDIOC_STREAMOFF, &type);
-}
-
-void show_device_cap_list(void)
+static void show_device_cap_list(const char *name)
 {
 	struct v4l2_capability cap;
 	struct v4l2_fmtdesc fmtdesc;
@@ -744,49 +270,41 @@ void show_device_cap_list(void)
 	char v4l_name[20];
 	int i;
 
-	for (i = 0; i < 10; i++) {
+	log_level = 6;
+	if (g_cam != 0) {
+		v4l2_err("only need -l option\n");
+		print_help(name);
+		log_level = DEFAULT;
+		return;
+	}
+
+	for (i = 0; i < NUM_SENSORS; i++) {
 		snprintf(v4l_name, sizeof(v4l_name), "/dev/video%d", i);
 
 		if ((fd_v4l = open(v4l_name, O_RDWR, 0)) < 0) {
-			v4l2_err
-			    ("\nunable to open %s for capture device.\n",
-			     v4l_name);
+			v4l2_err("unable to open %s for capture device\n", v4l_name);
 		} else
-			v4l2_info("\nopen video device %s \n", v4l_name);
+			v4l2_info("open video device %s\n", v4l_name);
 
 		if (ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap) == 0) {
 			if (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE) {
-				v4l2_info
-				    ("Found v4l2 MPLANE capture device %s\n",
-				     v4l_name);
+				v4l2_info("Found v4l2 MPLANE capture device %s\n", v4l_name);
 				fmtdesc.index = 0;
-				fmtdesc.type =
-				    V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-				while (ioctl
-				       (fd_v4l, VIDIOC_ENUM_FMT,
-					&fmtdesc) >= 0) {
-					print_pixelformat
-					    ("pixelformat (output by camera)",
-					     fmtdesc.pixelformat);
-					frmsize.pixel_format =
-					    fmtdesc.pixelformat;
+				fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+				while (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) >= 0) {
+					v4l2_info("pixelformat (output by camera)%.4s\n",
+					          (char *)&fmtdesc.pixelformat);
+					frmsize.pixel_format = fmtdesc.pixelformat;
 					frmsize.index = 0;
-					while (ioctl
-					       (fd_v4l,
-						VIDIOC_ENUM_FRAMESIZES,
-						&frmsize) >= 0) {
+					while (ioctl (fd_v4l, VIDIOC_ENUM_FRAMESIZES,
+								  &frmsize) >= 0) {
 						frmival.index = 0;
-						frmival.pixel_format =
-						    fmtdesc.pixelformat;
-						frmival.width =
-						    frmsize.discrete.width;
-						frmival.height =
-						    frmsize.discrete.height;
-						while (ioctl
-						       (fd_v4l,
-							VIDIOC_ENUM_FRAMEINTERVALS,
-							&frmival) >= 0) {
-							v4l2_dbg
+						frmival.pixel_format = fmtdesc.pixelformat;
+						frmival.width = frmsize.discrete.width;
+						frmival.height = frmsize.discrete.height;
+						while (ioctl(fd_v4l, VIDIOC_ENUM_FRAMEINTERVALS,
+							        &frmival) >= 0) {
+							v4l2_info
 							    ("CaptureMode=%d, Width=%d, Height=%d %.3f fps\n",
 							     frmsize.index,
 							     frmival.width,
@@ -803,141 +321,485 @@ void show_device_cap_list(void)
 					fmtdesc.index++;
 				}
 			} else
-				v4l2_err
-				    ("Video device %s not support v4l2 capture\n",
-				     v4l_name);
+				v4l2_err("Video device %s not support v4l2 capture\n", v4l_name);
 		}
 		close(fd_v4l);
+	}
+	log_level = DEFAULT;
+}
+
+static int parse_cmdline(int argc, const char *argv[])
+{
+	int i;
+
+	if (argc < 2) {
+		print_help(argv[0]);
+		return -1;
+	}
+
+	/* Parse command line */
+	for (i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-cam") == 0) {
+			unsigned long mask;
+			mask = strtoul(argv[++i], NULL, 0);
+			g_cam = mask;
+		} else if (strcmp(argv[i], "-num") == 0) {
+			g_num_frames = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-help") == 0) {
+			print_help(argv[0]);
+			return -1;
+		} else if (strcmp(argv[i], "-of") == 0) {
+			g_saved_to_file = true;
+		} else if (strcmp(argv[i], "-l") == 0) {
+			show_device_cap_list(argv[0]);
+			return -1;
+		} else if (strcmp(argv[i], "-p") == 0) {
+			g_performance_test = true;
+		} else if (strcmp(argv[i], "-log") == 0) {
+			log_level = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-m") == 0) {
+			g_capture_mode = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-fr") == 0) {
+			g_camera_framerate = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-fmt") == 0) {
+			g_cap_fmt = fmt_array[atoi(argv[++i])];
+		} else if (strcmp(argv[i], "-d") == 0) {
+			if (g_cam != 1) {
+				print_help(argv[0]);
+				return -1;
+			}
+			strcpy(g_v4l_device[0], argv[++i]);
+		} else {
+			print_help(argv[0]);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static void get_fmt_name(uint32_t fourcc)
+{
+	switch (fourcc) {
+	case V4L2_PIX_FMT_RGB32:
+		strcpy(g_fmt_name, "rgb32");
+		break;
+	case V4L2_PIX_FMT_NV12:
+		strcpy(g_fmt_name, "nv12");
+		break;
+	default:
+		strcpy(g_fmt_name, "null");
 	}
 }
 
-int v4l_capture_setup(int ch_id)
+static int init_video_channel(int ch_id, struct video_channel *video_ch)
 {
-	struct v4l2_format fmt;
-	struct v4l2_streamparm parm;
-	struct v4l2_fmtdesc fmtdesc;
-	struct v4l2_capability cap;
-	struct v4l2_frmsizeenum frmsize;
-	int fd_v4l;
+	video_ch[ch_id].init = 1;
+	video_ch[ch_id].out_width = g_out_width;
+	video_ch[ch_id].out_height = g_out_height;
+	video_ch[ch_id].cap_fmt = g_cap_fmt;
+	video_ch[ch_id].mem_type = g_mem_type;
+	video_ch[ch_id].x_offset = 0;
+	video_ch[ch_id].y_offset = 0;
+
+	strcat(g_saved_filename[ch_id], g_fmt_name);
+	strcpy(video_ch[ch_id].v4l_dev_name, g_v4l_device[ch_id]);
+
+	if (g_saved_to_file) {
+		strcpy(video_ch[ch_id].save_file_name, g_saved_filename[ch_id]);
+		v4l2_info("init channel[%d] save_file_name=%s\n",
+				   ch_id, video_ch[ch_id].save_file_name);
+	}
+
+	v4l2_info("init channel[%d] v4l2_dev_name=%s w/h=(%d,%d)\n",
+			  ch_id,
+			  video_ch[ch_id].v4l_dev_name,
+			  video_ch[ch_id].out_width,
+			  video_ch[ch_id].out_height);
+	return 0;
+
+}
+
+static void v4l2_device_init(struct v4l2_device *v4l2)
+{
+	struct video_channel *video_ch = v4l2->video_ch;
 	int i;
 
-	v4l2_dbg("Try to open device %s\n", video_ch[ch_id].v4l_dev_name);
-	if ((fd_v4l = open(video_ch[ch_id].v4l_dev_name, O_RDWR, 0)) < 0) {
-		v4l2_err("unable to open v4l2 %s for capture device.\n",
-			   video_ch[ch_id].v4l_dev_name);
+	get_fmt_name(g_cap_fmt);
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if ((g_cam >> i) & 0x01) {
+			init_video_channel(i, video_ch);
+			++g_cam_num;
+		}
+	}
+}
+
+static int media_device_alloc(struct media_dev *media)
+{
+	struct v4l2_device *v4l2;
+	struct drm_device *drm;
+
+	v4l2 = malloc(sizeof(*v4l2));
+	if (v4l2 == NULL) {
+		v4l2_err("alloc v4l2 device fail\n");
+		return -ENOMEM;
+	}
+	memset(v4l2, 0, sizeof(*v4l2));
+	v4l2_device_init(v4l2);
+	media->v4l2_dev = v4l2;
+
+	if (!g_saved_to_file) {
+		drm = malloc(sizeof(*drm));
+		if (drm == NULL) {
+			v4l2_err("alloc DRM device fail\n");
+			free(v4l2);
+			return -ENOMEM;
+		}
+		memset(drm, 0, sizeof(drm));
+		media->drm_dev = drm;
+	}
+	return 0;
+}
+
+static void media_device_free(struct media_dev *media)
+{
+	if (media->v4l2_dev)
+		free(media->v4l2_dev);
+
+	if (media->drm_dev)
+		free(media->drm_dev);
+}
+
+static int open_save_file(struct video_channel *video_ch)
+{
+	int i, fd;
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if ((g_cam >> i) & 0x01) {
+			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT);
+			if (fd < 0) {
+				 v4l2_err("Channel[%d] unable to create recording file\n", i);
+				 while (i)
+					close(video_ch[--i].saved_file_fd);
+				 return -1;
+			}
+			video_ch[i].saved_file_fd = fd;
+			v4l2_info("open %s success\n", video_ch[i].save_file_name);
+		}
+	}
+	return 0;
+}
+
+static int open_drm_device(struct drm_device *drm)
+{
+	char dev_name[15];
+	uint64_t has_dumb;
+	int fd, i, ret;
+
+	i = 0;
+loop:
+	sprintf(dev_name, "/dev/dri/card%d", i++);
+
+	fd = open(dev_name, O_RDWR | O_CLOEXEC | O_NONBLOCK);
+	if (fd < 0) {
+		v4l2_err("Open %s fail\n", dev_name);
 		return -1;
 	}
 
-	/* Get chipident */
-	struct v4l2_dbg_chip_ident chipident;
-	memset(&chipident, 0, sizeof(chipident));
-	if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chipident) < 0)
-		v4l2_info("get chip ident fail\n");
+	if (drmGetCap(fd, DRM_CAP_DUMB_BUFFER, &has_dumb) < 0 ||
+	    !has_dumb) {
+		v4l2_err("drm device '%s' does not support dumb buffers\n", dev_name);
+		close(fd);
+		goto loop;
+	}
+	drm->drm_fd = fd;
+	drm->card_id = --i;
+
+	v4l2_info("Open %s success\n", dev_name);
+
+	return 0;
+}
+
+static int open_v4l2_device(struct v4l2_device *v4l2)
+{
+	struct video_channel *video_ch = v4l2->video_ch;
+	struct v4l2_capability cap;
+	bool found;
+	int fd, i, ret;
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if ((g_cam >> i) & 0x01) {
+			fd = open(video_ch[i].v4l_dev_name, O_RDWR, 0);
+			if (fd < 0) {
+				v4l2_err("unable to open v4l2 %s for capture device.\n",
+					   video_ch[i].v4l_dev_name);
+				while (i)
+					close(video_ch[--i].v4l_fd);
+				return -1;
+			}
+
+			memset(&cap, 0, sizeof(cap));
+			ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
+			if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE) ||
+				ret < 0) {
+				v4l2_err("not support multi-plane v4l2 capture device\n");
+				close(fd);
+				continue;
+			}
+			found = true;
+			video_ch[i].v4l_fd = fd;
+			v4l2_info("open %s success\n", video_ch[i].v4l_dev_name);
+		}
+	}
+	if (!found) {
+		v4l2_info("can't found muti-plane v4l2 capture device\n");
+		return -1;
+	}
+	return 0;
+}
+
+static void close_save_file(struct video_channel *video_ch)
+{
+	int i;
+
+	for (i = 0; i < NUM_SENSORS; i++)
+		if (((g_cam >> i) & 0x1) && (video_ch[i].saved_file_fd > 0))
+			close(video_ch[i].saved_file_fd);
+}
+
+static void close_drm_device(int drm_fd)
+{
+	if (drm_fd > 0)
+		close(drm_fd);
+}
+
+static int media_device_open(struct media_dev *media)
+{
+	struct v4l2_device *v4l2 = media->v4l2_dev;
+	struct drm_device *drm = media->drm_dev;
+	int ret;
+
+	if (g_saved_to_file)
+		ret = open_save_file(v4l2->video_ch);
 	else
-		v4l2_info("Get chip ident: %s\n", chipident.match.name);
+		ret = open_drm_device(drm);
 
-	if (ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap) == 0) {
-		v4l2_dbg("cap=0x%x\n", cap.capabilities);
-		if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE)) {
-			v4l2_err("%s not support v4l2 capture device.\n",
-				   video_ch[ch_id].v4l_dev_name);
-			goto fail;
+	if (ret < 0)
+		return ret;
+
+	ret = open_v4l2_device(v4l2);
+	if (ret < 0) {
+		if (g_saved_to_file)
+			close_save_file(v4l2->video_ch);
+		else
+			close_drm_device(drm->drm_fd);
+	}
+	return ret;
+}
+
+static void dump_drm_clients(const int dev_num)
+{
+	char cmd[50];
+
+	sprintf(cmd, "cat /sys/kernel/debug/dri/%d/clients", dev_num);
+
+	printf("========================================================\n");
+	system(cmd);
+	printf("========================================================\n");
+	printf("Please ensure there is no other master client\n");
+	printf("========================================================\n");
+}
+
+static int modeset_find_crtc(struct drm_device *drm,
+				drmModeRes *res, drmModeConnector *conn)
+{
+	drmModeEncoder *encoder;
+	int drm_fd = drm->drm_fd;
+	int crtc_id, j, i;
+
+	for (i = 0; i < conn->count_encoders; i++) {
+		encoder = drmModeGetEncoder(drm_fd, conn->encoders[i]);
+		if (!encoder) {
+			v4l2_err("can't retrieve encoders[%d]\n", i);
+			continue;
 		}
-	} else {
-		close(fd_v4l);
-		v4l2_err("VIDIOC_QUERYCAP fail, chan_ID:%d\n", ch_id);
-		return -1;
-	}
 
-	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-
-	/* enum channels fmt */
-	for (i = 0;; i++) {
-		fmtdesc.index = i;
-		if (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) < 0) {
-			v4l2_err("VIDIOC ENUM FMT failed, index=%d \n", i);
-			break;
+		for (j = 0; j < res->count_crtcs; j++) {
+			if (encoder->possible_crtcs & (1 << j)) {
+				crtc_id = res->crtcs[j];
+				if (crtc_id > 0) {
+					drm->crtc_id = crtc_id;
+					drmModeFreeEncoder(encoder);
+					return 0;
+				}
+			}
+			crtc_id = -1;
 		}
-		v4l2_dbg("index=%d\n", fmtdesc.index);
-		print_pixelformat("pixelformat (output by camera)",
-				  fmtdesc.pixelformat);
-	}
 
-	memset(&parm, 0, sizeof(parm));
-	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	parm.parm.capture.timeperframe.numerator = 1;
-	parm.parm.capture.timeperframe.denominator = g_camera_framerate;
-	parm.parm.capture.capturemode = g_capture_mode;
-	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0)
-		v4l2_info("VIDIOC_S_PARM failed, chan_ID:%d\n", ch_id);
-
-	frmsize.pixel_format = g_cap_fmt;
-	frmsize.index = g_capture_mode;
-	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &frmsize) < 0) {
-		v4l2_err("get capture mode %d framesize failed\n", g_capture_mode);
-		goto fail;
-	}
-
-	if (g_cam_num == 1) {
-		video_ch[ch_id].out_width = frmsize.discrete.width;
-		video_ch[ch_id].out_height = frmsize.discrete.height;
-	}
-
-	memset(&fmt, 0, sizeof(fmt));
-	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	fmt.fmt.pix_mp.pixelformat = video_ch[ch_id].cap_fmt;
-	fmt.fmt.pix_mp.width = video_ch[ch_id].out_width;
-	fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
-	fmt.fmt.pix_mp.num_planes = g_num_planes;	/* RGB */
-	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
-		v4l2_err("set format failed, chan_ID:%d\n", ch_id);
-		goto fail;
-	}
-
-	memset(&fmt, 0, sizeof(fmt));
-	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0) {
-		v4l2_err("get format failed, chan_ID:%d\n", ch_id);
-		goto fail;
-	}
-	v4l2_dbg("video_ch=%d, width=%d, height=%d, \n",
-		   ch_id, fmt.fmt.pix_mp.width, fmt.fmt.pix_mp.height);
-	print_pixelformat("pixelformat", fmt.fmt.pix_mp.pixelformat);
-
-	memset(&parm, 0, sizeof(parm));
-	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	if (ioctl(fd_v4l, VIDIOC_G_PARM, &parm) < 0) {
-		v4l2_err("VIDIOC_G_PARM failed, chan_ID:%d\n", ch_id);
-		parm.parm.capture.timeperframe.denominator = g_camera_framerate;
-	}
-
-	v4l2_dbg("\t WxH@fps = %dx%d@%d\n", fmt.fmt.pix_mp.width,
-		   fmt.fmt.pix_mp.height,
-		   parm.parm.capture.timeperframe.denominator);
-
-	for (int k = 0; k < TEST_BUFFER_NUM; k++) {
-		for (int i = 0; i < g_num_planes; i++) {
-			video_ch[ch_id].buffers[k].planes[i].plane_size =
-				fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
-			v4l2_dbg("\t buffer[%d]->plane[%d]->Image size = %d\n",
-						k, i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
+		if (j == res->count_crtcs && crtc_id == -1) {
+			v4l2_err("cannot find crtc\n");
+			drmModeFreeEncoder(encoder);
+			continue;
 		}
+		drmModeFreeEncoder(encoder);
+	}
+	v4l2_err("cannot find suitable CRTC for connector[%d]\n", conn->connector_id);
+	return -ENOENT;
+}
+
+static int drm_create_fb(int fd, int index, struct drm_buffer *buf)
+{
+	struct drm_mode_create_dumb creq;
+	struct drm_mode_destroy_dumb dreq;
+	struct drm_mode_map_dumb mreq;
+	int ret;
+
+	memset(&creq, 0, sizeof(creq));
+	creq.width = buf->width;
+	creq.height = buf->height;
+	creq.bpp = 32;
+
+	ret = drmIoctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
+	if (ret < 0) {
+		v4l2_err("cannot create dumb buffer[%d]\n", index);
+		return ret;
 	}
 
-	video_ch[ch_id].v4l_dev = fd_v4l;
-	video_ch[ch_id].on = 1;
+	buf->stride = creq.pitch;
+	buf->size = creq.size;
+	buf->handle = creq.handle;
 
-	v4l2_dbg("%s, Open v4l_dev=0x%x, channel=%d\n",
-		   __func__, video_ch[ch_id].v4l_dev, ch_id);
+	ret = drmModeAddFB(fd, buf->width, buf->height, 24, 32,
+				buf->stride, buf->handle, &buf->buf_id);
+	if (ret < 0) {
+		v4l2_err("Add framebuffer (%d) fail\n", index);
+		goto destroy_fb;
+	}
+
+	memset(&mreq, 0, sizeof(mreq));
+	mreq.handle = buf->handle;
+	ret = drmIoctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq);
+	if (ret) {
+		v4l2_err("Map buffer[%d] dump ioctl fail\n", index);
+		goto remove_fb;
+	}
+
+	buf->fb_base = mmap(0, buf->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+							fd, mreq.offset);
+	if (buf->fb_base == MAP_FAILED) {
+		v4l2_err("Cannot mmap dumb buffer[%d]\n", index);
+		goto remove_fb;
+	}
+	memset(buf->fb_base, 0, buf->size);
 
 	return 0;
 
-fail:
-	close(fd_v4l);
-	return -1;
+remove_fb:
+	drmModeRmFB(fd, buf->buf_id);
+destroy_fb:
+	memset(&dreq, 0, sizeof(dreq));
+	dreq.handle = buf->handle;
+	drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+	v4l2_err("Create DRM buffer[%d] fail\n", index);
 }
 
-int config_video_channel(struct drm_kms *kms)
+static void drm_destroy_fb(int fd, int index, struct drm_buffer *buf)
+{
+	struct drm_mode_destroy_dumb dreq;
+
+	munmap(buf->fb_base, buf->size);
+	drmModeRmFB(fd, buf->buf_id);
+
+	memset(&dreq, 0, sizeof(dreq));
+	dreq.handle = buf->handle;
+	drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+}
+
+static int modeset_setup_dev(struct drm_device *drm,
+				drmModeRes *res, drmModeConnector *conn)
+{
+	struct drm_buffer *buf = drm->buffers;
+	int i, ret;
+
+	ret = modeset_find_crtc(drm, res, conn);
+	if (ret < 0)
+		return ret;
+
+	memcpy(&drm->mode, &conn->modes[0], sizeof(drm->mode));
+	/* Double buffering */
+	for (i = 0; i < 2; i++) {
+		buf[i].width  = conn->modes[0].hdisplay;
+		buf[i].height = conn->modes[0].vdisplay;
+		ret = drm_create_fb(drm->drm_fd, i, &buf[i]);
+		if (ret < 0) {
+			while(i)
+				drm_destroy_fb(drm->drm_fd, i - 1, &buf[--i]);
+			return ret;
+		}
+		v4l2_dbg("DRM bufffer[%d] addr=0x%x size=%d w/h=(%d,%d) buf_id=%d\n",
+				 i, buf[i].fb_base, buf[i].size,
+				 buf[i].width, buf[i].height, buf[i].buf_id);
+	}
+	drm->bits_per_pixel = 32;
+	drm->bytes_per_pixel = drm->bits_per_pixel >> 3;
+	return 0;
+}
+
+static int drm_device_prepare(struct drm_device *drm)
+{
+	drmModeRes *res;
+	drmModeConnector *conn;
+	int drm_fd = drm->drm_fd;
+	int ret, i;
+
+	ret = drmSetMaster(drm_fd);
+	if (ret < 0) {
+		dump_drm_clients(drm->card_id);
+		return ret;
+	}
+
+	res = drmModeGetResources(drm_fd);
+	if (res == NULL) {
+		v4l2_err("Cannot retrieve DRM resources\n");
+		drmDropMaster(drm_fd);
+		return -errno;
+	}
+
+	/* iterate all connectors */
+	for (i = 0; i < res->count_connectors; i++) {
+		/* get information for each connector */
+		conn = drmModeGetConnector(drm_fd, res->connectors[i]);
+		if (!conn) {
+			v4l2_err("Cannot retrieve DRM connector %u:%u (%d)\n",
+				i, res->connectors[i], errno);
+			continue;
+		}
+
+		/* valid connector? */
+		if (conn->connection != DRM_MODE_CONNECTED ||
+					conn->count_modes == 0) {
+			drmModeFreeConnector(conn);
+			continue;
+		}
+
+		/* find a valid connector */
+		drm->conn_id = conn->connector_id;
+		ret = modeset_setup_dev(drm, res, conn);
+		if (ret < 0) {
+			v4l2_err("mode setup device environment fail\n");
+			drmDropMaster(drm_fd);
+			drmModeFreeConnector(conn);
+			drmModeFreeResources(res);
+			return ret;
+		}
+		drmModeFreeConnector(conn);
+	}
+	drmModeFreeResources(res);
+	return 0;
+}
+
+static int config_video_channel(struct video_channel *video_ch,
+								struct drm_buffer *buf)
 {
 	int x_out;
 	int y_out;
@@ -946,8 +808,8 @@ int config_video_channel(struct drm_kms *kms)
 	int cam_num, i;
 	int x_res, y_res;
 
-	x_res = kms->width;
-	y_res = kms->height;
+	x_res = buf->width;
+	y_res = buf->height;
 
 	if (g_cam_num < 1) {
 		v4l2_err("Error cam number %d\n", g_cam_num);
@@ -1024,222 +886,609 @@ int config_video_channel(struct drm_kms *kms)
 	return 0;
 }
 
-int set_up_frame_drm(int ch_id, struct drm_kms *kms)
+static void v4l2_enum_fmt(struct video_channel *video_ch)
 {
-	int out_h, out_w;
-	int stride;
-	int bufoffset;
-	int j;
-	int bytes_per_line;
-	int buf_id = video_ch[ch_id].cur_buf_id;
+	struct v4l2_fmtdesc fmtdesc;
+	int fd = video_ch->v4l_fd;
+	int ret, i = 0;
 
-	bytes_per_line = kms->bytes_per_pixel * kms->width;
-	bufoffset = video_ch[ch_id].x_offset * kms->bpp / 8 +
-	    video_ch[ch_id].y_offset * bytes_per_line;
+	memset(&fmtdesc, 0, sizeof(fmtdesc));
+	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	do {
+		fmtdesc.index = i;
+		ret = ioctl(fd, VIDIOC_ENUM_FMT, &fmtdesc);
+		if (ret < 0) {
+			v4l2_err("channel VIDIOC_ENUM_FMT fail\n");
+			break;
+		}
+		v4l2_dbg("index=%d pixelformat=%.4s\n",
+				 fmtdesc.index, (char *)&fmtdesc.pixelformat);
+		i++;
+	} while(1);
+}
 
-	out_h = video_ch[ch_id].out_height - 1;
-	out_w = video_ch[ch_id].out_width;
-	stride = out_w * kms->bpp >> 3;
+static void adjust_width_height_for_one_sensor(struct video_channel *video_ch)
+{
+	struct v4l2_frmsizeenum frmsize;
+	int fd = video_ch->v4l_fd;
+	int ret;
 
-	/* fb buffer offset 1 frame */
-	/*bufoffset += 0;*/
-	for (j = 0; j < out_h; j++)
-		memcpy(kms->fb_base + bufoffset +
-			   j * bytes_per_line,
-			   video_ch[ch_id].buffers[buf_id].planes[0].start +
-			   j * stride, stride);
+	memset(&frmsize, 0, sizeof(frmsize));
+	frmsize.pixel_format = g_cap_fmt;
+	frmsize.index = g_capture_mode;
+	ret = ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &frmsize);
+	if (ret < 0) {
+		v4l2_err("channel VIDIOC_ENUM_FRAMESIZES fail\n");
+		return;
+	}
+	video_ch->out_width  = frmsize.discrete.width;
+	video_ch->out_height = frmsize.discrete.height;
+}
+
+static void fill_video_channel(struct video_channel *video_ch,
+			                   struct v4l2_format *fmt)
+{
+	int i, j;
+
+	for (i = 0; i < TEST_BUFFER_NUM; i++) {
+		for (j = 0; j < g_num_planes; j++) {
+			video_ch->buffers[i].planes[j].plane_size =
+				      fmt->fmt.pix_mp.plane_fmt[j].sizeimage;
+		}
+	}
+	video_ch->on = 1;
+}
+
+static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
+{
+	struct v4l2_dbg_chip_ident chipident;
+	struct v4l2_format fmt;
+	struct v4l2_streamparm parm;
+	int fd = video_ch[ch_id].v4l_fd;
+	int i, ret;
+
+	memset(&chipident, 0, sizeof(chipident));
+	ret = ioctl(fd, VIDIOC_DBG_G_CHIP_IDENT, &chipident);
+	if (ret < 0)
+		v4l2_err("get chip ident fail\n");
+	else
+		v4l2_dbg("Get chip ident: %s\n", chipident.match.name);
+
+	v4l2_enum_fmt(&video_ch[ch_id]);
+
+	memset(&parm, 0, sizeof(parm));
+	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = g_camera_framerate;
+	parm.parm.capture.capturemode = g_capture_mode;
+	ret = ioctl(fd, VIDIOC_S_PARM, &parm);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_S_PARM failed\n", ch_id);
+		return ret;
+	}
+
+	if (g_cam_num == 1)
+		adjust_width_height_for_one_sensor(&video_ch[ch_id]);
+
+	memset(&fmt, 0, sizeof(fmt));
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	fmt.fmt.pix_mp.pixelformat = video_ch[ch_id].cap_fmt;
+	fmt.fmt.pix_mp.width = video_ch[ch_id].out_width;
+	fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
+	/*fmt.fmt.pix_mp.num_planes = g_num_planes; */
+	ret = ioctl(fd, VIDIOC_S_FMT, &fmt);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_S_FMT fail\n", ch_id);
+		return ret;
+	}
+
+	memset(&fmt, 0, sizeof(fmt));
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_G_FMT, &fmt);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_G_FMT fail\n", ch_id);
+		return ret;
+	}
+	g_num_planes = fmt.fmt.pix_mp.num_planes;
+
+	memset(&parm, 0, sizeof(parm));
+	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_G_PARM, &parm);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_G_PARM failed\n", ch_id);
+		return ret;
+	}
+
+	fill_video_channel(&video_ch[ch_id], &fmt);
+
+	v4l2_info("\tplanes=%d WxH@fps = %dx%d@%d\n",
+			 fmt.fmt.pix_mp.num_planes,
+		     fmt.fmt.pix_mp.width,
+		     fmt.fmt.pix_mp.height,
+		     parm.parm.capture.timeperframe.denominator);
 	return 0;
 }
 
-int get_video_channel_buffer(int ch_id)
+static void get_memory_map_info(struct video_channel *video_ch)
 {
-	int fd_v4l = video_ch[ch_id].v4l_dev;
 	struct v4l2_buffer buf;
-	struct v4l2_plane *planes = NULL;
+	struct v4l2_plane *planes;
+	int fd = video_ch->v4l_fd;
+	int ret, i, j;
 
-	planes = calloc(g_num_planes, sizeof(*planes));
+	if (video_ch->mem_type != V4L2_MEMORY_MMAP)
+		return;
+
+	planes = malloc(g_num_planes * sizeof(*planes));
 	if (!planes) {
-		v4l2_err("%s, alloc plane mem fail\n", __func__);
-		return -1;
+		v4l2_err("alloc %d planes fail\n", g_num_planes);
+		return;
 	}
 
-	memset(&buf, 0, sizeof(buf));
-	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	buf.memory = video_ch[ch_id].mem_type;
-	buf.m.planes = planes;
-	buf.length = g_num_planes;
-	if (ioctl(fd_v4l, VIDIOC_DQBUF, &buf) < 0) {
-		v4l2_err("VIDIOC_DQBUF failed.\n");
-		free(planes);
-		return -1;
+	for (i = 0; i < TEST_BUFFER_NUM; i++) {
+		memset(&buf, 0, sizeof(buf));
+		memset(planes, 0, sizeof(*planes));
+
+		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		buf.memory = video_ch->mem_type;
+		buf.m.planes = planes;
+		buf.length = g_num_planes;	/* plane num */
+		buf.index = i;
+		ret = ioctl(fd, VIDIOC_QUERYBUF, &buf);
+		if (ret < 0) {
+			v4l2_err("query buffer[%d] info fail\n", i);
+			free(planes);
+			return;
+		}
+
+		for (j = 0; j < g_num_planes; j++) {
+			video_ch->buffers[i].planes[j].length = buf.m.planes[j].length;
+			video_ch->buffers[i].planes[j].offset =
+				            (size_t)buf.m.planes[j].m.mem_offset;
+			video_ch->buffers[i].planes[j].start = mmap(NULL,
+					 video_ch->buffers[i].planes[j].length,
+					 PROT_READ | PROT_WRITE, MAP_SHARED,
+					 fd, video_ch->buffers[i].planes[j].offset);
+
+			v4l2_dbg("V4L2 buffer[%d]->planes[%d]:"
+					 "startAddr=0x%x, offset=0x%x, buf_size=%d\n",
+					 i, j,
+					 (unsigned int *)video_ch->buffers[i].planes[j].start,
+					 video_ch->buffers[i].planes[j].offset,
+					 video_ch->buffers[i].planes[j].length);
+		}
 	}
-
-	video_ch[ch_id].frame_num++;
-	video_ch[ch_id].cur_buf_id = buf.index;
-
 	free(planes);
+}
 
+static void memory_map_info_put(struct video_channel *video_ch)
+{
+	int i, k;
+
+	for (i = 0; i < TEST_BUFFER_NUM; i++) {
+		for (k = 0; k < g_num_planes; k++) {
+			munmap(video_ch->buffers[i].planes[k].start,
+				   video_ch->buffers[i].planes[k].length);
+		}
+	}
+}
+
+static int v4l2_create_buffer(int ch_id, struct video_channel *video_ch)
+{
+	struct v4l2_requestbuffers req;
+	int fd = video_ch[ch_id].v4l_fd;
+	int ret;
+
+	memset(&req, 0, sizeof(req));
+	req.count = TEST_BUFFER_NUM;
+	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	req.memory = video_ch[ch_id].mem_type;
+	ret = ioctl(fd, VIDIOC_REQBUFS, &req);
+	if (ret < 0) {
+		v4l2_err("chanel[%d] VIDIOC_REQBUFS failed\n", ch_id);
+		return ret;
+	}
+
+	if (req.count < TEST_BUFFER_NUM) {
+		v4l2_err("channel[%d] can't alloc enought buffers\n", ch_id);
+		return -ENOMEM;
+	}
+
+	get_memory_map_info(&video_ch[ch_id]);
+
+	v4l2_dbg("channel[%d] alloc buffer success\n", ch_id);
 	return 0;
 }
 
-int put_video_channel_buffer(int ch_id)
+static void v4l2_destroy_buffer(int ch_id, struct video_channel *video_ch)
 {
-	int fd_v4l = video_ch[ch_id].v4l_dev;
-	struct v4l2_buffer buf;
-	struct v4l2_plane *planes = NULL;
-	int buf_id = video_ch[ch_id].cur_buf_id;
+	struct v4l2_requestbuffers req;
+	int fd = video_ch[ch_id].v4l_fd;
+	int ret;
 
-	planes = calloc(g_num_planes, sizeof(*planes));
+	memory_map_info_put(&video_ch[ch_id]);
+
+	memset(&req, 0, sizeof(req));
+	req.count = 0;
+	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	req.memory = video_ch[ch_id].mem_type;
+
+	ret = ioctl(fd, VIDIOC_REQBUFS, &req);
+	if (ret < 0) {
+		v4l2_err("channel[%d] free v4l2 buffer fail\n", ch_id);
+		return;
+	}
+	v4l2_dbg("channel[%d] free v4l2 buffer success\n", ch_id);
+}
+
+static void media_device_cleanup(struct media_dev *media)
+{
+	struct video_channel *video_ch = media->v4l2_dev->video_ch;
+	int i, fd;
+
+	if (!g_saved_to_file) {
+		fd = media->drm_dev->drm_fd;
+		drmDropMaster(fd);
+		drm_destroy_fb(fd, 0, &media->drm_dev->buffers[0]);
+		drm_destroy_fb(fd, 1, &media->drm_dev->buffers[1]);
+	}
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (video_ch[i].on)
+			v4l2_destroy_buffer(i, video_ch);
+	}
+}
+
+static int queue_buffer(int buf_id, struct video_channel *video_ch)
+{
+	struct v4l2_buffer buf;
+	struct v4l2_plane *planes;
+	int fd = video_ch->v4l_fd;
+	int k, ret;
+
+	planes = malloc(g_num_planes * sizeof(*planes));
 	if (!planes) {
-		v4l2_err("%s, alloc plane mem fail\n", __func__);
-		return -1;
+		v4l2_err("alloc %d plane fail\n", g_num_planes);
+		return -ENOMEM;
 	}
 
 	memset(&buf, 0, sizeof(buf));
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	buf.memory = g_mem_type;
+	buf.memory = video_ch->mem_type;
 	buf.m.planes = planes;
 	buf.index = buf_id;
-
 	buf.length = g_num_planes;
-	for (int k = 0; k < buf.length; k++) {
-		buf.m.planes[k].length =
-			video_ch[ch_id].buffers[buf_id].planes[k].length;
+
+	for (k = 0; k < g_num_planes; k++) {
+		buf.m.planes[k].length = video_ch->buffers[buf_id].planes[k].length;
+		if (video_ch->mem_type == V4L2_MEMORY_MMAP)
+			buf.m.planes[k].m.mem_offset =
+					video_ch->buffers[buf_id].planes[k].offset;
 	}
 
-	if (ioctl(fd_v4l, VIDIOC_QBUF, &buf) < 0) {
-		v4l2_err("VIDIOC_QBUF failed, video=%d\n", ch_id);
+	ret = ioctl(fd, VIDIOC_QBUF, &buf);
+	if (ret < 0) {
+		v4l2_err("buffer[%s] VIDIOC_QBUF error\n", buf_id);
 		free(planes);
-		return -1;
+		return ret;
 	}
+
+	/*v4l2_dbg("== qbuf ==\n");*/
 	free(planes);
 	return 0;
 }
 
-int open_save_file(void)
+static int dqueue_buffer(int buf_id, struct video_channel *video_ch)
 {
-	int i;
+	struct v4l2_buffer buf;
+	struct v4l2_plane *planes;
+	int fd = video_ch->v4l_fd;
+	int ret;
 
-	for (i = 0; i < 8; i++) {
-		if (video_ch[i].init) {
-			if ((video_ch[i].file_fd =
-				 open(video_ch[i].save_file_name, O_RDWR | O_CREAT)) < 0) {
-				v4l2_err("Unable to create recording file, \n");
-				return -1;
+	planes = malloc(g_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d plane fail\n", g_num_planes);
+		return -ENOMEM;
+	}
+
+	memset(&buf, 0, sizeof(buf));
+	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	buf.memory = video_ch->mem_type;
+	buf.m.planes = planes;
+	buf.length = g_num_planes;
+
+	ret = ioctl(fd, VIDIOC_DQBUF, &buf);
+	if (ret < 0) {
+		v4l2_err("buffer[%d] VIDIOC_DQBUF error\n", buf_id);
+		free(planes);
+		return ret;
+	}
+	video_ch->frame_num++;
+	video_ch->cur_buf_id = buf.index;
+
+	/*v4l2_dbg("=== dqbuf ===\n");*/
+	free(planes);
+	return 0;
+
+}
+
+static int v4l2_device_prepare(struct v4l2_device *v4l2,
+							   struct drm_buffer *buf)
+{
+	struct video_channel *video_ch = v4l2->video_ch;
+	int ret, i, j;
+
+	if (!g_saved_to_file) {
+		ret = config_video_channel(video_ch, buf);
+		if (ret) {
+			v4l2_err("config video faied\n");
+			return ret;
+		}
+	}
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if ((g_cam >> i) & 0x01) {
+			ret = v4l2_setup_dev(i, video_ch);
+			if (ret < 0) {
+				v4l2_err("video_ch[%d] setup fail\n", i);
+				return ret;
+			}
+
+			ret = v4l2_create_buffer(i, video_ch);
+			if (ret < 0) {
+				v4l2_err("video_ch[%d] create buffer fail\n", i);
+				return ret;
+			}
+
+			for (j = 0; j < TEST_BUFFER_NUM; j++) {
+				ret = queue_buffer(j, &video_ch[i]);
+				if (ret < 0) {
+					while (i) {
+						if (video_ch[i].on)
+							v4l2_destroy_buffer(i, video_ch);
+						i--;
+					}
+					return ret;
+				}
 			}
 		}
 	}
 	return 0;
 }
 
-int save_to_file(int ch_id)
+static int v4l2_device_streamon(int ch_id, struct video_channel *video_ch)
 {
+	enum v4l2_buf_type type;
+	int fd = video_ch[ch_id].v4l_fd;
+	int ret;
+
+	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_STREAMON, &type);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_STREAMON error\n", ch_id);
+		return ret;;
+	}
+	v4l2_info("channel[%d] v4l_dev=0x%x start capturing\n", ch_id, fd);
+	return 0;
+}
+
+static int v4l2_device_streamoff(int ch_id, struct video_channel *video_ch)
+{
+	enum v4l2_buf_type type;
+	int fd = video_ch[ch_id].v4l_fd;
+	int nframe = video_ch[ch_id].frame_num;
+	int ret;
+
+	v4l2_info("channel[%d] v4l2_dev=0x%x frame=%d\n", ch_id, fd, nframe);
+
+	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_STREAMOFF, &type);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_STREAMOFF error\n", ch_id);
+		return ret;;
+	}
+	v4l2_info("channel[%d] v4l_dev=0x%x stop capturing\n", ch_id, fd);
+	return 0;
+}
+
+static int media_device_prepare(struct media_dev *media)
+{
+	struct v4l2_device *v4l2 = media->v4l2_dev;
+	struct drm_device *drm = media->drm_dev;
+	int ret;
+
+	if (!g_saved_to_file) {
+		ret = drm_device_prepare(drm);
+		if (ret < 0) {
+			drmDropMaster(drm->drm_fd);
+			return ret;
+		}
+	}
+
+	ret = v4l2_device_prepare(v4l2, &drm->buffers[0]);
+	if (ret < 0) {
+		if (!g_saved_to_file) {
+			drm_destroy_fb(drm->drm_fd, 0, &drm->buffers[0]);
+			drm_destroy_fb(drm->drm_fd, 1, &drm->buffers[1]);
+			drmDropMaster(drm->drm_fd);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+static int media_device_start(struct media_dev *media)
+{
+	struct v4l2_device *v4l2 = media->v4l2_dev;
+	struct drm_device *drm = media->drm_dev;
+	struct drm_buffer *buf;
+	int i, ret;
+
+	if (!g_saved_to_file) {
+		buf = &drm->buffers[drm->front_buf];
+		ret = drmModeSetCrtc(drm->drm_fd, drm->crtc_id, buf->buf_id,
+							 0, 0, &drm->conn_id, 1, &drm->mode);
+		if (ret < 0) {
+			v4l2_err("buffer[%d] set CRTC fail\n", buf->buf_id);
+			return ret;
+		}
+		v4l2_dbg("crtc_id=%d conn_id=%d buf_id=%d\n",
+				 drm->crtc_id, drm->conn_id,
+				 drm->buffers[drm->front_buf].buf_id);
+	}
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (v4l2->video_ch[i].on) {
+			ret = v4l2_device_streamon(i, v4l2->video_ch);
+			if (ret < 0) {
+				while(--i) {
+					if (v4l2->video_ch[i].on)
+						v4l2_device_streamoff(i, v4l2->video_ch);
+				}
+				return ret;
+			}
+		}
+	}
+	return 0;
+}
+
+static int media_device_stop(struct media_dev *media)
+{
+	struct v4l2_device *v4l2 = media->v4l2_dev;
+	int i, ret;
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (v4l2->video_ch[i].on) {
+			ret = v4l2_device_streamoff(i, v4l2->video_ch);
+			if (ret < 0) {
+				return ret;
+			}
+		}
+	}
+	return 0;
+}
+
+static int save_to_file(int ch, struct video_channel *video_ch)
+{
+	int buf_id = video_ch[ch].cur_buf_id;
+	int fd = video_ch[ch].saved_file_fd;
 	size_t wsize;
-	int buf_id = video_ch[ch_id].cur_buf_id;
 	int i;
 
-	if (video_ch[ch_id].file_fd) {
+	if (fd) {
 		/* Save capture frame to file */
 		for (i = 0; i < g_num_planes; i++) {
-			wsize = write(video_ch[ch_id].file_fd, video_ch[ch_id].buffers[buf_id].planes[i].start,
-					   video_ch[ch_id].buffers[buf_id].planes[i].plane_size);
-
+			wsize = write(fd, video_ch[ch].buffers[buf_id].planes[i].start,
+				    video_ch[ch].buffers[buf_id].planes[i].plane_size);
 			if (wsize < 1) {
-				v4l2_err
-					("No space left on device. Stopping after %d frames.\n",
-					 video_ch[ch_id].frame_num);
+				v4l2_err("No space left on device. Stopping after %d frames.\n",
+						 video_ch[ch].frame_num);
 				return -1;
 			}
 		}
 	}
-	return 0;
-}
-
-int close_save_file(void)
-{
-	int i;
-
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on && video_ch[i].file_fd)
-			close(video_ch[i].file_fd);
+	v4l2_dbg("enter\n");
 
 	return 0;
 }
 
-void close_vdev_file(void)
+static int display_on_screen(int ch, struct media_dev *media)
 {
-	int i;
+	struct video_channel *video_ch = media->v4l2_dev->video_ch;
+	struct drm_device *drm = media->drm_dev;
+	struct drm_buffer *buf = &drm->buffers[drm->front_buf^1];
+	int buf_id = video_ch[ch].cur_buf_id;
+	static int enter_count = 0;
+	int bufoffset;
+	int out_h, out_w, stride;
+	int bytes_per_line;
+	int j, ret;
 
-	for (i = 0; i < 8; i++)
-		if ((video_ch[i].v4l_dev > 0) && video_ch[i].on)
-			close(video_ch[i].v4l_dev);
-}
+	bytes_per_line = drm->bytes_per_pixel * buf->width;
+	bufoffset = video_ch[ch].x_offset * drm->bytes_per_pixel +
+				video_ch[ch].y_offset * bytes_per_line;
 
-int set_vdev_parm(int ch_id)
-{
-	struct v4l2_format fmt;
-	int fd_v4l;
+	out_h = video_ch[ch].out_height - 1;
+	out_w = video_ch[ch].out_width;
+	stride = out_w * drm->bytes_per_pixel;
 
-	if (video_ch[ch_id].on) {
-		fd_v4l = video_ch[ch_id].v4l_dev;
+	for (j = 0; j < out_h; j++) {
+		memcpy(buf->fb_base + bufoffset + j * bytes_per_line,
+			   video_ch[ch].buffers[buf_id].planes[0].start + j * stride,
+			   stride);
+	}
 
-		memset(&fmt, 0, sizeof(fmt));
-		fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		fmt.fmt.pix_mp.pixelformat = video_ch[ch_id].cap_fmt;
-		fmt.fmt.pix_mp.width = video_ch[ch_id].out_width;
-		fmt.fmt.pix_mp.height = video_ch[ch_id].out_height;
-		fmt.fmt.pix_mp.num_planes = g_num_planes;
-		if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
-			v4l2_err("set format failed\n");
-			return -1;
+	if (!(++enter_count % g_cam_num)) {
+		ret = drmModeSetCrtc(drm->drm_fd, drm->crtc_id, buf->buf_id, 0, 0,
+					&drm->conn_id, 1, &drm->mode);
+		if (ret < 0) {
+			v4l2_err("Set Crtc fail\n");
+			return ret;
 		}
+		enter_count = 0;
+		drm->front_buf ^= 1;
+
+		/*v4l2_dbg("crtc_id=%d conn_id=%d buf_id=%d\n",*/
+				 /*drm->crtc_id, drm->conn_id,*/
+				 /*buf->buf_id);*/
 	}
 	return 0;
 }
 
-int v4l_capture_test(struct drm_kms *kms)
+static void show_performance_test(struct media_dev *media)
 {
-	struct timeval tv1, tv2;
-	int i;
-	int ret;
-	static int first_time_enter = 0;
+	struct video_channel *video_ch = media->v4l2_dev->video_ch;
+	struct timeval *tv1, *tv2;
+	int i, time;
 
-loop:
-	if (first_time_enter++ > 0) {
-		v4l2_dbg(" ===== first_time_enter:%d ===== \n", first_time_enter);
-		for (i = 0; i < g_cam_max; i++) {
-			if (set_vdev_parm(i) < 0)
-				return -1;
+	if (!g_performance_test)
+		return;
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (video_ch[i].on) {
+			tv1 = &video_ch[i].tv1;
+			tv2 = &video_ch[i].tv2;
+			time = (tv2->tv_sec - tv1->tv_sec);
+
+			v4l2_info("Channel[%d]: frame=%d Performance=%d(fps)\n", i,
+					  video_ch[i].frame_num,
+					  (video_ch[i].frame_num / time));
+			/*video_ch[ch_id].frame_num = 0;*/
 		}
-		first_time_enter = 2;
+	}
+}
+
+static int redraw(struct media_dev *media)
+{
+	struct video_channel *video_ch = media->v4l2_dev->video_ch;
+	struct drm_device *drm = media->drm_dev;
+	int i, ret;
+
+	/* Record enter time for every channel */
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (video_ch[i].on) {
+			gettimeofday(&video_ch[i].tv1, NULL);
+		}
 	}
 
-	if (mx8_capturing_prepare() < 0)
-		return -1;
-
-	if (mx8_qbuf() < 0)
-		return -1;
-
-	if (start_streamon() < 0)
-		return -1;
-
-	gettimeofday(&tv1, NULL);
+	media->total_frames_cnt = 0;
 	do {
-		/* DQBuf  */
-		for (i = 0; i < 8; i++) {
+		for (i = 0; i < NUM_SENSORS; i++) {
 			if (video_ch[i].on) {
-				ret = get_video_channel_buffer(i);
+				/* DQBUF */
+				ret = dqueue_buffer(i, &video_ch[i]);
 				if (ret < 0)
 					return -1;
+				/* Save to file or playback */
 				if (!g_saved_to_file) {
-					/* Copy video buffer to fb buffer */
-					ret = set_up_frame_drm(i, kms);
+					/* Playback */
+					ret = display_on_screen(i, media);
 					if (ret < 0)
 						return -1;
 				} else {
-					/* Performance test, skip write file operation */
+					/* Save to file */
 					if (!g_performance_test) {
-						ret = save_to_file(i);
+						ret = save_to_file(i, video_ch);
 						if (ret < 0)
 							return -1;
 					}
@@ -1247,81 +1496,61 @@ loop:
 			}
 		}
 
-		/* QBuf  */
-		for (i = 0; i < 8; i++)
+		/* QBUF */
+		for (i = 0; i < NUM_SENSORS; i++) {
 			if (video_ch[i].on)
-				put_video_channel_buffer(i);
-
-		gettimeofday(&tv2, NULL);
-	} while ((tv2.tv_sec - tv1.tv_sec < g_timeout) && !quitflag);
-
-	if (g_performance_test) {
-		for (i = 0; i < 8; i++) {
-			if (video_ch[i].on) {
-				v4l2_info("Channel[%d]: frame:%d\n", i, video_ch[i].frame_num);
-				v4l2_info("Channel[%d]: Performance = %d(fps)\n",
-							i, video_ch[i].frame_num / g_timeout);
-				video_ch[i].frame_num = 0;
-			}
+				queue_buffer(video_ch[i].cur_buf_id, &video_ch[i]);
 		}
-	}
+	} while(++media->total_frames_cnt < g_num_frames && !quitflag);
 
-	/* stop channels / stream off */
-	for (i = 0; i < 8; i++) {
-		if (video_ch[i].on) {
-			if (stop_capturing(i) < 0) {
-				v4l2_err("stop_capturing failed, device %d\n", i);
-				return -1;
-			}
-		}
+	/* Record exit time for every channel */
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (video_ch[i].on)
+			gettimeofday(&video_ch[i].tv2, NULL);
 	}
-
-	for (i = 0; i < 8; i++) {
-		if (video_ch[i].on) {
-			if (free_buffer(i) < 0) {
-				v4l2_err("stop_capturing failed, device %d\n", i);
-				return -1;
-			}
-		}
-	}
-
-	if (g_loop > 0 && !quitflag) {
-		v4l2_info(" ======= loop %d done! ========\n", g_loop);
-		g_loop--;
-		goto loop;
-	}
-
 	return 0;
 }
 
-static int start_streamon(void)
+static void close_v4l2_device(struct v4l2_device *v4l2)
 {
+	struct video_channel *video_ch = v4l2->video_ch;
 	int i;
-	for (i = 0; i < 8; i++)
-		if (video_ch[i].on) {
-			if (start_capturing(i) < 0) {
-				v4l2_err
-				    ("start_capturing failed, channel%d\n", i);
-				return -1;
-			}
-		}
 
-	return 0;
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if (((g_cam >> i) & 0x1) && (video_ch[i].v4l_fd > 0))
+			close(video_ch[i].v4l_fd);
+	}
 }
 
-int main(int argc, char **argv)
+static void media_device_close(struct media_dev *media)
 {
-	struct drm_kms *kms;
-	quitflag = 0;
-	int i;
-	int ret;
+	struct v4l2_device *v4l2 = media->v4l2_dev;
+
+	if (!g_saved_to_file)
+		close_drm_device(media->drm_dev->drm_fd);
+	else
+		close_save_file(v4l2->video_ch);
+
+	close_v4l2_device(v4l2);
+}
+
+/*
+ * Main function
+ */
+int main(int argc, const char *argv[])
+{
+	struct sigaction sigint;
+	struct media_dev media;
 	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", " " };
+	int ret;
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
-		v4l2_err("mx8_cap.out not supported on current soc\n");
+		v4l2_err("not supported on current soc\n");
 		return 0;
 	}
+
+	global_vars_init();
 
 	pthread_t sigtid;
 	sigemptyset(&sigset);
@@ -1329,103 +1558,46 @@ int main(int argc, char **argv)
 	pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 	pthread_create(&sigtid, NULL, (void *)&signal_thread, NULL);
 
-	/* use input parm  */
-	if (process_cmdline(argc, argv) < 0) {
-		return -1;
+	ret = parse_cmdline(argc, argv);
+	if (ret < 0) {
+		v4l2_err("%s failed to parse arguments\n", argv[0]);
+		return ret;
 	}
 
-	if (!g_saved_to_file) {
-		kms = malloc(sizeof(*kms));
-		if (!kms) {
-			v4l2_err("No Memory Space\n");
-			return -errno;
-		}
+	ret = media_device_alloc(&media);
+	if (ret < 0) {
+		v4l2_err("No enough memory\n");
+		return -ENOMEM;
 	}
 
-	memset(video_ch, 0, sizeof(struct video_channel) * 8);
+	ret = media_device_open(&media);
+	if (ret < 0)
+		goto free;
 
-	/* check cam */
-	if ((g_cam & 0xFF) == 0)
-		return -1;
+	ret = media_device_prepare(&media);
+	if (ret < 0)
+		goto close;
 
-	g_num_planes = get_num_planes_by_fmt(g_cap_fmt);
-	get_fmt_name(g_cap_fmt);
+	ret = media_device_start(&media);
+	if (ret < 0)
+		goto cleanup;
 
-	/* init all video channel to default value */
-	g_cam_num = 0;
-	for (i = 0; i < g_cam_max; i++) {
-		if (g_cam >> i & 0x1) {
-			g_cam_num++;
-			strcat(g_saved_filename[i], g_fmt_name);
-			init_video_channel(i);
-		}
-	}
+	ret = redraw(&media);
+	if (ret < 0)
+		goto stop;
 
-	if (!g_saved_to_file) {
-		ret = drm_setup(kms);
-		if (ret < 0) {
-			v4l2_err("drm setup failed\n");
-			free(kms);
-			return -1;
-		}
-	} else {
-		/* Open save file */
-		ret = open_save_file();
-		if (ret < 0) {
-			return -1;
-		}
-	}
+	show_performance_test(&media);
 
-	if (!g_saved_to_file) {
-		/* config video channel according FB info */
-		ret = config_video_channel(kms);
-		if (ret < 0) {
-			v4l2_err("config video failed\n");
-			goto FAIL0;
-		}
-	} else {
-		/* default video channel config, no resize */
-	}
+stop:
+	media_device_stop(&media);
 
-	/* open video device and enable channel */
-	for (i = 0; i < g_cam_max; i++) {
-		if (g_cam >> i & 0x1) {
-			ret = v4l_capture_setup(i);
-			if (ret < 0)
-				goto FAIL1;
-		}
-	}
-
-	if (v4l_capture_test(kms) < 0)
-		goto FAIL1;
-
-	v4l2_info("success!\n");
-
-	if (!g_saved_to_file) {
-		if (kms->drm_fd > 0) {
-			drm_cleanup(kms);
-			close(kms->drm_fd);
-		}
-		free(kms);
-	}
-	else {
-		close_save_file();
-	}
-	close_vdev_file();
-
-	return 0;
-
-FAIL1:
-	close_vdev_file();
-FAIL0:
-	if (!g_saved_to_file) {
-		if (kms->drm_fd > 0) {
-			drm_cleanup(kms);
-			close(kms->drm_fd);
-		}
-		free(kms);
-	} else
-		close_save_file();
-
-	return -1;
+cleanup:
+	media_device_cleanup(&media);
+close:
+	media_device_close(&media);
+free:
+	media_device_free(&media);
+	if (ret == 0)
+		v4l2_info("=*= success =*=\n");
+	return ret;
 }
