@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <linux/v4l2-common.h>
 #include <linux/v4l2-controls.h>
 #include <linux/v4l2-dv-timings.h>
@@ -39,7 +40,7 @@ int main(int argc, char *argv[])
 
 	if (argc != 5) {
 		print_usage();
-		return;
+		exit(1);
 	}
 
 	for (i = 1; i < 5; i += 2) {
@@ -50,7 +51,7 @@ int main(int argc, char *argv[])
 	}
 	if (video_device == 0 || test_file == 0) {
 		print_usage();
-		return;
+		exit(1);
 	}
 
 	fd = open(video_device, O_RDWR);
@@ -65,7 +66,7 @@ int main(int argc, char *argv[])
 	fseek(testjpg, 0, SEEK_SET);
 	buf = malloc(filesize + 1);
 
-	printf("\n FILE SIZE %ld \n", filesize);
+	printf("\n %s FILE SIZE %ld \n", test_file, filesize);
 
 	struct v4l2_capability capabilities;
 	if (ioctl(fd, VIDIOC_QUERYCAP, &capabilities) < 0) {
@@ -78,33 +79,36 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	struct v4l2_format format;
-	format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	format.fmt.pix.pixelformat = V4L2_PIX_FMT_JPEG;
-	format.fmt.pix.sizeimage = filesize;
-	format.fmt.pix.width = 256;
-	format.fmt.pix.height = 256;
+	struct v4l2_format out_fmt;
+	out_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	out_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_JPEG;
+	out_fmt.fmt.pix.sizeimage = filesize;
+	out_fmt.fmt.pix.width = 256;
+	out_fmt.fmt.pix.height = 256;
 
-	struct v4l2_format format2;
-	format2.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	format2.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB32;
-	format2.fmt.pix.width = 256;
-	format2.fmt.pix.height = 256;
+	struct v4l2_format cap_fmt;
+	cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	cap_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB32;
+	cap_fmt.fmt.pix.width = 256;
+	cap_fmt.fmt.pix.height = 256;
 
 	printf("\nIOCTL VIDIOC_S_FMT\n");
 
-	if (ioctl(fd, VIDIOC_S_FMT, &format) < 0) {
+	if (ioctl(fd, VIDIOC_S_FMT, &out_fmt) < 0) {
 		perror("VIDIOC_S_FMT");
 		exit(1);
 	}
 	printf("\n2\n");
-	if (ioctl(fd, VIDIOC_S_FMT, &format2) < 0) {
+	if (ioctl(fd, VIDIOC_S_FMT, &cap_fmt) < 0) {
 		perror("VIDIOC_S_FMT");
 		exit(1);
 	}
 
 	struct v4l2_requestbuffers bufrequestin;
 	struct v4l2_requestbuffers bufrequestout;
+	/* The reserved array must be zeroed */
+	memset(&bufrequestin, 0, sizeof(bufrequestin));
+	memset(&bufrequestout, 0, sizeof(bufrequestout));
 
 	bufrequestin.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	bufrequestin.memory = V4L2_MEMORY_MMAP;
@@ -132,6 +136,7 @@ int main(int argc, char *argv[])
 	memset(&bufferout, 0, sizeof(bufferout));
 
 	bufferin.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	/* bytesused set by the driver for capture stream */
 	bufferin.memory = V4L2_MEMORY_MMAP;
 	bufferin.index = 0;
 
@@ -150,16 +155,22 @@ int main(int argc, char *argv[])
 		perror("VIDIOC_QUERYBUF OUT");
 		exit(1);
 	}
+	printf("after VIDIOC_QUERYBUF: bufferout.bytesused=%d\n", bufferout.bytesused);
+	
+	bufferout.bytesused = filesize;
+	
+	printf("refilled: bufferout.bytesused=%d\n", bufferout.bytesused);
 
 	void *bufferin_start = mmap(
 				    NULL,
-				    bufferin.length,
+				    bufferin.length, /* buffer size (not the payload) in bytes for the single-planar API. This is set by the driver based on the calls to ioctl VIDIOC_REQBUFS */
 				    PROT_READ | PROT_WRITE,
 				    MAP_SHARED,
 				    fd,
-				    bufferin.m.offset
+				    bufferin.m.offset /* buffer offset from the start of the device memory */
 				   );
 
+	/* empty capture buffer */
 	memset(bufferin_start, 0, bufferin.length);
 
 	if (bufferin_start == MAP_FAILED) {
@@ -183,28 +194,12 @@ int main(int argc, char *argv[])
 	}
 
 	memset(bufferout_start, 0, bufferout.length);
+	/* fill output buffer */
 	fread(bufferout_start, filesize, 1, testjpg);
 	fclose(testjpg);
+	
 	printf("BUFFER STARTS: %lx, %ld, other size %ld\n", *(long *)bufferin_start,
 	       (unsigned long) bufferin.length, (unsigned long) bufferout.length);
-
-
-	struct v4l2_buffer bufferin2[5];
-	struct v4l2_buffer bufferout2[5];
-
-	for (i = 0; i < 5; i++) {
-		memset(&bufferin2[i], 0, sizeof(bufferin2[i]));
-		memset(&bufferout2[i], 0, sizeof(bufferout2[i]));
-
-		bufferin2[i].type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		bufferin2[i].memory = V4L2_MEMORY_MMAP;
-		bufferin2[i].index = 0; /* Queueing buffer index 0. */
-
-		bufferout2[i].type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-		bufferout2[i].memory = V4L2_MEMORY_MMAP;
-		bufferout2[i].index = 0; /* Queueing buffer index 0. */
-	}
-
 
 	/* Here is where you typically start two loops:
 	 * - One which runs for as long as you want to
@@ -213,34 +208,34 @@ int main(int argc, char *argv[])
 
 	// Put the buffer in the incoming queue.
 
-	for (i = 0; i < 5; i++) {
+
+
+		printf("\n\nQBUF IN\n\n");
+		if (ioctl(fd, VIDIOC_QBUF, &bufferin) < 0) {
+			perror("VIDIOC_QBUF IN");
+			exit(1);
+		}
+
+		if (ioctl(fd, VIDIOC_QBUF, &bufferout) < 0) {
+			perror("VIDIOC_QBUF OUT");
+			exit(1);
+		}
+
 		// Activate streaming
 		printf("\n\nSTREAMON IN\n\n");
-		int typein = bufferin2[i].type;
+		int typein = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		if (ioctl(fd, VIDIOC_STREAMON, &typein) < 0) {
 			perror("VIDIOC_STREAMON IN");
 			exit(1);
 		}
 		printf("\n\nSTREAMON OUT\n\n");
 
-		int typeout = bufferout2[i].type;
+		int typeout = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 		if (ioctl(fd, VIDIOC_STREAMON, &typeout) < 0) {
 			perror("VIDIOC_STREAMON OUT");
 			exit(1);
 		}
-	}
 
-	for (i = 0; i < 5; i++) {
-		printf("\n\nQBUF IN\n\n");
-		if (ioctl(fd, VIDIOC_QBUF, &bufferin) < 0) {
-			perror("VIDIOC_QBUF IN");
-			exit(1);
-		}
-		printf("\n\nQBUF OUT\n\n");
-		if (ioctl(fd, VIDIOC_QBUF, &bufferout) < 0) {
-			perror("VIDIOC_QBUF OUT");
-			exit(1);
-		}
 		for (j = 0; j < bufferin.length; j += 8) {
 			printf("%02x %02x %02x %02x %02x %02x %02x %02x",
 			       ((char *)bufferin_start)[j],
@@ -256,16 +251,15 @@ int main(int argc, char *argv[])
 		       *((long *)bufferin_start));
 
 		printf("\n\nDQBUF OUT\n\n");
-		if (ioctl(fd, VIDIOC_DQBUF, &bufferout2[i]) < 0) {
+		if (ioctl(fd, VIDIOC_DQBUF, &bufferout) < 0) {
 			perror("VIDIOC_QBUF OUT");
 			exit(1);
 		}
 		printf("\n\nDQBUF IN\n\n");
-		if (ioctl(fd, VIDIOC_DQBUF, &bufferin2[i]) < 0) {
+		if (ioctl(fd, VIDIOC_DQBUF, &bufferin) < 0) {
 			perror("VIDIOC_QBUF OUT");
 			exit(1);
 		}
-	}
 
 	FILE *fout = fopen("outfile", "wb");
 
@@ -277,7 +271,8 @@ int main(int argc, char *argv[])
 
 	// Deactivate streaming
 	printf("\n\nTEST DONE\n\n");
-	/*
+
+	printf("\n\nDeactivate streaming\n\n");
 	   if(ioctl(fd, VIDIOC_STREAMOFF, &typein) < 0){
 	   perror("VIDIOC_STREAMOFF IN");
 	   exit(1);
@@ -288,8 +283,11 @@ int main(int argc, char *argv[])
 	   perror("VIDIOC_STREAMOFF OUT");
 	   exit(1);
 	   }
-	 */
-
+	
+	// dealocate buffers
+	munmap(bufferin_start, bufferin.length);
+	munmap(bufferout_start, bufferout.length);
+	
 	close(fd);
 	return 0;
 }
