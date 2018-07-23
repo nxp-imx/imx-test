@@ -474,6 +474,9 @@ static int open_save_file(struct video_channel *video_ch)
 {
 	int i, fd;
 
+	if (g_performance_test)
+		return 0;
+
 	for (i = 0; i < NUM_SENSORS; i++) {
 		if ((g_cam >> i) & 0x01) {
 			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT);
@@ -561,6 +564,9 @@ static int open_v4l2_device(struct v4l2_device *v4l2)
 static void close_save_file(struct video_channel *video_ch)
 {
 	int i;
+
+	if (g_performance_test)
+		return;
 
 	for (i = 0; i < NUM_SENSORS; i++)
 		if (((g_cam >> i) & 0x1) && (video_ch[i].saved_file_fd > 0))
@@ -1375,7 +1381,7 @@ static int save_to_file(int ch, struct video_channel *video_ch)
 	size_t wsize;
 	int i;
 
-	if (fd) {
+	if (fd && !g_performance_test) {
 		/* Save capture frame to file */
 		for (i = 0; i < g_num_planes; i++) {
 			wsize = write(fd, video_ch[ch].buffers[buf_id].planes[i].start,
@@ -1450,7 +1456,8 @@ static void show_performance_test(struct media_dev *media)
 			tv2 = &video_ch[i].tv2;
 			time = (tv2->tv_sec - tv1->tv_sec);
 
-			v4l2_info("Channel[%d]: frame=%d Performance=%d(fps)\n", i,
+			v4l2_info("Channel[%d]: time=%d(s) frame=%d Performance=%d(fps)\n", i,
+					  time,
 					  video_ch[i].frame_num,
 					  (video_ch[i].frame_num / time));
 			/*video_ch[ch_id].frame_num = 0;*/
@@ -1487,11 +1494,9 @@ static int redraw(struct media_dev *media)
 						return -1;
 				} else {
 					/* Save to file */
-					if (!g_performance_test) {
-						ret = save_to_file(i, video_ch);
-						if (ret < 0)
-							return -1;
-					}
+					ret = save_to_file(i, video_ch);
+					if (ret < 0)
+						return -1;
 				}
 			}
 		}
