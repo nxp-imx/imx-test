@@ -69,6 +69,11 @@ do {                                      \
 #define v4l2_err(fmt, args...)   \
 	    v4l2_printf(ERR_LEVEL, "\x1B[31m"fmt"\e[0m", ##args)
 
+#define min(x, y) \
+	({__typeof__ (x) _x = x;   \
+	__typeof__ (y) _y = y;   \
+	((_x) > (_y)) ? (_y) : (_x); })
+
 /*
  * DRM modeset releated data structure definition
  */
@@ -88,8 +93,8 @@ struct drm_device {
 	int drm_fd;
 
 	__s32 crtc_id;
-	__s32 conn_id;
 	__s32 card_id;
+	uint32_t conn_id;
 
 	__u32 bits_per_pixel;
 	__u32 bytes_per_pixel;
@@ -139,6 +144,10 @@ struct video_channel {
 	/* fb info */
 	__s32 x_offset;
 	__s32 y_offset;
+
+	/* Display info */
+	__u32 width_d;
+	__u32 height_d;
 
 	struct testbuffer buffers[TEST_BUFFER_NUM];
 	__u32 nr_buffer;
@@ -455,7 +464,7 @@ static int media_device_alloc(struct media_dev *media)
 			free(v4l2);
 			return -ENOMEM;
 		}
-		memset(drm, 0, sizeof(drm));
+		memset(drm, 0, sizeof(*drm));
 		media->drm_dev = drm;
 	}
 	return 0;
@@ -497,7 +506,7 @@ static int open_drm_device(struct drm_device *drm)
 {
 	char dev_name[15];
 	uint64_t has_dumb;
-	int fd, i, ret;
+	int fd, i;
 
 	i = 0;
 loop:
@@ -707,6 +716,7 @@ destroy_fb:
 	dreq.handle = buf->handle;
 	drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
 	v4l2_err("Create DRM buffer[%d] fail\n", index);
+	return ret;
 }
 
 static void drm_destroy_fb(int fd, int index, struct drm_buffer *buf)
@@ -739,10 +749,10 @@ static int modeset_setup_dev(struct drm_device *drm,
 		ret = drm_create_fb(drm->drm_fd, i, &buf[i]);
 		if (ret < 0) {
 			while(i)
-				drm_destroy_fb(drm->drm_fd, i - 1, &buf[--i]);
+				drm_destroy_fb(drm->drm_fd, i - 1, &buf[i-1]);
 			return ret;
 		}
-		v4l2_dbg("DRM bufffer[%d] addr=0x%x size=%d w/h=(%d,%d) buf_id=%d\n",
+		v4l2_dbg("DRM bufffer[%d] addr=0x%p size=%d w/h=(%d,%d) buf_id=%d\n",
 				 i, buf[i].fb_base, buf[i].size,
 				 buf[i].width, buf[i].height, buf[i].buf_id);
 	}
@@ -927,8 +937,8 @@ static void adjust_width_height_for_one_sensor(struct video_channel *video_ch)
 		v4l2_err("channel VIDIOC_ENUM_FRAMESIZES fail\n");
 		return;
 	}
-	video_ch->out_width  = frmsize.discrete.width;
-	video_ch->out_height = frmsize.discrete.height;
+	video_ch->out_width  = min(video_ch->width_d, frmsize.discrete.width);
+	video_ch->out_height = min(video_ch->height_d, frmsize.discrete.height);
 }
 
 static void fill_video_channel(struct video_channel *video_ch,
@@ -951,7 +961,7 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	struct v4l2_format fmt;
 	struct v4l2_streamparm parm;
 	int fd = video_ch[ch_id].v4l_fd;
-	int i, ret;
+	int ret;
 
 	memset(&chipident, 0, sizeof(chipident));
 	ret = ioctl(fd, VIDIOC_DBG_G_CHIP_IDENT, &chipident);
@@ -1057,10 +1067,10 @@ static void get_memory_map_info(struct video_channel *video_ch)
 					 fd, video_ch->buffers[i].planes[j].offset);
 
 			v4l2_dbg("V4L2 buffer[%d]->planes[%d]:"
-					 "startAddr=0x%x, offset=0x%x, buf_size=%d\n",
+					 "startAddr=0x%p, offset=0x%x, buf_size=%d\n",
 					 i, j,
 					 (unsigned int *)video_ch->buffers[i].planes[j].start,
-					 video_ch->buffers[i].planes[j].offset,
+					 (unsigned int)video_ch->buffers[i].planes[j].offset,
 					 video_ch->buffers[i].planes[j].length);
 		}
 	}
@@ -1174,7 +1184,7 @@ static int queue_buffer(int buf_id, struct video_channel *video_ch)
 
 	ret = ioctl(fd, VIDIOC_QBUF, &buf);
 	if (ret < 0) {
-		v4l2_err("buffer[%s] VIDIOC_QBUF error\n", buf_id);
+		v4l2_err("buffer[%d] VIDIOC_QBUF error\n", buf_id);
 		free(planes);
 		return ret;
 	}
@@ -1297,6 +1307,21 @@ static int v4l2_device_streamoff(int ch_id, struct video_channel *video_ch)
 	return 0;
 }
 
+static void cpy_dis_w_h_to_video_ch(struct v4l2_device *v4l2,
+					                struct drm_device *drm)
+{
+	struct video_channel *video_ch = v4l2->video_ch;
+	struct drm_buffer *buf = &drm->buffers[0];
+	int i;
+
+	for (i = 0; i < NUM_SENSORS; i++) {
+		if ((g_cam >> i) & 0x1) {
+			video_ch[i].width_d = buf->width;
+			video_ch[i].height_d = buf->height;
+		}
+	}
+}
+
 static int media_device_prepare(struct media_dev *media)
 {
 	struct v4l2_device *v4l2 = media->v4l2_dev;
@@ -1310,6 +1335,8 @@ static int media_device_prepare(struct media_dev *media)
 			return ret;
 		}
 	}
+
+	cpy_dis_w_h_to_video_ch(v4l2, drm);
 
 	ret = v4l2_device_prepare(v4l2, &drm->buffers[0]);
 	if (ret < 0) {
@@ -1476,7 +1503,6 @@ static void show_performance_test(struct media_dev *media)
 static int redraw(struct media_dev *media)
 {
 	struct video_channel *video_ch = media->v4l2_dev->video_ch;
-	struct drm_device *drm = media->drm_dev;
 	int i, ret;
 
 	/* Record enter time for every channel */
@@ -1552,7 +1578,6 @@ static void media_device_close(struct media_dev *media)
  */
 int main(int argc, const char *argv[])
 {
-	struct sigaction sigint;
 	struct media_dev media;
 	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", " " };
 	int ret;
