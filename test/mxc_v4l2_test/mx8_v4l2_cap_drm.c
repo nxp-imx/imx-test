@@ -1408,11 +1408,19 @@ static int display_on_screen(int ch, struct media_dev *media)
 	int bufoffset;
 	int out_h, out_w, stride;
 	int bytes_per_line;
+	int cor_offset_x, cor_offset_y;
 	int j, ret;
 
+	if (g_cam_num == 1) {
+		cor_offset_x = (buf->width >> 1) - (video_ch[ch].out_width >> 1);
+		cor_offset_y = (buf->height >> 1) - (video_ch[ch].out_height >> 1);
+	} else {
+		cor_offset_x = 0;
+		cor_offset_y = 0;
+	}
 	bytes_per_line = drm->bytes_per_pixel * buf->width;
-	bufoffset = video_ch[ch].x_offset * drm->bytes_per_pixel +
-				video_ch[ch].y_offset * bytes_per_line;
+	bufoffset = (video_ch[ch].x_offset + cor_offset_x)* drm->bytes_per_pixel +
+				(video_ch[ch].y_offset + cor_offset_y)* bytes_per_line;
 
 	out_h = video_ch[ch].out_height - 1;
 	out_w = video_ch[ch].out_width;
