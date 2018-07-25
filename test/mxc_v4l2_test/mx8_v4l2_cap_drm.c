@@ -69,11 +69,6 @@ do {                                      \
 #define v4l2_err(fmt, args...)   \
 	    v4l2_printf(ERR_LEVEL, "\x1B[31m"fmt"\e[0m", ##args)
 
-#define min(x, y) \
-	({__typeof__ (x) _x = x;   \
-	__typeof__ (y) _y = y;   \
-	((_x) > (_y)) ? (_y) : (_x); })
-
 /*
  * DRM modeset releated data structure definition
  */
@@ -144,10 +139,6 @@ struct video_channel {
 	/* fb info */
 	__s32 x_offset;
 	__s32 y_offset;
-
-	/* Display info */
-	__u32 width_d;
-	__u32 height_d;
 
 	struct testbuffer buffers[TEST_BUFFER_NUM];
 	__u32 nr_buffer;
@@ -475,7 +466,7 @@ static void media_device_free(struct media_dev *media)
 	if (media->v4l2_dev)
 		free(media->v4l2_dev);
 
-	if (media->drm_dev)
+	if (media->drm_dev && !g_saved_to_file)
 		free(media->drm_dev);
 }
 
@@ -594,10 +585,10 @@ static int media_device_open(struct media_dev *media)
 	struct drm_device *drm = media->drm_dev;
 	int ret;
 
-	if (g_saved_to_file)
-		ret = open_save_file(v4l2->video_ch);
-	else
+	if (!g_saved_to_file)
 		ret = open_drm_device(drm);
+	else
+		ret = open_save_file(v4l2->video_ch);
 
 	if (ret < 0)
 		return ret;
@@ -937,8 +928,9 @@ static void adjust_width_height_for_one_sensor(struct video_channel *video_ch)
 		v4l2_err("channel VIDIOC_ENUM_FRAMESIZES fail\n");
 		return;
 	}
-	video_ch->out_width  = min(video_ch->width_d, frmsize.discrete.width);
-	video_ch->out_height = min(video_ch->height_d, frmsize.discrete.height);
+
+	video_ch->out_width  = frmsize.discrete.width;
+	video_ch->out_height = frmsize.discrete.height;
 }
 
 static void fill_video_channel(struct video_channel *video_ch,
@@ -1112,7 +1104,8 @@ static int v4l2_create_buffer(int ch_id, struct video_channel *video_ch)
 
 	get_memory_map_info(&video_ch[ch_id]);
 
-	v4l2_dbg("channel[%d] alloc buffer success\n", ch_id);
+	v4l2_dbg("channel[%d] w/h=(%d,%d) alloc buffer success\n",
+			  ch_id, video_ch[ch_id].out_width, video_ch[ch_id].out_height);
 	return 0;
 }
 
@@ -1222,7 +1215,9 @@ static int dqueue_buffer(int buf_id, struct video_channel *video_ch)
 	video_ch->frame_num++;
 	video_ch->cur_buf_id = buf.index;
 
-	/*v4l2_dbg("=== dqbuf ===\n");*/
+	setbuf(stdout, NULL);
+	printf(" %c", (video_ch->frame_num % 16 == 0 ||
+			  video_ch->frame_num == g_num_frames) ? '\n' : '.' );
 	free(planes);
 	return 0;
 
@@ -1307,21 +1302,6 @@ static int v4l2_device_streamoff(int ch_id, struct video_channel *video_ch)
 	return 0;
 }
 
-static void cpy_dis_w_h_to_video_ch(struct v4l2_device *v4l2,
-					                struct drm_device *drm)
-{
-	struct video_channel *video_ch = v4l2->video_ch;
-	struct drm_buffer *buf = &drm->buffers[0];
-	int i;
-
-	for (i = 0; i < NUM_SENSORS; i++) {
-		if ((g_cam >> i) & 0x1) {
-			video_ch[i].width_d = buf->width;
-			video_ch[i].height_d = buf->height;
-		}
-	}
-}
-
 static int media_device_prepare(struct media_dev *media)
 {
 	struct v4l2_device *v4l2 = media->v4l2_dev;
@@ -1335,8 +1315,6 @@ static int media_device_prepare(struct media_dev *media)
 			return ret;
 		}
 	}
-
-	cpy_dis_w_h_to_video_ch(v4l2, drm);
 
 	ret = v4l2_device_prepare(v4l2, &drm->buffers[0]);
 	if (ret < 0) {
@@ -1353,6 +1331,7 @@ static int media_device_prepare(struct media_dev *media)
 static int media_device_start(struct media_dev *media)
 {
 	struct v4l2_device *v4l2 = media->v4l2_dev;
+	struct video_channel *video_ch = v4l2->video_ch;
 	struct drm_device *drm = media->drm_dev;
 	struct drm_buffer *buf;
 	int i, ret;
@@ -1368,6 +1347,16 @@ static int media_device_start(struct media_dev *media)
 		v4l2_dbg("crtc_id=%d conn_id=%d buf_id=%d\n",
 				 drm->crtc_id, drm->conn_id,
 				 drm->buffers[drm->front_buf].buf_id);
+
+		for (i = 0; i < NUM_SENSORS; i++) {
+			if (v4l2->video_ch[i].on) {
+				if (video_ch[i].out_width > buf->width ||
+					video_ch[i].out_height > buf->height)
+					v4l2_info("sensor image dimension is bigger than screen "
+							  "resolution, so truncate to adapt to display\n");
+			}
+		}
+
 	}
 
 	for (i = 0; i < NUM_SENSORS; i++) {
@@ -1433,7 +1422,7 @@ static int display_on_screen(int ch, struct media_dev *media)
 	int buf_id = video_ch[ch].cur_buf_id;
 	static int enter_count = 0;
 	int bufoffset;
-	int out_h, out_w, stride;
+	int out_h, out_w, stride_v, stride_d;
 	int bytes_per_line;
 	int cor_offset_x, cor_offset_y;
 	int j, ret;
@@ -1441,22 +1430,35 @@ static int display_on_screen(int ch, struct media_dev *media)
 	if (g_cam_num == 1) {
 		cor_offset_x = (buf->width >> 1) - (video_ch[ch].out_width >> 1);
 		cor_offset_y = (buf->height >> 1) - (video_ch[ch].out_height >> 1);
+		cor_offset_x = (cor_offset_x < 0) ? 0 : cor_offset_x;
+		cor_offset_y = (cor_offset_y < 0) ? 0 : cor_offset_y;
 	} else {
 		cor_offset_x = 0;
 		cor_offset_y = 0;
 	}
+
 	bytes_per_line = drm->bytes_per_pixel * buf->width;
 	bufoffset = (video_ch[ch].x_offset + cor_offset_x)* drm->bytes_per_pixel +
 				(video_ch[ch].y_offset + cor_offset_y)* bytes_per_line;
 
+	/* V4L2 buffer width and height */
 	out_h = video_ch[ch].out_height - 1;
 	out_w = video_ch[ch].out_width;
-	stride = out_w * drm->bytes_per_pixel;
 
-	for (j = 0; j < out_h; j++) {
+	/* V4L2 buffer stride value */
+	stride_v = out_w * drm->bytes_per_pixel;
+
+	/* adjust wight and height of output when image is bigger than screen */
+	out_w = (out_w > buf->width) ? buf->width : out_w;
+	out_h = (out_h > buf->height - 1) ? buf->height - 1 : out_h;
+
+	/* display screen stride value */
+	stride_d = out_w * drm->bytes_per_pixel;
+
+	for (j = 1; j < out_h; j++) {
 		memcpy(buf->fb_base + bufoffset + j * bytes_per_line,
-			   video_ch[ch].buffers[buf_id].planes[0].start + j * stride,
-			   stride);
+			   video_ch[ch].buffers[buf_id].planes[0].start + j * stride_v,
+			   stride_d);
 	}
 
 	if (!(++enter_count % g_cam_num)) {
