@@ -143,6 +143,9 @@ typedef struct _stream_media_t
 
 	uint32_t			        fmt;
 	zoe_bool_t                  auto_rewind;
+
+	unsigned int                outFrameCount;
+	unsigned int                inFrameCount;
 } stream_media_t;
 
 typedef enum _stream_dir_e

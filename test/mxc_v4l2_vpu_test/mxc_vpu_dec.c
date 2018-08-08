@@ -785,6 +785,18 @@ static void LoadFrameNV12_10b (unsigned char *pFrameBuffer, unsigned char *pYuvB
 	}
 }
 
+int file_size(char* filename)
+{
+	FILE *fp = fopen(filename,"r");
+	if(!fp)
+		return -1;
+	fseek(fp,0,SEEK_END);
+	int size = ftell(fp);
+	fclose(fp);
+
+	return size;
+}
+
 void test_streamout(component_t *pComponent)
 {
 	int							lErr = 0;
@@ -809,6 +821,9 @@ void test_streamout(component_t *pComponent)
 
     int                         i;
 
+	int  out_stream_flag;
+	unsigned int outFrameNum = 0;
+
 	printf("%s() [\n", __FUNCTION__);
 
 	ulWidth = pComponent->ulWidth;
@@ -822,17 +837,25 @@ void test_streamout(component_t *pComponent)
 	
 	if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 	{
-		fpOutput = fopen(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr, "w+");
-		if (fpOutput == NULL)
+		if(!strcasecmp(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr,"NONE"))
+			out_stream_flag = 0;
+		else
+			out_stream_flag = 1;
+		if(out_stream_flag)
 		{
-			printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
-			lErr = 1;
-			goto FUNC_END;
+			fpOutput = fopen(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr, "w+");
+			if (fpOutput == NULL)
+			{
+				printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
+				lErr = 1;
+				goto FUNC_END;
+			}
 		}
 	}
 	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
 	{
 		// output to null
+		out_stream_flag = 0;
 	}
 	else
 	{
@@ -997,22 +1020,33 @@ void test_streamout(component_t *pComponent)
 						}
 						ybuf = dstbuf;
 						uvbuf = dstbuf + ulWidth * ulHeight;
-
-						for (i = 0; i < stV4lBuf.length; i++) {
-
-							if (0 == i)
-							{
-								bytesused = ulWidth * ulHeight;
+                        if(out_stream_flag)
+						{
+							for (i = 0; i < stV4lBuf.length; i++) {
+								if (0 == i)
+								{
+									bytesused = ulWidth * ulHeight;
 #ifndef PRECISION_8BIT
-								if (b10format)
-									bytesused = bytesused * 2;
+									if (b10format)
+										bytesused = bytesused * 2;
 #endif
-								fwrite((void*)ybuf, 1, bytesused, fpOutput);
+									fwrite((void*)ybuf, 1, bytesused, fpOutput);
+								}
+								else
+								{
+									bytesused = (ulWidth * ulHeight) / 2;
+									fwrite((void*)uvbuf, 1, bytesused, fpOutput);
+								}
 							}
-							else
+							if(pComponent->ports[STREAM_DIR_OUT].outFrameCount > 0 &&
+									++outFrameNum >= pComponent->ports[STREAM_DIR_OUT].outFrameCount)
 							{
-								bytesused = (ulWidth * ulHeight) / 2;
-								fwrite((void*)uvbuf, 1, bytesused, fpOutput);
+								printf("Complete output %d frame.",outFrameNum);
+								free(dstbuf);
+								free(yuvbuf);
+								g_unCtrlCReceived = 1;
+								gettimeofday(&end,NULL);
+								goto FUNC_END;
 							}
 						}
 					free(dstbuf);
@@ -1085,7 +1119,7 @@ void test_streamin(component_t *pComponent)
     unsigned int                total;
     int                         first = pComponent->ports[STREAM_DIR_IN].buf_count;
 	long                        file_size;
-
+	
 	printf("%s() [\n", __FUNCTION__);
 
 	frame_nb = pComponent->ports[STREAM_DIR_IN].buf_count;
@@ -1218,7 +1252,7 @@ RETRY:
 						{
 							msync((void*)pBuf, block_size, MS_SYNC);
 						}
-                    }
+					 }
 				}
 
                 total = 0;
@@ -1307,7 +1341,7 @@ RETRY:
 						lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
 						if (lErr)
 							printf("VIDIOC_DECODER_CMD has error\n");
-						file_size = -1;
+						file_size = -1;						
 					}
 					usleep(1000);
 					goto RETRY;
@@ -1371,7 +1405,7 @@ int main(int argc,
     component_t                 *pComponent;
 	int			                nType;
 	int			                i, j, k;
-    uint32_t                    type = COMPONENT_TYPE_DECODER;
+    uint32_t                    type = COMPONENT_TYPE_DECODER;  //COMPOENT_TYPE
 
 	struct v4l2_buffer			stV4lBuf;
     struct v4l2_plane           stV4lPlanes[3];
@@ -1399,8 +1433,12 @@ HAS_2ND_CMD:
 	nHas2ndCmd = 0;
 
 	component[nCmdIdx].busType = -1;
-    pComponent = &component[nCmdIdx];
+	component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_NULL_OUT;
+	component[nCmdIdx].ports[STREAM_DIR_IN].fmt = 0xFFFFFFFF;
+	component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
+   	pComponent = &component[nCmdIdx];
     pComponent->ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
+	
 
     while (nArgNow < argc)
 	{
@@ -1436,7 +1474,7 @@ HAS_2ND_CMD:
 				break;
             }
 			nArgNow++;
-			component[nCmdIdx].ports[STREAM_DIR_IN].fmt = atoi(argv[nArgNow++]);
+			component[nCmdIdx].ports[STREAM_DIR_IN].fmt = atoi(argv[nArgNow++]);   //uint32_t
         }
 		else if (!strcasecmp(argv[nArgNow],"OFMT"))
 		{
@@ -1447,6 +1485,15 @@ HAS_2ND_CMD:
 			nArgNow++;
 			component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = atoi(argv[nArgNow++]);
         }
+		else if(!strcasecmp(argv[nArgNow],"FRAMES"))
+		{
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			component[nCmdIdx].ports[STREAM_DIR_OUT].outFrameCount = atoi(argv[nArgNow++]);
+		}
 		else if (!strcasecmp(argv[nArgNow],"+"))
 		{
             nArgNow++;
@@ -1458,6 +1505,21 @@ HAS_2ND_CMD:
             nArgNow++;
         }
     }
+
+	if(strlen(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr)==0 
+			|| component[nCmdIdx].ports[STREAM_DIR_IN].fmt == 0xFFFFFFFF
+			|| component[nCmdIdx].ports[STREAM_DIR_OUT].fmt == 0xFFFFFFFF
+	  )
+	{
+		printf("INPUT ERROR.\n\
+Usage:\
+./mxc_v4l2_vpu_dec.out ifile filename ifmt input_format ofmt out_format ofile filename\n\
+or\n\
+./mxc_v4l2_vpu_dec.out ifile filename ifmt input_format ofmt out_format\n\
+or\n\
+./mxc_v4l2_vpu_dec.out ifile filename ifmt input_format ofmt out_format ofile filename frames  out_frame_amount\n");
+			goto FUNC_END;
+	}
 
 	// lookup and open the device
 	lErr = lookup_video_device_node(component[nCmdIdx].devInstance,
@@ -1549,7 +1611,7 @@ HAS_2ND_CMD:
     req_bufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     req_bufs.memory = V4L2_MEMORY_MMAP;
 
-    lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs);
+    lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs); 
 	if (lErr)
 	{
 		printf("%s() VIDIOC_REQBUFS ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
