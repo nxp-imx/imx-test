@@ -63,7 +63,6 @@ static enum asrc_pair_index pair_index;
 static char header[WAVE_HEAD_SIZE];
 
 static int *input_buffer;
-static int *output_buffer;
 static int *input_null;
 
 static enum asrc_inclk inclk;
@@ -170,7 +169,7 @@ int asrc_get_output_buffer_size(int input_buffer_size,
 	return outbuffer_size;
 }
 
-int play_file(int fd_asrc, struct audio_info_s *info)
+int play_file(FILE * fd_dst, int fd_asrc, struct audio_info_s *info)
 {
 	int err = 0;
 	struct asrc_convert_buffer buf_info;
@@ -180,11 +179,12 @@ int play_file(int fd_asrc, struct audio_info_s *info)
 	unsigned int tail;
 
 	input_p = (char *)input_buffer;
-	output_p = (char *)output_buffer;
 	output_dma_size =
 	    asrc_get_output_buffer_size(DMA_BUF_SIZE, info->sample_rate,
 					info->output_sample_rate);
 	tail = info->channel * 4 * 2;
+
+	output_p = (char *)malloc(output_dma_size + tail);
 
 	convert_flag = 1;
 	memset(input_null, 0, DMA_BUF_SIZE);
@@ -212,17 +212,20 @@ int play_file(int fd_asrc, struct audio_info_s *info)
 			goto error;
 		if (info->output_data_len > buf_info.output_buffer_length) {
 			info->output_data_len -= buf_info.output_buffer_length;
-			output_p += buf_info.output_buffer_length;
 			info->output_used += buf_info.output_buffer_length;
+			fwrite(output_p, buf_info.output_buffer_length, 1, fd_dst);
+
 		} else {
-			output_p += info->output_data_len;
 			info->output_used += info->output_data_len;
+			fwrite(output_p, info->output_data_len, 1, fd_dst);
 			info->output_data_len = 0;
 		}
 		if (info->output_data_len == 0)
 			break;
 	}
 	err = ioctl(fd_asrc, ASRC_STOP_CONV, &pair_index);
+
+	free(output_p);
 
 error:
 	return err;
@@ -310,9 +313,6 @@ void bitshift(FILE * src, struct audio_info_s *info)
 	info->input_word_width = ASRC_WIDTH_24_BIT;
 	update_sample_bitdepth(info);
 	/*allocate input buffer*/
-	output_buffer = (int *)malloc(info->output_data_len + 256 * 1024);
-	if (output_buffer == NULL)
-		printf("output buffer allocate error\n");
 }
 
 int header_parser(FILE * src, struct audio_info_s *info)
@@ -403,29 +403,36 @@ int header_parser(FILE * src, struct audio_info_s *info)
 
 }
 
-void convert_data(FILE * dst, struct audio_info_s *info)
+void header_update(FILE * dst, struct audio_info_s *info)
 {
-	unsigned int data;
-	unsigned int size;
 	int format_size;
-	int i = 0;
 
 	format_size = *(int *)&header[16];
 
 	*(int *)&header[24 + format_size] = info->output_used;
 	*(int *)&header[4] = info->output_used + 20 + format_size;
-	size = *(int *)&header[24 + format_size];
+
+
+	fseek(dst, 4,  SEEK_SET);
+	fwrite(&header[4], 4, 1, dst);
+
+	fseek(dst, 24 + format_size,  SEEK_SET);
+	fwrite(&header[24 + format_size], 4, 1, dst);
+
+	fseek(dst, 0, SEEK_END);
+}
+
+void header_write(FILE * dst)
+{
+	int format_size;
+	int i = 0;
+
+	format_size = *(int *)&header[16];
+
 	while (i < (format_size + 28)) {
 		fwrite(&header[i], 1, 1, dst);
 		i++;
 	}
-	i = 0;
-	do {
-		data = output_buffer[i++];
-		data &= 0x00FFFFFF;
-		fwrite(&data, 4, 1, dst);
-		size -= 4;
-	} while (size > 0);
 }
 
 int main(int ac, char *av[])
@@ -590,12 +597,16 @@ int main(int ac, char *av[])
 	if (err < 0)
 		goto end_err;
 
+	header_write(fd_dst);
+
 	/* Config HW */
-	err += play_file(fd_asrc, &audio_info);
+	err += play_file(fd_dst, fd_asrc, &audio_info);
 
 	if (err < 0)
 		goto end_err;
-	convert_data(fd_dst, &audio_info);
+
+	header_update(fd_dst, &audio_info);
+
 
 	fclose(fd_src);
 	fclose(fd_dst);
@@ -603,7 +614,6 @@ int main(int ac, char *av[])
 
 	free(input_null);
 	free(input_buffer);
-	free(output_buffer);
 	printf("All tests passed with success\n");
 	return 0;
 
