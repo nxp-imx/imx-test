@@ -52,13 +52,17 @@
 
 #define DQEVENT
 
+
 volatile unsigned int g_unCtrlCReceived = 0;
 unsigned  long time_total =0;
 unsigned int num_total =0;
 unsigned int frame_count = 0;
-zoe_bool_t  seek_flag=0;
 struct  timeval start;
 struct  timeval end;
+volatile int loopTimes = 1;
+volatile int preLoopTimes = 1;
+volatile int initLoopTimes = 1;
+int frame_done = 0; 
 
 static __u32  formats_compressed[] = 
 {
@@ -131,6 +135,7 @@ int kbhit(void)
 {
 	struct timeval	tv;
 	fd_set			rdfs;
+	int ret;
 
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
@@ -138,7 +143,31 @@ int kbhit(void)
 	FD_ZERO(&rdfs);
 	FD_SET(STDIN_FILENO, &rdfs);
 
-	select(STDIN_FILENO + 1, &rdfs, NULL, NULL, &tv);
+	ret = select(STDIN_FILENO + 1, &rdfs, NULL, NULL, &tv);
+	if(ret == -1)
+	{
+		printf("warnning: select stdin failed.\n");
+	}
+	else if(ret == 0)
+	{
+	}
+	else
+	{
+		int size = 1024;
+		char *buff = (char *)malloc(size);
+		memset(buff, 0, size);
+		if(NULL != fgets(buff,size,stdin))
+		{
+			if(buff[strlen(buff)-1] == '\n')
+				buff[strlen(buff)-1] = '\0';
+			printf("Input command: %s\n", buff);
+			if(!strcasecmp(buff, "x") || !strcasecmp(buff, "stop"))
+			{
+				g_unCtrlCReceived = 1;
+			}
+		}
+		free(buff);
+	}
 	return FD_ISSET(STDIN_FILENO, &rdfs);
 }
 
@@ -785,16 +814,58 @@ static void LoadFrameNV12_10b (unsigned char *pFrameBuffer, unsigned char *pYuvB
 	}
 }
 
-int file_size(char* filename)
+int isNumber(char *str)
 {
-	FILE *fp = fopen(filename,"r");
-	if(!fp)
-		return -1;
-	fseek(fp,0,SEEK_END);
-	int size = ftell(fp);
-	fclose(fp);
+	int ret = 1;
+	int len = strlen(str);
+	for(int i = 0; i < len; i++)
+	{
+		if(str[i]<'0' || str[i]>'9')
+		{
+			ret = 0;
+			break;
+		}
+	}
+	return ret;	
+}
 
-	return size;
+void showUsage(void)
+{
+	printf("\n\
+Usage: ./mxc_v4l2_vpu_dec.out ifile [PATH] ifmt [IFMT] ofmt [OFMT] [OPTIONS]\n\n\
+OPTIONS:\n\
+    --help          Show usage manual.\n\n\
+    PATH            Specify the input file path.\n\n\
+    IFMT            Specify input file encode format number. Format comparsion table:\n\
+                        VPU_VIDEO_UNDEFINED    0\n\
+                        VPU_VIDEO_AVC          1\n\
+                        VPU_VIDEO_VC1          2\n\
+                        VPU_VIDEO_MPEG2        3\n\
+                        VPU_VIDEO_AVS          4\n\
+                        VPU_VIDEO_ASP          5\n\
+                        VPU_VIDEO_JPEG         6\n\
+                        VPU_VIDEO_RV8          7\n\
+                        VPU_VIDEO_RV9          8\n\
+                        VPU_VIDEO_VP6          9\n\
+                        VPU_VIDEO_SPK          10\n\
+                        VPU_VIDEO_VP8          11\n\
+                        VPU_VIDEO_AVC_MVC      12\n\
+                        VPU_VIDEO_HEVC         13\n\
+                        VPU_VIDEO_VP9          14\n\n\
+    OFMT            Secify decode format number. Format comparsion table:\n\
+                        V4L2_PIX_FMT_NV12      0\n\
+                        V4L2_PIX_FMT_YUV420    1\n\
+                        V4L2_PIX_FMT_UYVY      2\n\
+                        VPU_PIX_FMT_TILED_8    3\n\
+                        VPU_PIX_FMT_TILED_10   4\n\n\
+    ofile path      Specify the output file path.\n\n\
+    loop times      Specify loop decode times to the same file. If the times not set, the loop continues.\n\n\
+    frames amount   Specify amount of decode frames. Default total decode.\n\n\n\
+EXAMPLES:\n\
+    ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
+    ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 ofile test.yuv frames 100 loop 10\n\n\
+    ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 loop\n\n");
+
 }
 
 void test_streamout(component_t *pComponent)
@@ -820,42 +891,42 @@ void test_streamout(component_t *pComponent)
     struct v4l2_event           evt;
 
     int                         i;
+    zoe_bool_t                  seek_flag;
+	unsigned int                outFrameNum = 0;
+	int                         stream_type;
+	float                       used_time;
 
-	int  out_stream_flag;
-	unsigned int outFrameNum = 0;
-
-	printf("%s() [\n", __FUNCTION__);
 
 	ulWidth = pComponent->ulWidth;
 	ulHeight = pComponent->ulHeight;
 	frame_nb = pComponent->ports[STREAM_DIR_OUT].buf_count;
 
-    /***********************************************
+STREAMOUT_START:
+	printf("%s() [\n", __FUNCTION__);
+	ulXferBufCnt = 0;
+	seek_flag = 1;
+	pComponent->ports[STREAM_DIR_OUT].done_flag = 0;
+	frame_done = 0;
+	outFrameNum = 0;
+    
+	/***********************************************
     ** 1> Open output file descriptor
     ***********************************************/
-	
-	
+		
 	if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 	{
-		if(!strcasecmp(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr,"NONE"))
-			out_stream_flag = 0;
-		else
-			out_stream_flag = 1;
-		if(out_stream_flag)
+		fpOutput = fopen(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr, "w+");
+		if (fpOutput == NULL)
 		{
-			fpOutput = fopen(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr, "w+");
-			if (fpOutput == NULL)
-			{
-				printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
-				lErr = 1;
-				goto FUNC_END;
-			}
+			printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
+			lErr = 1;
+			g_unCtrlCReceived = 1;
+			return;			
 		}
 	}
 	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
 	{
 		// output to null
-		out_stream_flag = 0;
 	}
 	else
 	{
@@ -863,123 +934,141 @@ void test_streamout(component_t *pComponent)
 		goto FUNC_END;
 	}
 
+    // stream on v4l2 capture	
+    stream_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &stream_type);
+	if (!lErr)
+	{
+		pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 0;
+	}
+    else
+    {
+		printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
+		lErr = 20;
+		goto FUNC_END;
+    }
 
 	/***********************************************
 	** 2> Stream on
 	***********************************************/
-	while (!pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived)
+	while (!g_unCtrlCReceived && !pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived)
 	{
-		if (pComponent->ports[STREAM_DIR_OUT].unStarted)
-		{
-			/***********************************************
-			** QBUF, send all the buffers to driver
-			***********************************************/
-	
-			if(seek_flag==1){
+		/***********************************************
+		** QBUF, send all the buffers to driver
+		***********************************************/
+		if(seek_flag==1){
 			for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
 			{
 				stAppV4lBuf[nV4lBufCnt].sent = 0;
 			}
 			seek_flag = 0;
-			}
-			for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		}
+		for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		{
+			if (!stAppV4lBuf[nV4lBufCnt].sent)
 			{
-				if (!stAppV4lBuf[nV4lBufCnt].sent)
+				for (i = 0; i < stAppV4lBuf[nV4lBufCnt].stV4lBuf.length; i++)
 				{
-					for (i = 0; i < stAppV4lBuf[nV4lBufCnt].stV4lBuf.length; i++)
+					stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].bytesused = 0;
+					stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
+				}
+				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stAppV4lBuf[nV4lBufCnt].stV4lBuf);
+				if (lErr)
+				{
+					printf("%s() QBUF ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+					if (errno == EAGAIN)
 					{
-						stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].bytesused = 0;
-						stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
+						lErr = 0;
 					}
-					lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stAppV4lBuf[nV4lBufCnt].stV4lBuf);
-					if (lErr)
-					{
-						printf("%s() QBUF ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-						if (errno == EAGAIN)
-						{
-							lErr = 0;
-						}
-						break;
-					}
-					else
-					{
-						stAppV4lBuf[nV4lBufCnt].sent = 1;
-					}
+					break;
+				}
+				else
+				{
+					stAppV4lBuf[nV4lBufCnt].sent = 1;
 				}
 			}
+		}
 
-			/***********************************************
-			** DQBUF, get buffer from driver
-			***********************************************/
+		/***********************************************
+		** DQBUF, get buffer from driver
+		***********************************************/
+		FD_ZERO(&fds);
+		FD_SET(pComponent->hDev, &fds);
 
+		// Timeout
+        tv.tv_sec = 1;
+		tv.tv_usec = 0;
+
+		r = select(pComponent->hDev + 1, &fds, NULL, NULL, &tv);
+
+		if (-1 == r) 
+		{
+			fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+			continue;
+		}
+		if (0 == r) 
+		{
+		    printf("stream out: select readable dev timeout.\n");
+			//continue;
 			FD_ZERO(&fds);
 			FD_SET(pComponent->hDev, &fds);
 
 			// Timeout
-           	tv.tv_sec = 1;
+			tv.tv_sec = 3;
 			tv.tv_usec = 0;
 
-			r = select(pComponent->hDev + 1, &fds, NULL, NULL, &tv);
-
-			if (-1 == r) 
+			r = select(pComponent->hDev + 1, NULL, NULL, &fds, &tv);
+			if (-1 == r)
 			{
 				fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+				break;
+			}
+			if (0 == r)
+			{
+				printf("stream out: select event dev timeout.\n");
 				continue;
 			}
-			if (0 == r) 
+
+			memset(&evt, 0, sizeof(struct v4l2_event));
+			lErr = ioctl(pComponent->hDev, VIDIOC_DQEVENT, &evt);
+			if (lErr)
 			{
-			    //continue;
-				FD_ZERO(&fds);
-				FD_SET(pComponent->hDev, &fds);
-
-				// Timeout
-				tv.tv_sec = 3;
-				tv.tv_usec = 0;
-
-				r = select(pComponent->hDev + 1, NULL, NULL, &fds, &tv);
-				if (-1 == r)
-				{
-					fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
-					continue;
-				}
-				if (0 == r)
-				{
-					continue;
-				}
-
-				memset(&evt, 0, sizeof(struct v4l2_event));
-				lErr = ioctl(pComponent->hDev, VIDIOC_DQEVENT, &evt);
-				if (lErr)
-				{
-					printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-					continue;
+				printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+				break;
+			}
+			else
+			{
+				if(evt.type == V4L2_EVENT_EOS) {
+					printf("V4L2_EVENT_EOS is called\n");
+					break;
 				}
 				else
-				{
-					if(evt.type == V4L2_EVENT_EOS) {
-						printf("V4L2_EVENT_EOS is called\n");
-						g_unCtrlCReceived = 1;
-						gettimeofday(&end,NULL);
-						break;
-					}
-					else
-						printf("%s() VIDIOC_DQEVENT type=%d\n", __FUNCTION__, V4L2_EVENT_EOS);
-					continue;
-				}
+					printf("%s() VIDIOC_DQEVENT type=%d\n", __FUNCTION__, V4L2_EVENT_EOS);
+				continue;
 			}
+		}
 
-			stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-			stV4lBuf.memory = V4L2_MEMORY_MMAP;
-			stV4lBuf.m.planes = stV4lPlanes;
-			stV4lBuf.length = 2;
-			
-			lErr = ioctl(pComponent->hDev, VIDIOC_DQBUF, &stV4lBuf);
+		stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		stV4lBuf.memory = V4L2_MEMORY_MMAP;
+		stV4lBuf.m.planes = stV4lPlanes;
+		stV4lBuf.length = 2;
+		
+		lErr = ioctl(pComponent->hDev, VIDIOC_DQBUF, &stV4lBuf);
+		if (!lErr)
+		{
+			// clear sent flag
+			stAppV4lBuf[stV4lBuf.index].sent = 0;
 
-			if (!lErr)
+			if(pComponent->ports[STREAM_DIR_OUT].outFrameCount > 0 &&
+				outFrameNum >= pComponent->ports[STREAM_DIR_OUT].outFrameCount)
 			{
-				// clear sent flag
-				stAppV4lBuf[stV4lBuf.index].sent = 0;
-
+				if(!frame_done)
+					frame_done = 1;
+				continue;
+			}
+			else
+			{
+				outFrameNum++;
 				frame_count++;
 				printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r\n", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
@@ -1020,37 +1109,24 @@ void test_streamout(component_t *pComponent)
 						}
 						ybuf = dstbuf;
 						uvbuf = dstbuf + ulWidth * ulHeight;
-                        if(out_stream_flag)
-						{
-							for (i = 0; i < stV4lBuf.length; i++) {
-								if (0 == i)
-								{
-									bytesused = ulWidth * ulHeight;
-#ifndef PRECISION_8BIT
-									if (b10format)
-										bytesused = bytesused * 2;
-#endif
-									fwrite((void*)ybuf, 1, bytesused, fpOutput);
-								}
-								else
-								{
-									bytesused = (ulWidth * ulHeight) / 2;
-									fwrite((void*)uvbuf, 1, bytesused, fpOutput);
-								}
-							}
-							if(pComponent->ports[STREAM_DIR_OUT].outFrameCount > 0 &&
-									++outFrameNum >= pComponent->ports[STREAM_DIR_OUT].outFrameCount)
+						for (i = 0; i < stV4lBuf.length; i++) {
+							if (0 == i)
 							{
-								printf("Complete output %d frame.",outFrameNum);
-								free(dstbuf);
-								free(yuvbuf);
-								g_unCtrlCReceived = 1;
-								gettimeofday(&end,NULL);
-								goto FUNC_END;
+								bytesused = ulWidth * ulHeight;
+#ifndef ISION_8BIT
+								if (b10format)
+									bytesused = bytesused * 2;
+#endif
+								fwrite((void*)ybuf, 1, bytesused, fpOutput);
+							}
+							else
+							{
+								bytesused = (ulWidth * ulHeight) / 2;
+								fwrite((void*)uvbuf, 1, bytesused, fpOutput);
 							}
 						}
-					free(dstbuf);
-					free(yuvbuf);
+						free(dstbuf);
+						free(yuvbuf);
 					}
 				}
 				else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
@@ -1058,40 +1134,72 @@ void test_streamout(component_t *pComponent)
 				}
 				fflush(stdout);
 			}
+		}
+		else	
+		{
+			if (errno == EAGAIN)
+			{
+				lErr = 0;
+			}
 			else
 			{
-				if (errno == EAGAIN)
-				{
-					lErr = 0;
-				}
-				else
-				{
-					printf("\r%s()  DQBUF failed(%d) errno(%d)\n", __FUNCTION__, lErr, errno);
-				}
+				printf("\r%s()  DQBUF failed(%d) errno(%d)\n", __FUNCTION__, lErr, errno);
 			}
+		}
 
-			if (pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived)
-			{
-				printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
-				break;
-			}
-
-   		}
+		if (pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived)
+		{
+			printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
+			break;
+		}
 	}
 
-
 FUNC_END:
-	printf("\n");
+	printf("%s() ]\n", __FUNCTION__);
 	usleep(1000);
-
+    
+	fflush(stdout);
 	if (fpOutput)
 	{
 		fclose(fpOutput);
 	}
+	
+	stream_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
 
-	pComponent->ports[STREAM_DIR_OUT].unStarted = 0;
+	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
+	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
 
-	printf("%s() ]\n", __FUNCTION__);
+	gettimeofday(&end, NULL);
+	used_time = (float)(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0);
+	printf("current cycle end.\n");
+	printf("time=%.2f,  frame_count=%d,  fps=%.2f\n",used_time, outFrameNum, outFrameNum/used_time);
+	
+	if(!g_unCtrlCReceived)
+	{
+		while(preLoopTimes == loopTimes && !g_unCtrlCReceived); //sync stream in loopTimes
+		
+		if(abs(preLoopTimes - loopTimes) > 1)
+		{
+			printf("warn: test_streamin thread too fast, test_streamout cannot sync\n");
+			loopTimes = preLoopTimes - 1;  //sync actual loopTimes
+			g_unCtrlCReceived = 1;
+		}
+		else
+		{
+			if(loopTimes <= 0)
+			{
+				g_unCtrlCReceived = 1;
+			}
+			else
+			{
+				while(pComponent->ports[STREAM_DIR_IN].done_flag && !g_unCtrlCReceived);
+				
+				preLoopTimes = loopTimes;
+				goto STREAMOUT_START;
+			}
+		}
+	}
 }
 
 void test_streamin(component_t *pComponent)
@@ -1117,13 +1225,18 @@ void test_streamin(component_t *pComponent)
 
     int                         i;
     unsigned int                total;
-    int                         first = pComponent->ports[STREAM_DIR_IN].buf_count;
 	long                        file_size;
+	int                         stream_type;
+	int                         seek_flag;
 	
-	printf("%s() [\n", __FUNCTION__);
-
 	frame_nb = pComponent->ports[STREAM_DIR_IN].buf_count;
     ulIOBlockSize = frame_size = pComponent->ports[STREAM_DIR_IN].frame_size;
+	
+STREAMIN_START:	
+	printf("%s() [\n", __FUNCTION__);
+	gettimeofday(&start,NULL);
+	pComponent->ports[STREAM_DIR_IN].done_flag = 0;
+	seek_flag = 1;
 
 	/***********************************************
 	** 1> Open output file descriptor
@@ -1135,7 +1248,8 @@ void test_streamin(component_t *pComponent)
 		{
             printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
 			lErr = 1;
-			goto FUNC_END;
+			g_unCtrlCReceived = 1;
+			return;
 		}
         else
         {
@@ -1149,244 +1263,277 @@ void test_streamin(component_t *pComponent)
 		goto FUNC_END;
 	}
 
+	//  stream on v4l2 output
+    stream_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &stream_type);
+    if (!lErr)
+    {
+		pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 0;
+    }
+    else
+    {
+    	printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
+    	lErr = 11;
+    	goto FUNC_END;
+    }
+
+	while(frame_done && !g_unCtrlCReceived)
+	{
+		usleep(1000);
+	}
 
 	/***********************************************
 	** 2> Stream on
 	***********************************************/
-	while (!pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
+	while (!g_unCtrlCReceived && !pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
 	{
-		if ((pComponent->ports[STREAM_DIR_IN].unStarted) &&
-            ((first > 0) || pComponent->ports[STREAM_DIR_OUT].unStarted)
-            )
+		if(frame_done)
 		{
-            int buf_avail = 0;
+			break;
+		}
+		
+		if(seek_flag)
+		{
+			for(nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+			{
+				stAppV4lBuf[nV4lBufCnt].sent = 0;
+			}
+			seek_flag = 0;
+		}
 
-            if (first > 0)
+		int buf_avail = 0;
+
+		/***********************************************
+		** DQBUF, get buffer from driver
+		***********************************************/
+		for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		{
+			if (!stAppV4lBuf[nV4lBufCnt].sent)
+			{
+                buf_avail = 1;
+                break;
+            }
+		}
+
+        if (!buf_avail)
+        {
+            FD_ZERO(&fds);
+            FD_SET(pComponent->hDev, &fds);
+
+            // Timeout
+            tv.tv_sec = 2;
+            tv.tv_usec = 0;
+
+            r = select(pComponent->hDev + 1, NULL, &fds, NULL, &tv);
+
+            if (-1 == r) 
             {
-                first--;
+                fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+                continue;
+            }
+            if (0 == r) 
+            {
+                continue;
             }
 
-			/***********************************************
-			** DQBUF, get buffer from driver
-			***********************************************/
-
-			for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+			stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+			stV4lBuf.memory = V4L2_MEMORY_MMAP;
+            stV4lBuf.m.planes = stV4lPlanes;
+	        stV4lBuf.length = 1;
+			lErr = ioctl(pComponent->hDev, VIDIOC_DQBUF, &stV4lBuf);
+			if (!lErr)
 			{
-				if (!stAppV4lBuf[nV4lBufCnt].sent)
-				{
-                    buf_avail = 1;
-                    break;
-                }
+				stAppV4lBuf[stV4lBuf.index].sent = 0;
 			}
+        }
 
-            if (!buf_avail)
-            {
-                FD_ZERO(&fds);
-                FD_SET(pComponent->hDev, &fds);
-
-                // Timeout
-                tv.tv_sec = 2;
-                tv.tv_usec = 0;
-
-                r = select(pComponent->hDev + 1, NULL, &fds, NULL, &tv);
-
-                if (-1 == r) 
-                {
-                    fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
-                    continue;
-                }
-                if (0 == r) 
-                {
-                    continue;
-                }
-
-				stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-				stV4lBuf.memory = V4L2_MEMORY_MMAP;
-                stV4lBuf.m.planes = stV4lPlanes;
-	            stV4lBuf.length = 1;
-				lErr = ioctl(pComponent->hDev, VIDIOC_DQBUF, &stV4lBuf);
-				if (!lErr)
-				{
-					stAppV4lBuf[stV4lBuf.index].sent = 0;
-				}
-            }
-
-			if (lErr)
+		if (lErr)
+		{
+			if (errno == EAGAIN)
 			{
-				if (errno == EAGAIN)
-				{
-					lErr = 0;
-				}
+				lErr = 0;
 			}
+		}
 
-			/***********************************************
-			** get empty buffer and read data
-			***********************************************/
-			pstV4lBuf = NULL;
+		/***********************************************
+		** get empty buffer and read data
+		***********************************************/
+		pstV4lBuf = NULL;
 
-			for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		{
+			if (!stAppV4lBuf[nV4lBufCnt].sent)
 			{
-				if (!stAppV4lBuf[nV4lBufCnt].sent)
-				{
-					pstV4lBuf = &stAppV4lBuf[nV4lBufCnt].stV4lBuf;
-					break;
-				}
+				pstV4lBuf = &stAppV4lBuf[nV4lBufCnt].stV4lBuf;
+				break;
 			}
+		}
 
-			if (pstV4lBuf)
-			{
-				char            *pBuf;
-                unsigned int    block_size;
+		if (pstV4lBuf)
+		{
+			char            *pBuf;
+            unsigned int    block_size;
 
 RETRY:
-				if (pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN)
-				{
-                    for (i = 0; i < pstV4lBuf->length; i++)
-                    {
-				        pBuf = stAppV4lBuf[pstV4lBuf->index].addr[i];
-                        block_size = stAppV4lBuf[pstV4lBuf->index].size[i];
-					    pstV4lBuf->m.planes[i].bytesused = fread((void*)pBuf, 1, block_size, fpInput);
-					    pstV4lBuf->m.planes[i].data_offset = 0;
-						file_size -= pstV4lBuf->m.planes[i].bytesused;
-						if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_IN].memory)
-						{
-							msync((void*)pBuf, block_size, MS_SYNC);
-						}
-					 }
-				}
+			if (pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN)
+			{ 
+				for (i = 0; i < pstV4lBuf->length; i++)
+            	{
+					pBuf = stAppV4lBuf[pstV4lBuf->index].addr[i];
+					block_size = stAppV4lBuf[pstV4lBuf->index].size[i];
+					pstV4lBuf->m.planes[i].bytesused = fread((void*)pBuf, 1, block_size, fpInput);
+					pstV4lBuf->m.planes[i].data_offset = 0;
+					file_size -= pstV4lBuf->m.planes[i].bytesused;
+					if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_IN].memory)
+					{
+						msync((void*)pBuf, block_size, MS_SYNC);
+					}
+				}					
+			}
 
-                total = 0;
-                ulIOBlockSize = 0;
-                for (i = 0; i < pstV4lBuf->length; i++)
-                {
-                    total += pstV4lBuf->m.planes[i].bytesused;
-                    ulIOBlockSize += stAppV4lBuf[pstV4lBuf->index].size[i];
-                }
+            total = 0;
+            ulIOBlockSize = 0;
+            for (i = 0; i < pstV4lBuf->length; i++)
+            {
+                total += pstV4lBuf->m.planes[i].bytesused;
+                ulIOBlockSize += stAppV4lBuf[pstV4lBuf->index].size[i];
+            }
 
-				if ((pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN) &&
-					(total != ulIOBlockSize)
+			if ((pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN) &&
+				(total != ulIOBlockSize)
+				)
+			{
+				if ((pComponent->ports[STREAM_DIR_IN].portType == COMPONENT_PORT_COMP_IN) ||
+					(pComponent->ports[STREAM_DIR_IN].portType == COMPONENT_PORT_YUV_IN)
 					)
 				{
-					if ((pComponent->ports[STREAM_DIR_IN].portType == COMPONENT_PORT_COMP_IN) ||
-						(pComponent->ports[STREAM_DIR_IN].portType == COMPONENT_PORT_YUV_IN)
-						)
-					{
-                        if (pComponent->ports[STREAM_DIR_IN].auto_rewind)
-                        {
-						    fseek(fpInput, 0, SEEK_SET);
-                        }
-					}
-					else
-					{
-						pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
-					}
-				}
-
-				if (total != 0)
-				{
-					memcpy(&stV4lBuf, pstV4lBuf, sizeof(struct v4l2_buffer));
-
-					if (pComponent->ports[STREAM_DIR_IN].unUserPTS)
-					{
-                        struct timespec now;
-                        clock_gettime (CLOCK_MONOTONIC, &now);
-                        stV4lBuf.timestamp.tv_sec = now.tv_sec;
-                        stV4lBuf.timestamp.tv_usec = now.tv_nsec / 1000;	
-	                    stV4lBuf.flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-					}
-					else
-					{
-						// not use PTS
-	                    stV4lBuf.flags &= ~V4L2_BUF_FLAG_TIMESTAMP_MASK;
-					}
-
-					/***********************************************
-					** QBUF, put data to driver
-					***********************************************/
-					lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stV4lBuf);
-					if (lErr)
-					{
-						if (errno == EAGAIN)
-						{
-						    printf("\n");
-							lErr = 0;
-						}
-                        else
-                        {
-						    printf("v4l2_buf index(%d) type(%d) memory(%d) sequence(%d) length(%d) planes(%p)\n",
-                                stV4lBuf.index,
-                                stV4lBuf.type,
-                                stV4lBuf.memory,
-                                stV4lBuf.sequence,
-                                stV4lBuf.length,
-                                stV4lBuf.m.planes
-                                );
-                        }
-					}
-					else
-					{
-						stAppV4lBuf[stV4lBuf.index].sent = 1;
-					}
+                    if (pComponent->ports[STREAM_DIR_IN].auto_rewind)
+                    {
+					    fseek(fpInput, 0, SEEK_SET);
+                    }
 				}
 				else
 				{
-					if (pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
-					{
-						printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
-						break;
-					}
-					if (file_size == 0)
-					{
-						v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
-						lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
-						if (lErr)
-							printf("VIDIOC_DECODER_CMD has error\n");
-						file_size = -1;						
-					}
-					usleep(1000);
-					goto RETRY;
+					pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
+				}
+			}
+
+			if (total != 0)
+			{
+				memcpy(&stV4lBuf, pstV4lBuf, sizeof(struct v4l2_buffer));
+
+				if (pComponent->ports[STREAM_DIR_IN].unUserPTS)
+				{
+                    struct timespec now;
+                    clock_gettime (CLOCK_MONOTONIC, &now);
+                    stV4lBuf.timestamp.tv_sec = now.tv_sec;
+                    stV4lBuf.timestamp.tv_usec = now.tv_nsec / 1000;	
+	                stV4lBuf.flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+				}
+				else
+				{
+					// not use PTS
+	                stV4lBuf.flags &= ~V4L2_BUF_FLAG_TIMESTAMP_MASK;
 				}
 
-				fflush(stdout);
-			}
-
-			if (pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
-			{
-				printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
-				break;
-			}
-
-			if (pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN)
-			{
-				usleep(1000);
+				/***********************************************
+				** QBUF, put data to driver
+				***********************************************/
+				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stV4lBuf);
+				if (lErr)
+				{
+					if (errno == EAGAIN)
+					{
+					    printf("\n");
+						lErr = 0;
+					}
+                    else
+                    {
+					    printf("v4l2_buf index(%d) type(%d) memory(%d) sequence(%d) length(%d) planes(%p)\n",
+                            stV4lBuf.index,
+                            stV4lBuf.type,
+                            stV4lBuf.memory,
+                            stV4lBuf.sequence,
+                            stV4lBuf.length,
+                            stV4lBuf.m.planes
+                            );
+                    }
+				}
+				else
+				{
+					stAppV4lBuf[stV4lBuf.index].sent = 1;
+				}
 			}
 			else
 			{
+				if (pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
+				{
+					printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
+					break;
+				}
+				if (file_size == 0)
+				{
+					file_size = -1;
+					break;													
+				}
 				usleep(1000);
+				goto RETRY;
 			}
+			fflush(stdout);
 		}
-        else
-        {
-			usleep(30000);
-        }
-    }
 
+		if (pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
+		{
+			printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
+			break;
+		}
+
+		if (pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN)
+		{
+			usleep(1000);
+		}
+		else
+		{
+			usleep(1000);
+		}
+	}
 
 FUNC_END:
-
-	printf("\n");
-
-	usleep(10000);
-
+	printf("%s() ]\n", __FUNCTION__);
+	usleep(1000);
+	fflush(stdout);
 	if (fpInput)
 	{
 		fclose(fpInput);
 	}
+    
+	pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
 
-    pComponent->ports[STREAM_DIR_IN].unStarted = 0;
-
-    //return lErr;
-	printf("%s() ]\n", __FUNCTION__);
+	v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
+	lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
+	if (lErr)
+		printf("VIDIOC_DECODER_CMD has error\n");
+    else
+	{
+		printf("sent cmd: V4L2_DEC_CMD_STOP\n");
+	}
+	pComponent->ports[STREAM_DIR_IN].done_flag = 1;
+	while(!pComponent->ports[STREAM_DIR_OUT].done_flag && !g_unCtrlCReceived)
+	{
+		usleep(1000);
+	}
+	
+	//Cannot streamoff unitl current stream out thread is done.
+	stream_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
+	loopTimes--;	
+	if(!g_unCtrlCReceived)
+	{
+		if((loopTimes) > 0)
+		{			
+			goto STREAMIN_START;
+		}
+	}
 }
 
 #define MAX_SUPPORTED_COMPONENTS	5
@@ -1403,7 +1550,6 @@ int main(int argc,
 	int			                nHas2ndCmd;
 	component_t	                component[MAX_SUPPORTED_COMPONENTS];
     component_t                 *pComponent;
-	int			                nType;
 	int			                i, j, k;
     uint32_t                    type = COMPONENT_TYPE_DECODER;  //COMPOENT_TYPE
 
@@ -1438,8 +1584,14 @@ HAS_2ND_CMD:
 	component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
    	pComponent = &component[nCmdIdx];
     pComponent->ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
-	
+	component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr = NULL;
 
+	if(argc >= 2 && strstr(argv[1],"help"))
+	{
+		showUsage();
+		return 0;
+	}
+	
     while (nArgNow < argc)
 	{
 		if (!strcasecmp(argv[nArgNow],"IFILE"))
@@ -1459,8 +1611,9 @@ HAS_2ND_CMD:
 				break;
             }
 			nArgNow++;
-			component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_FILE_OUT;
 			component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr = argv[nArgNow++];
+			if(strcasecmp(component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr, "NONE"))
+				component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_FILE_OUT;
 		}
 		else if (!strcasecmp(argv[nArgNow],"NULL"))
 		{
@@ -1474,7 +1627,8 @@ HAS_2ND_CMD:
 				break;
             }
 			nArgNow++;
-			component[nCmdIdx].ports[STREAM_DIR_IN].fmt = atoi(argv[nArgNow++]);   //uint32_t
+			if(isNumber(argv[nArgNow]))
+				component[nCmdIdx].ports[STREAM_DIR_IN].fmt = atoi(argv[nArgNow++]);   //uint32_t
         }
 		else if (!strcasecmp(argv[nArgNow],"OFMT"))
 		{
@@ -1483,7 +1637,8 @@ HAS_2ND_CMD:
 				break;
             }
 			nArgNow++;
-			component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = atoi(argv[nArgNow++]);
+			if(isNumber(argv[nArgNow]))
+				component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = atoi(argv[nArgNow++]);
         }
 		else if(!strcasecmp(argv[nArgNow],"FRAMES"))
 		{
@@ -1492,7 +1647,20 @@ HAS_2ND_CMD:
 				break;
 			}
 			nArgNow++;
-			component[nCmdIdx].ports[STREAM_DIR_OUT].outFrameCount = atoi(argv[nArgNow++]);
+			if(isNumber(argv[nArgNow]))
+				component[nCmdIdx].ports[STREAM_DIR_OUT].outFrameCount = atoi(argv[nArgNow++]);
+		}
+		else if(!strcasecmp(argv[nArgNow],"LOOP"))
+		{
+			initLoopTimes = preLoopTimes = loopTimes = 10000;
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			if(isNumber(argv[nArgNow]))
+				loopTimes = atoi(argv[nArgNow++]);
+			initLoopTimes = preLoopTimes = loopTimes;
 		}
 		else if (!strcasecmp(argv[nArgNow],"+"))
 		{
@@ -1503,22 +1671,22 @@ HAS_2ND_CMD:
 		else
 		{
             nArgNow++;
-        }
-    }
-
-	if(strlen(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr)==0 
+        }    
+	}
+	if(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr == NULL
 			|| component[nCmdIdx].ports[STREAM_DIR_IN].fmt == 0xFFFFFFFF
 			|| component[nCmdIdx].ports[STREAM_DIR_OUT].fmt == 0xFFFFFFFF
 	  )
 	{
 		printf("INPUT ERROR.\n\
-Usage:\
-./mxc_v4l2_vpu_dec.out ifile filename ifmt input_format ofmt out_format ofile filename\n\
-or\n\
-./mxc_v4l2_vpu_dec.out ifile filename ifmt input_format ofmt out_format\n\
-or\n\
-./mxc_v4l2_vpu_dec.out ifile filename ifmt input_format ofmt out_format ofile filename frames  out_frame_amount\n");
-			goto FUNC_END;
+Usage:\n\
+	./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
+	./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
+	./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 loop\n\n\
+Or reference the usage manual.\n\
+	");
+		
+		return 0;
 	}
 
 	// lookup and open the device
@@ -1686,7 +1854,7 @@ or\n\
     // this port is opened if the buffers are allocated
     pComponent->ports[STREAM_DIR_IN].opened = 1;
 
-	gettimeofday(&start,NULL);
+	//gettimeofday(&start,NULL);
     // start the v4l2 output streaming thread
     printf("%s() want to create input thread\n", __FUNCTION__);
 	
@@ -1702,21 +1870,7 @@ or\n\
 
 	// wait for 100 msec
 	usleep(100000);
-
-    // stream on v4l2 output
-    nType = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &nType);
-	if (!lErr)
-	{
-        pComponent->ports[STREAM_DIR_IN].unStarted = 1;
-	}
-    else
-    {
-		printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 11;
-		goto FUNC_END;
-    }
-
+   
     // wait for resoltion change
     p_fds.fd = pComponent->hDev;
     p_fds.events = POLLPRI;
@@ -1947,30 +2101,13 @@ or\n\
 	// wait for 100 msec
 	usleep(100000);
 
-    // stream on v4l2 capture
-    nType = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &nType);
-	if (!lErr)
-	{
-        pComponent->ports[STREAM_DIR_OUT].unStarted = 1;
-	}
-    else
-    {
-		printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 20;
-		goto FUNC_END;
-    }
-
 	if (nHas2ndCmd)
 	{
 		nCmdIdx++;
 		goto HAS_2ND_CMD;
 	}
 
-    
-
 	// wait for user input
-
 CHECK_USER_INPUT:
 	while ((g_unCtrlCReceived == 0) && !kbhit())
 	{
@@ -1981,37 +2118,8 @@ CHECK_USER_INPUT:
 		usleep(30000);
 		goto CHECK_USER_INPUT;
 	}
-	time_total += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
-	printf("time_total=%f,frame_count=%d,fps=%f\n",time_total / 1000000.0,frame_count,frame_count*1000000.0/time_total);
-
 
 FUNCTION_STOP:
-
-	// stop streaming
-	for (i = MAX_SUPPORTED_COMPONENTS - 1; i >= 0; i--)
-	{
-		if (component[i].hDev > 0)
-		{
-			if (component[i].ports[STREAM_DIR_OUT].opened)
-			{
-			    printf("stop(%d) hDev(%d) V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE\n", i, component[i].hDev);
-                nType = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-			    ioctl(component[i].hDev, VIDIOC_STREAMOFF, &nType);
-			    component[i].ports[STREAM_DIR_OUT].unSentStopCmd = 1;
-				component[i].ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
-			}
-
-			if (component[i].ports[STREAM_DIR_IN].opened)
-			{
-			    printf("stop(%d) hDev(%d) V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE\n", i, component[i].hDev);
-                nType = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-			    ioctl(component[i].hDev, VIDIOC_STREAMOFF, &nType);
-			    component[i].ports[STREAM_DIR_IN].unSentStopCmd = 1;
-				component[i].ports[STREAM_DIR_IN].unCtrlCReceived = 1;
-			}
-		}
-	}
-
     // unsubscribe v4l2 events
     memset(&sub, 0, sizeof(struct v4l2_event_subscription));
 	for (i = MAX_SUPPORTED_COMPONENTS - 1; i >= 0; i--)
@@ -2027,23 +2135,9 @@ FUNCTION_STOP:
         }
     }
 
-
 FUNC_END:
 
 	frame_count = 0;
-	// propagate the signal to all the threads
-	for (i = MAX_SUPPORTED_COMPONENTS - 1; i >= 0; i--)
-	{
-		for (j = 0; j < MAX_STREAM_DIR; j++)
-		{
-			if (component[i].ports[j].ulThreadCreated)
-			{
-				printf("%s() set component(%d) port(%d) unCtrlCReceived\n", __FUNCTION__, i, j);
-                component[i].ports[j].unStarted = 0;
-				component[i].ports[j].unCtrlCReceived = 1;
-			}
-		}
-	}
 
 	// wait for 100 msec
 	usleep(100000);
@@ -2105,6 +2199,8 @@ FUNC_END:
 		}
 
 	}
+
+	printf("\nEND.\t loop_times=%d\n",(initLoopTimes - loopTimes));
 
 	return (lErr);
 }

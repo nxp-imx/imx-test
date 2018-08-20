@@ -146,6 +146,7 @@ typedef struct _stream_media_t
 
 	unsigned int                outFrameCount;
 	unsigned int                inFrameCount;
+	unsigned int                done_flag;
 } stream_media_t;
 
 typedef enum _stream_dir_e
