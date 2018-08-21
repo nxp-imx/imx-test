@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 NXP.
+ * Copyright 2018 NXP.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -244,6 +244,7 @@ int main(int argc, char *argv[])
 	log_addrs.osd_name[3] = '\0';
 	log_addrs.features[0][0] =  0x2;
 	log_addrs.features[0][1] =  0x2;
+	log_addrs.flags = CEC_LOG_ADDRS_FL_ALLOW_UNREG_FALLBACK;
 
 	if (node.log_addr == 0) {
 		log_addrs.primary_device_type[0] = CEC_OP_PRIM_DEVTYPE_TV;
