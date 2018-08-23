@@ -56,11 +56,20 @@
 #endif //!max
 
 #define DQEVENT
+#define MAX_SUPPORTED_COMPONENTS	5
 
 volatile unsigned int g_unCtrlCReceived = 0;
 unsigned  long time_total = 0;
 unsigned int num_total = 0;
 unsigned int frame_count = 0;
+
+unsigned int setFrameNum = 0;
+volatile unsigned int loopFlag = 0;
+volatile unsigned int loopSync = 0;
+pthread_mutex_t lockSync = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condSync = PTHREAD_COND_INITIALIZER;
+unsigned int loopCount = 0;
+
 struct  timeval start;
 struct  timeval end;
 unsigned int TarBitrate = 0;
@@ -95,14 +104,6 @@ void convert_feed_stream(component_t *pComponent, unsigned char *buf)
 
 	free(uv_temp);
 }
-
-static void SigIntHanlder(int Signal)
-{
-    /*signal(SIGALRM, Signal);*/
-    g_unCtrlCReceived = 1;
-    return;
-}
-
 static void SigStopHanlder(int Signal)
 {
     printf("%s()\n", __FUNCTION__);
@@ -113,23 +114,6 @@ static void SigContHanlder(int Signal)
 {
     printf("%s()\n", __FUNCTION__);
     return;
-}
-
-void changemode(int dir)
-{
-	static struct termios	oldt, newt;
-
-	if (dir == 1)
-	{
-		tcgetattr(STDIN_FILENO, &oldt);
-		newt = oldt;
-		newt.c_lflag &= ~(ICANON | ECHO);
-		tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-	}
-	else
-	{
-		tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-	}
 }
 
 int kbhit(void)
@@ -164,26 +148,26 @@ int lookup_video_device_node(uint32_t devInstance,
 
     printf("%s()-> Requesting %d:%d\n", __FUNCTION__, devInstance, *p_busType);
 
-	memset(&devInfo, 
-           0xAA, 
+	memset(&devInfo,
+           0xAA,
            sizeof(ZVDEV_INFO)
            );
 
-    while (nCnt < 64) 
+    while (nCnt < 64)
 	{
-		sprintf(pszDeviceName, 
-				"/dev/video%d", 
+		sprintf(pszDeviceName,
+				"/dev/video%d",
 				nCnt
 				);
 
-		hDev = open(pszDeviceName, 
+		hDev = open(pszDeviceName,
 					O_RDWR
 					);
-        if (hDev >= 0) 
+        if (hDev >= 0)
 		{
             // query capability
-			lErr = ioctl(hDev, 
-						 VIDIOC_QUERYCAP, 
+			lErr = ioctl(hDev,
+						 VIDIOC_QUERYCAP,
 						 &cap
 						 );
             // close the driver now
@@ -264,7 +248,7 @@ int lookup_video_device_node(uint32_t devInstance,
 		nCnt++;
 	}
 
-	if (64 == nCnt) 
+	if (64 == nCnt)
 	{
 		// return empty device name
 		*pszDeviceName = 0;
@@ -317,29 +301,6 @@ int zvconf(component_t *pComponent,
 	pComponent->ulHeight = 1088;
 	return (0);
 }
-
-void usage(int nExit)
-{
-    printf("\n");
-    printf("  [%s version %s]\n", MODULE_NAME, MODULE_VERSION);
-    printf("  -------------------------------------------------\n");
-    printf("  %s <command1> <arg1> <arg2> ... [+ <command2> <arg1> <arg2> ...] \n", MODULE_NAME);
-    printf("\n");
-    printf("  arg for stream media,\n");
-    printf("    ifile <file_name>       => input from file.\n");
-    printf("    ifmt <fmt>              => input format 0 - 14.\n");
-    printf("    ofmt <fmt>              => output format 0 - 4.\n");
-    printf("    ofile <file_name>       => output to file.\n");
-    printf("    null                    => output to null.\n");
-    printf("\n");
-    printf("  examples, \n");
-    printf("\n");
-
-    if (nExit) {
-        exit(nExit);
-    }
-}
-
 void test_streamout(component_t *pComponent)
 {
 	int							lErr = 0;
@@ -361,6 +322,7 @@ void test_streamout(component_t *pComponent)
     struct v4l2_event           evt;
 
     int                         i;
+    int                         OutputType;
 
 	printf("%s() [\n", __FUNCTION__);
 
@@ -369,27 +331,30 @@ void test_streamout(component_t *pComponent)
     /***********************************************
     ** 1> Open output file descriptor
     ***********************************************/
-	if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
-	{
+    if(loopFlag == 0)
+    {
+    	if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
+	    {
 		fpOutput = fopen(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr, "w+");
 		if (fpOutput == NULL)
-		{
+        {
 			printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
 			lErr = 1;
 			goto FUNC_END;
 		}
-	}
-	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
-	{
-		// output to null
-	}
-	else
-	{
-		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].eMediaType);
-		goto FUNC_END;
-	}
+	    }
+    	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
+	    {
+		    // output to null
+	    }
+	    else
+    	{
+    		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].eMediaType);
+    		goto FUNC_END;
+    	}
+    }
 
-
+OUTPUT_StreamOn:
 	/***********************************************
 	** 2> Stream on
 	***********************************************/
@@ -439,7 +404,7 @@ void test_streamout(component_t *pComponent)
 
 			r = select(pComponent->hDev + 1, &fds, NULL, NULL, &tv);
 
-			if (-1 == r) 
+			if (-1 == r)
 			{
 				fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
 				continue;
@@ -475,10 +440,19 @@ void test_streamout(component_t *pComponent)
 				else
 				{
 					if(evt.type == V4L2_EVENT_EOS) {
-						g_unCtrlCReceived = 1;
-						printf("EOS received\n");
-						gettimeofday(&end,NULL);
-						goto FUNC_END;
+                        if(loopFlag == 0)
+                        {
+                            g_unCtrlCReceived = 1;
+                            printf("EOS received\n");
+                            gettimeofday(&end,NULL);
+                            goto FUNC_END;
+                        }
+                        else
+                        {
+                            printf("EOS received\n");
+                            gettimeofday(&end,NULL);
+                            goto OUTPUT_LOOP;
+                        }
 					}
 					else
 						printf("%s() VIDIOC_DQEVENT type=%d\n",__FUNCTION__, evt.type);
@@ -492,28 +466,53 @@ void test_streamout(component_t *pComponent)
 			stV4lBuf.length = 2;
 
 			lErr = ioctl(pComponent->hDev, VIDIOC_DQBUF, &stV4lBuf);
-
 			if (!lErr)
 			{
 				char *pBuf;
 
 				stAppV4lBuf[stV4lBuf.index].sent = 0;
 
-				printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
+                if(loopFlag == 0)
+                {
+				    printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
+                }
+                else
+                {
+                    if(setFrameNum != 0)
+                    {
+                        if(frame_count < setFrameNum)
+                        {
+                            printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
+                        }
+                    }
+                    else
+                        printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
+                }
 				frame_count++;
-				if(frame_count==51)
+				if(frame_count==setFrameNum)
 				{
-					g_unCtrlCReceived = 1;
-					v4l2cmd.cmd = V4L2_ENC_CMD_STOP;
-					lErr = ioctl(pComponent->hDev, VIDIOC_ENCODER_CMD, &v4l2cmd);
-					if (lErr)
-						printf("VIDIOC_ENCODER_CMD has error\n");
-					goto FUNC_END;
-				}
+                    printf("setFrameNum : %d , frame_count : %d\n",setFrameNum,frame_count);
+                    if(loopFlag == 0)
+					{
+                        g_unCtrlCReceived = 1;
+					    v4l2cmd.cmd = V4L2_ENC_CMD_STOP;
+					    lErr = ioctl(pComponent->hDev, VIDIOC_ENCODER_CMD, &v4l2cmd);
+					    if (lErr)
+					    	printf("VIDIOC_ENCODER_CMD has error\n");
+					    goto FUNC_END;
+                    }
+                    else
+                    {
+					    v4l2cmd.cmd = V4L2_ENC_CMD_STOP;
+					    lErr = ioctl(pComponent->hDev, VIDIOC_ENCODER_CMD, &v4l2cmd);
+					    if (lErr)
+					    	printf("VIDIOC_ENCODER_CMD has error\n");
+                    }
+                }
 
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
-					if(1)
+					if(loopFlag == 0)
 					{
 						unsigned int bytesused;
 						bytesused = stV4lBuf.m.planes[0].bytesused;
@@ -550,7 +549,48 @@ void test_streamout(component_t *pComponent)
 
 			usleep(1000);
    		}
-	} //while(!lErr)
+	}
+
+OUTPUT_LOOP:
+    if(loopFlag == 1)
+    {
+        usleep(10000);
+
+        loopCount++;
+        printf("output thread is %d loop times.\n",loopCount);
+        if (pComponent->ports[STREAM_DIR_OUT].opened)
+        {
+             OutputType = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+             lErr = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &OutputType);
+             if(lErr != 0)
+             {
+                printf("output thread streamoff error!!\n");
+             }
+        }
+        loopSync = 1;
+        pthread_mutex_lock(&lockSync);
+        pthread_cond_wait(&condSync,&lockSync);
+        pthread_mutex_unlock(&lockSync);
+        if (pComponent->ports[STREAM_DIR_OUT].opened)
+        {
+             OutputType = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+             lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &OutputType);
+             if(lErr != 0)
+             {
+                printf("output thread streamon error!!\n");
+             }
+        }
+        frame_count = 0;
+        ulXferBufCnt = 0;
+        for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+        {
+	        stAppV4lBuf[nV4lBufCnt].sent = 0;
+        }
+        goto
+            OUTPUT_StreamOn;
+    }
+
+
 
 
 FUNC_END:
@@ -594,6 +634,7 @@ void test_streamin(component_t *pComponent)
     unsigned int                total;
     int                         first = pComponent->ports[STREAM_DIR_IN].buf_count;
 	long                        file_size;
+    int                         InputType;
 
 	printf("%s() [\n", __FUNCTION__);
 
@@ -624,12 +665,16 @@ void test_streamin(component_t *pComponent)
 		goto FUNC_END;
 	}
 
-
+INPUT_StreamOn:
 	/***********************************************
 	** 2> Stream on
 	***********************************************/
 	while (!pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
 	{
+        if(loopSync == 1)
+        {
+            goto INPUT_LOOP;
+        }
 		if ((pComponent->ports[STREAM_DIR_IN].unStarted) &&
             ((first > 0) || pComponent->ports[STREAM_DIR_OUT].unStarted)
             )
@@ -664,12 +709,12 @@ void test_streamin(component_t *pComponent)
                 tv.tv_usec = 0;
                 r = select(pComponent->hDev + 1, NULL, &fds, NULL, &tv);
 
-                if (-1 == r) 
+                if (-1 == r)
                 {
                     fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
                     continue;
                 }
-                if (0 == r) 
+                if (0 == r)
                 {
                     fprintf(stderr, "%s() select timeout\n", __FUNCTION__);
                     continue;
@@ -767,7 +812,7 @@ RETRY:
                         struct timespec now;
                         clock_gettime (CLOCK_MONOTONIC, &now);
                         stV4lBuf.timestamp.tv_sec = now.tv_sec;
-                        stV4lBuf.timestamp.tv_usec = now.tv_nsec / 1000;	
+                        stV4lBuf.timestamp.tv_usec = now.tv_nsec / 1000;
 	                    stV4lBuf.flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 					}
 					else
@@ -847,7 +892,46 @@ RETRY:
         {
 			usleep(30000);
         }
-    } //while(!lErr)
+    }
+
+INPUT_LOOP:
+    if(loopSync == 1)
+    {
+        printf("input thread is %d loops\n",loopCount);
+        if (pComponent->ports[STREAM_DIR_IN].opened)
+        {
+             InputType = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+             lErr = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &InputType);
+             if(lErr == -1)
+             {
+                 printf("input streamoff error!!\n");
+             }
+        }
+		fseek(fpInput, 0, SEEK_END);
+		file_size = ftell(fpInput);
+        if(0 != fseek(fpInput, 0, SEEK_SET))
+            printf("fseek error\n");
+
+        if (pComponent->ports[STREAM_DIR_IN].opened)
+        {
+            InputType = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+            lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &InputType);
+            if(lErr == -1)
+            {
+                printf("input streamon error!!\n");
+            }
+        }
+        first = pComponent->ports[STREAM_DIR_IN].buf_count;
+        for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+        {
+	        stAppV4lBuf[nV4lBufCnt].sent = 0;
+        }
+        loopSync = 0;
+        pthread_mutex_lock(&lockSync);
+        pthread_cond_signal(&condSync);
+        pthread_mutex_unlock(&lockSync);
+        goto INPUT_StreamOn;
+    }
 
 
 FUNC_END:
@@ -921,9 +1005,103 @@ static void set_encoder_parameters(pMEDIAIP_ENC_PARAM pin_enc_param ,component_t
 	}
 }
 
-#define MAX_SUPPORTED_COMPONENTS	5
 
 #define HAS_ARG_NUM(argc, argnow, need) ((nArgNow + need) < argc)
+
+/***********help ********/
+void showAllArgs(void)
+{
+    printf("Type 'HELP' to see the list. Type 'HELP NAME' to find out more about parameter 'NAME'.\n");
+    printf("HELP     : fand out  more about parameter\n");
+    printf("IFILE    : input filename\n");
+    printf("OFILE    : output filename\n");
+    printf("WIDTH    : set input file width\n");
+    printf("OWIDTH   : set output file width\n");
+    printf("HEIGHT   : set input file height\n");
+    printf("OWIDTH   : set output file height\n");
+    printf("GOP      : set group of picture\n");
+    printf("QP       : set quantizer parameter\n");
+    printf("MAXBR    : set encoder maximum boudrate\n");
+    printf("MINBR    : set encoder minimum boudrate\n");
+    printf("FRAMENUM : set output frame number\n");
+    printf("LOOP     : set application in loops\n");
+    return ;
+}
+
+void showArgs(int allArgs,int count,char* p[])
+{
+    while(count < allArgs)
+    {
+        if(!strcasecmp(p[count],"HELP"))
+        {
+            count++;
+            printf("HELP: parameter 'HELP' is help to use the app\n");
+        }
+        else if(!strcasecmp(p[count],"IFILE"))
+        {
+            count++;
+            printf("IFILE: parameter 'IFILE' is input file\n");
+        }
+        else if(!strcasecmp(p[count],"OFILE"))
+        {
+            count++;
+            printf("OFILE: parameter 'OFILE' is output file\n");
+        }
+        else if(!strcasecmp(p[count],"WIDTH"))
+        {
+            count++;
+            printf("WIDTH: parameter 'WIDTH' is input file width\n");
+        }
+        else if(!strcasecmp(p[count],"OWIDTH"))
+        {
+            count++;
+            printf("OWIDTH: parameter 'OWIDTH' is output file width\n");
+        }
+        else if(!strcasecmp(p[count],"HEIGHT"))
+        {
+            count++;
+            printf("HEIGHT: parameter 'HEIGHT' is input file height\n");
+        }
+        else if(!strcasecmp(p[count],"GOP"))
+        {
+            count++;
+            printf("GOP: parameter 'GOP' is Group of picture\n");
+        }
+        else if(!strcasecmp(p[count],"QP"))
+        {
+            count++;
+            printf("QP: parameter 'QP' is quantizer parameter,between 0 and 31. The smaller the value,the finer the quantization,the higher the image quality,the longer the code stream \n");
+        }
+        else if(!strcasecmp(p[count],"MAXBR"))
+        {
+            count++;
+            printf("MAXBR: parameter 'MAXBR' is maximum boudrate \n");
+        }
+        else if(!strcasecmp(p[count],"MINBR"))
+        {
+            count++;
+            printf("MINBR: parameter 'MINBR' is minimum boudrate \n");
+        }
+        else if(!strcasecmp(p[count],"FRAMENUM"))
+        {
+            count++;
+            printf("FRAMENUM: parameter 'FRAMENUM' set output frame number \n");
+        }
+        else if(!strcasecmp(p[count],"LOOP"))
+        {
+            count++;
+            printf("LOOP: parameter 'LOOP' set application in loops and no output file  \n");
+        }
+        else
+        {
+            printf("no help topics match %s,please try help help\n",p[count]);
+            count++;
+        }
+    }
+    return ;
+}
+/*********help end********/
+
 
 int main(int argc,
 		 char* argv[]
@@ -937,7 +1115,7 @@ int main(int argc,
     component_t                 *pComponent;
 	int			                nType;
 	int			                i, j, k;
-	int			                ch;
+//	int			                ch;
     uint32_t                    type = COMPONENT_TYPE_ENCODER;
 	MEDIAIP_ENC_PARAM           enc_param;
 
@@ -949,7 +1127,7 @@ int main(int argc,
     struct v4l2_event_subscription  sub;
 	float fps;
 
-	signal(SIGINT, SigIntHanlder);
+	//signal(SIGINT, SigIntHanlder);
 	signal(SIGSTOP, SigStopHanlder);
 	signal(SIGCONT, SigContHanlder);
 
@@ -970,13 +1148,30 @@ HAS_2ND_CMD:
     pComponent = &component[nCmdIdx];
     pComponent->ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
 
+    if(argc == 1)
+    {
+        printf("ERROR: Lack of necessary parameters\n");
+        return 0;
+    }
     while (nArgNow < argc)
 	{
-		if (!strcasecmp(argv[nArgNow],"IFILE"))
+        if (!strcasecmp(argv[nArgNow],"help"))
+        {
+            if (!HAS_ARG_NUM(argc,nArgNow,1))
+            {
+                showAllArgs();
+                return 0;
+            }
+            nArgNow++;
+            showArgs(argc,nArgNow,argv);
+            return 0;
+        }
+		else if (!strcasecmp(argv[nArgNow],"IFILE"))
 		{
 			if (!HAS_ARG_NUM(argc, nArgNow, 1))
             {
-				break;
+				printf("ERROR: no input file\n");
+                return 0;
             }
 			nArgNow++;
 			component[nCmdIdx].ports[STREAM_DIR_IN].eMediaType = MEDIA_FILE_IN;
@@ -986,7 +1181,8 @@ HAS_2ND_CMD:
 		{
 			if (!HAS_ARG_NUM(argc, nArgNow, 1))
             {
-				break;
+				printf("ERROR: no output file\n");
+                return 0;
             }
 			nArgNow++;
 			component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_FILE_OUT;
@@ -1111,6 +1307,22 @@ HAS_2ND_CMD:
 			nArgNow++;
 			profile = atoi(argv[nArgNow++]);
 		}
+        else if(!strcasecmp(argv[nArgNow],"FRAMENUM"))
+        {
+            if(!HAS_ARG_NUM(argc, nArgNow, 1))
+            {
+                printf("set frame number error!\n");
+                return 0;
+            }
+            nArgNow++;
+            setFrameNum = atoi(argv[nArgNow++]);
+            printf("setFrameNum is %d\n",setFrameNum);
+        }
+        else if(!strcasecmp(argv[nArgNow],"LOOP"))
+        {
+            nArgNow++;
+            loopFlag = 1;
+        }
 		else
 		{
             nArgNow++;
@@ -1182,7 +1394,7 @@ HAS_2ND_CMD:
 
 	format.fmt.pix_mp.num_planes = 1;
 	format.fmt.pix_mp.plane_fmt[0].sizeimage = pComponent->ports[STREAM_DIR_OUT].frame_size;
-	
+
 	lErr = ioctl(pComponent->hDev, VIDIOC_S_FMT, &format);
 	if (lErr)
 	{
@@ -1461,31 +1673,12 @@ HAS_2ND_CMD:
 	}
 
 
-CHECK_USER_INPUT:
-	while ((g_unCtrlCReceived == 0) && !kbhit())
-	{
-		usleep(30000);
-	}
 
-	if (!g_unCtrlCReceived) {
-		usleep(30000);
-		goto CHECK_USER_INPUT;
-		ch = getchar();
+    while(g_unCtrlCReceived == 0)
+    {
+        usleep(50000);
+    }
 
-		printf("\nGot %c\n", ch);
-
-		if ((ch == 'q') ||
-				(ch == 'Q') ||
-				(ch == 0x03)
-		   )
-		{
-			g_unCtrlCReceived = 1;
-		}
-		else
-		{
-			goto CHECK_USER_INPUT;
-		}
-	}
 	time_total += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 	fps=frame_count*1000000.0/time_total;
 	printf("time_total=%f,frame_count=%d,fps=%f\n", time_total / 1000000.0, frame_count, fps);
@@ -1537,13 +1730,8 @@ FUNC_END:
 	for (i = MAX_SUPPORTED_COMPONENTS - 1; i >= 0; i--)
 	{
 		for (j = 0; j < MAX_STREAM_DIR; j++)
-		{
-			if (component[i].ports[j].ulThreadCreated)
-			{
-				printf("%s() set component(%d) port(%d) unCtrlCReceived\n", __FUNCTION__, i, j);
-                component[i].ports[j].unStarted = 0;
+        {
 				component[i].ports[j].unCtrlCReceived = 1;
-			}
 		}
 	}
 
@@ -1606,6 +1794,8 @@ FUNC_END:
 			component[i].hDev = 0;
 		}
 	}
+
+    pthread_cond_destroy(&condSync);
 
 	return (lErr);
 }
