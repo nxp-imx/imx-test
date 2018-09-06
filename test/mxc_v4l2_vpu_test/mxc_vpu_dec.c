@@ -56,7 +56,6 @@
 volatile unsigned int g_unCtrlCReceived = 0;
 unsigned  long time_total =0;
 unsigned int num_total =0;
-unsigned int frame_count = 0;
 struct  timeval start;
 struct  timeval end;
 volatile int loopTimes = 1;
@@ -324,8 +323,10 @@ int zvconf(component_t *pComponent,
         case COMPONENT_TYPE_DECODER:
         default:
 	        pComponent->ports[STREAM_DIR_IN].portType = COMPONENT_PORT_COMP_IN;
-	        pComponent->ports[STREAM_DIR_IN].frame_size = 256 * 1024 * 3 +1;
-	        pComponent->ports[STREAM_DIR_IN].buf_count = 6;
+			if(pComponent->ports[STREAM_DIR_IN].frame_size <= 0)
+				pComponent->ports[STREAM_DIR_IN].frame_size = 256 * 1024 * 3 +1;
+			if(pComponent->ports[STREAM_DIR_IN].buf_count <= 0)
+				pComponent->ports[STREAM_DIR_IN].buf_count = 6;
 	        pComponent->ports[STREAM_DIR_OUT].portType = COMPONENT_PORT_YUV_OUT;
 	        pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nWidth = 1920;
 	        pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nHeight = 1088;
@@ -333,7 +334,8 @@ int zvconf(component_t *pComponent,
 	        pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nDataType = ZV_YUV_DATA_TYPE_NV12;
 	        pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nFrameRate = 30;
 	        pComponent->ports[STREAM_DIR_OUT].frame_size = (1920 * 1088 * 3) / 2;
-	        pComponent->ports[STREAM_DIR_OUT].buf_count = 4;
+			if(pComponent->ports[STREAM_DIR_OUT].buf_count <= 0)
+				pComponent->ports[STREAM_DIR_OUT].buf_count = 4;
             break;
     }
 	pComponent->ulWidth = 1920;
@@ -852,7 +854,7 @@ OPTIONS:\n\
                         VPU_VIDEO_AVC_MVC      12\n\
                         VPU_VIDEO_HEVC         13\n\
                         VPU_VIDEO_VP9          14\n\n\
-    OFMT            Secify decode format number. Format comparsion table:\n\
+    OFMT            Specify decode format number. Format comparsion table:\n\
                         V4L2_PIX_FMT_NV12      0\n\
                         V4L2_PIX_FMT_YUV420    1\n\
                         V4L2_PIX_FMT_UYVY      2\n\
@@ -860,9 +862,13 @@ OPTIONS:\n\
                         VPU_PIX_FMT_TILED_10   4\n\n\
     ofile path      Specify the output file path.\n\n\
     loop times      Specify loop decode times to the same file. If the times not set, the loop continues.\n\n\
-    frames amount   Specify amount of decode frames. Default total decode.\n\n\n\
+    frames count    Specify the count of decode frames. Default total decode.\n\n\
+    bs count        Specify the count of input buffer block size, the unit is Kb.\n\n\
+    iqc count       Specify the count of input reqbuf.\n\n\
+    oqc count       Specify the count of output reqbuf.\n\n\n\
 EXAMPLES:\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
+    ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 bs 500 ofmt 1 ofile test.yuv\n\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 ofile test.yuv frames 100 loop 10\n\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 loop\n\n");
 
@@ -878,7 +884,7 @@ void test_streamout(component_t *pComponent)
     struct v4l2_plane           stV4lPlanes[3];
 	int							nV4lBufCnt;
 
-	unsigned int				ulXferBufCnt = 0;
+	//unsigned int				ulXferBufCnt = 0;
 
 	unsigned int				ulWidth;
 	unsigned int				ulHeight;
@@ -903,7 +909,7 @@ void test_streamout(component_t *pComponent)
 
 STREAMOUT_START:
 	printf("%s() [\n", __FUNCTION__);
-	ulXferBufCnt = 0;
+	//ulXferBufCnt = 0;
 	seek_flag = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 0;
 	frame_done = 0;
@@ -1008,7 +1014,7 @@ STREAMOUT_START:
 		}
 		if (0 == r) 
 		{
-		    printf("stream out: select readable dev timeout.\n");
+		    printf("\nstream out: select readable dev timeout.\n");
 			//continue;
 			FD_ZERO(&fds);
 			FD_SET(pComponent->hDev, &fds);
@@ -1069,8 +1075,8 @@ STREAMOUT_START:
 			else
 			{
 				outFrameNum++;
-				frame_count++;
-				printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r\n", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
+				printf("\rframes = %d", outFrameNum);
+				//printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r\n", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
 					{
@@ -1155,6 +1161,7 @@ STREAMOUT_START:
 	}
 
 FUNC_END:
+	gettimeofday(&end, NULL);
 	printf("%s() ]\n", __FUNCTION__);
 	usleep(1000);
     
@@ -1170,10 +1177,9 @@ FUNC_END:
 	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
 
-	gettimeofday(&end, NULL);
 	used_time = (float)(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0);
 	printf("current cycle end.\n");
-	printf("time=%.2f,  frame_count=%d,  fps=%.2f\n",used_time, outFrameNum, outFrameNum/used_time);
+	printf("time=%.2f,  frames=%d,  fps=%.2f\n",used_time, outFrameNum, outFrameNum/used_time);
 	
 	if(!g_unCtrlCReceived)
 	{
@@ -1228,15 +1234,18 @@ void test_streamin(component_t *pComponent)
 	long                        file_size;
 	int                         stream_type;
 	int                         seek_flag;
+	int                         first_input_buffer;
+	int                         qbuf_times;
 	
 	frame_nb = pComponent->ports[STREAM_DIR_IN].buf_count;
     ulIOBlockSize = frame_size = pComponent->ports[STREAM_DIR_IN].frame_size;
 	
 STREAMIN_START:	
 	printf("%s() [\n", __FUNCTION__);
-	gettimeofday(&start,NULL);
 	pComponent->ports[STREAM_DIR_IN].done_flag = 0;
 	seek_flag = 1;
+	first_input_buffer = 1;
+	qbuf_times = 0;
 
 	/***********************************************
 	** 1> Open output file descriptor
@@ -1253,6 +1262,7 @@ STREAMIN_START:
 		}
         else
         {
+			printf("Testing stream: %s\n",pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
 			fseek(fpInput, 0, SEEK_END);
 			file_size = ftell(fpInput);
 		    fseek(fpInput, 0, SEEK_SET);
@@ -1457,11 +1467,17 @@ RETRY:
                             stV4lBuf.length,
                             stV4lBuf.m.planes
                             );
-                    }
+					}
 				}
 				else
 				{
 					stAppV4lBuf[stV4lBuf.index].sent = 1;
+					if(first_input_buffer)
+					{
+						gettimeofday(&start,NULL);
+						first_input_buffer = 0;
+					}
+					qbuf_times++;
 				}
 			}
 			else
@@ -1509,6 +1525,7 @@ FUNC_END:
     
 	pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
 
+	printf("stream in: qbuf_times= %d\n",qbuf_times);
 	v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
 	lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
 	if (lErr)
@@ -1640,6 +1657,70 @@ HAS_2ND_CMD:
 			if(isNumber(argv[nArgNow]))
 				component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = atoi(argv[nArgNow++]);
         }
+		else if(!strcasecmp(argv[nArgNow],"BS"))
+		{
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			if(isNumber(argv[nArgNow]))
+			{
+				unsigned int fs = abs(atoi(argv[nArgNow++]));
+				if(fs > 7900)
+				{
+					fs = 7900;
+					printf("The maximum input buffer block size is 7900.\n");
+				}
+				component[nCmdIdx].ports[STREAM_DIR_IN].frame_size = fs*1024+1;				
+			}
+		}
+		else if(!strcasecmp(argv[nArgNow],"IQC"))
+		{
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			if(isNumber(argv[nArgNow]))
+			{
+				unsigned int iqc = abs(atoi(argv[nArgNow++]));
+				if(iqc < 2)
+				{
+					iqc = 2;
+					printf("The minimum qbuf count is 2.\n");
+				}
+				else if(iqc > 32)
+				{
+					iqc = 32;
+					printf("The maximum qbuf count is 32.\n");
+				}
+				component[nCmdIdx].ports[STREAM_DIR_IN].buf_count = iqc;
+			}
+		}
+		else if(!strcasecmp(argv[nArgNow],"OQC"))
+		{
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			if(isNumber(argv[nArgNow]))
+			{
+				unsigned int oqc = abs(atoi(argv[nArgNow++]));
+				if(oqc < 2)
+				{
+					oqc = 2;
+					printf("The minimum qbuf count is 2.\n");
+				}
+				else if(oqc > 32)
+				{
+					oqc = 32;
+					printf("The maximum qbuf count is 32.\n");
+				}
+				component[nCmdIdx].ports[STREAM_DIR_OUT].buf_count = oqc;
+			}
+		}
 		else if(!strcasecmp(argv[nArgNow],"FRAMES"))
 		{
 			if(!HAS_ARG_NUM(argc,nArgNow,1))
@@ -1790,7 +1871,7 @@ Or reference the usage manual.\n\
     // save memory type and actual buffer number
     pComponent->ports[STREAM_DIR_IN].memory = req_bufs.memory;
     pComponent->ports[STREAM_DIR_IN].buf_count = req_bufs.count;
-
+	printf("%s() STREAM_DIR_IN: req_bufs.count = %d\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].buf_count);
     pComponent->ports[STREAM_DIR_IN].stAppV4lBuf = malloc(pComponent->ports[STREAM_DIR_IN].buf_count * sizeof(struct zvapp_v4l_buf_info));
 	if (!pComponent->ports[STREAM_DIR_IN].stAppV4lBuf)
 	{
@@ -1821,10 +1902,10 @@ Or reference the usage manual.\n\
 			lErr = ioctl(pComponent->hDev, VIDIOC_QUERYBUF, &stV4lBuf);
 			if (!lErr)
 			{
-				printf("%s() QUERYBUF(%d) buf_nb(%d)", __FUNCTION__, nV4lBufCnt, stV4lBuf.length);
+				//printf("%s() QUERYBUF(%d) buf_nb(%d)", __FUNCTION__, nV4lBufCnt, stV4lBuf.length);
                 for (i = 0; i < stV4lBuf.length; i++)
                 {
-				    printf("(%x:%d) ", stV4lBuf.m.planes[i].m.mem_offset, stV4lBuf.m.planes[i].length);
+				    //printf("(%x:%d) ", stV4lBuf.m.planes[i].m.mem_offset, stV4lBuf.m.planes[i].length);
 
 				    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].size[i] = stV4lBuf.m.planes[i].length;
 				    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].addr[i] = mmap(0, stV4lBuf.m.planes[i].length, PROT_READ | PROT_WRITE, MAP_SHARED, pComponent->hDev, stV4lBuf.m.planes[i].m.mem_offset);
@@ -1840,7 +1921,6 @@ Or reference the usage manual.\n\
                     pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].length = stV4lBuf.m.planes[i].length;
                     pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
                 }
-				printf("\n");
 			}
 			else
 			{
@@ -2000,7 +2080,8 @@ Or reference the usage manual.\n\
 	}
 
 	printf("%s() VIDIOC_G_CTRL ioctl val=%d\n", __FUNCTION__, ctl.value);
-	pComponent->ports[STREAM_DIR_OUT].buf_count = ctl.value + 3;
+	if(pComponent->ports[STREAM_DIR_OUT].buf_count < ctl.value + 3)
+		pComponent->ports[STREAM_DIR_OUT].buf_count = ctl.value + 3;
 
     // setup memory for v4l2 capture (YUV output)
     // request number of buffer and memory type
@@ -2024,7 +2105,7 @@ Or reference the usage manual.\n\
     // save memory type and actual buffer number
     pComponent->ports[STREAM_DIR_OUT].memory = req_bufs.memory;
     pComponent->ports[STREAM_DIR_OUT].buf_count = req_bufs.count;
-
+	printf("%s() STREAM_DIR_OUT: req_bufs.count = %d\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].buf_count);
     pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf = malloc(pComponent->ports[STREAM_DIR_OUT].buf_count * sizeof(struct zvapp_v4l_buf_info));
 	if (!pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf)
 	{
@@ -2055,10 +2136,10 @@ Or reference the usage manual.\n\
 			lErr = ioctl(pComponent->hDev, VIDIOC_QUERYBUF, &stV4lBuf);
 			if (!lErr)
 			{
-				printf("%s() QUERYBUF(%d) buf_nb(%d)", __FUNCTION__, nV4lBufCnt, stV4lBuf.length);
+				//printf("%s() QUERYBUF(%d) buf_nb(%d)", __FUNCTION__, nV4lBufCnt, stV4lBuf.length);
                 for (i = 0; i < stV4lBuf.length; i++)
                 {
-				    printf("(%x:%d) ", stV4lBuf.m.planes[i].m.mem_offset, stV4lBuf.m.planes[i].length);
+				    //printf("(%x:%d) ", stV4lBuf.m.planes[i].m.mem_offset, stV4lBuf.m.planes[i].length);
 
 				    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].size[i] = stV4lBuf.m.planes[i].length;
 				    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].addr[i] = mmap(0, stV4lBuf.m.planes[i].length, PROT_READ | PROT_WRITE, MAP_SHARED, pComponent->hDev, stV4lBuf.m.planes[i].m.mem_offset);
@@ -2073,7 +2154,6 @@ Or reference the usage manual.\n\
                     pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].length = stV4lBuf.m.planes[i].length;
                     pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
                 }
-				printf("\n");
 			}
 			else
 			{
@@ -2136,9 +2216,6 @@ FUNCTION_STOP:
     }
 
 FUNC_END:
-
-	frame_count = 0;
-
 	// wait for 100 msec
 	usleep(100000);
 
