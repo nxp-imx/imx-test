@@ -159,7 +159,6 @@ int kbhit(void)
 		{
 			if(buff[strlen(buff)-1] == '\n')
 				buff[strlen(buff)-1] = '\0';
-			printf("Input command: %s\n", buff);
 			if(!strcasecmp(buff, "x") || !strcasecmp(buff, "stop"))
 			{
 				g_unCtrlCReceived = 1;
@@ -223,30 +222,30 @@ int lookup_video_device_node(uint32_t devInstance,
                        cap.device_caps
 					   );
 
-                if (0 == strcmp(cap.bus_info, "PCIe:"))
+                if (0 == strcmp((const char*)cap.bus_info, "PCIe:"))
                 {
                     busType = 0;
                 }
-                if (0 == strcmp(cap.bus_info, "platform:"))
+                if (0 == strcmp((const char*)cap.bus_info, "platform:"))
                 {
                     busType = 1;
                 }
 
-                if (0 == strcmp(cap.driver, "MX8 codec"))
+                if (0 == strcmp((const char*)cap.driver, "MX8 codec"))
                 {
                     devType = COMPONENT_TYPE_CODEC;
                 }
-                if (0 == strcmp(cap.driver, "vpu B0"))
+                if (0 == strcmp((const char*)cap.driver, "vpu B0"))
                 {
                     devType = COMPONENT_TYPE_DECODER;
                 }
-                if (0 == strcmp(cap.driver, "vpu encoder"))
+                if (0 == strcmp((const char*)cap.driver, "vpu encoder"))
                 {
                     devType = COMPONENT_TYPE_ENCODER;
                 }
 
                 // find the matching device
-				if (-1 != *p_busType)
+				if (-1 != (int)*p_busType)
 				{
 					if (*p_busType != busType)
 					{
@@ -255,7 +254,7 @@ int lookup_video_device_node(uint32_t devInstance,
 					}
 				}
 
-                if (-1 != *p_devType)
+                if (-1 != (int)*p_devType)
                 {
                     if (*p_devType != devType)
                     {
@@ -266,7 +265,7 @@ int lookup_video_device_node(uint32_t devInstance,
 
                 // instance
                 snprintf(card, sizeof(cap.card) - 1, "%s", cap.driver);
-                if (0 == strcmp(cap.card, card))
+                if (0 == strcmp((const char*)cap.card, card))
                 {
                     *p_busType = busType;
                     *p_devType = devType;
@@ -420,7 +419,7 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 				int line_num  = (i + 128 * vtile) - v_offset;
 				unsigned int line_base = (line_num * nPicWidth) >> 2;
 				// Skip data that is off the bottom of the pic
-				if (line_num == nLines)
+				if (line_num == (int)nLines)
 					break;
 				// Skip data that is off the top of the pic
 				if (line_num < 0)
@@ -455,7 +454,7 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 					int line_num = (i + 128 * vtile) - v_offset;
 					unsigned int line_base = (line_num * nPicWidth) >> 2;
 					// Skip data that is off the bottom of the pic
-					if (line_num == nLines)
+					if (line_num == (int)nLines)
 						break;
 					// Skip data that is off the top of the pic
 					if (line_num < 0)
@@ -492,7 +491,7 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 				int line_num = (i + 128 * vtile) - v_offset;
 				unsigned int line_base = (line_num * nPicWidth) >> 2;
 				// Skip data that is off the bottom of the pic
-				if (line_num == nLines)
+				if (line_num == (int)nLines)
 					break;
 				// Skip data that is off the top of the pic
 				if (line_num < 0)
@@ -526,7 +525,7 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 					int line_num = (i + 128 * vtile) - v_offset;
 					unsigned int line_base = (line_num * nPicWidth) >> 2;
 					// Skip data that is off the bottom of the pic
-					if (line_num == nLines)
+					if (line_num == (int)nLines)
 						break;
 					// Skip data that is off the top of the pic
 					if (line_num < 0)
@@ -613,7 +612,7 @@ static unsigned int ReadYUVFrame_FSL_10b ( unsigned int nPicWidth,
 			unsigned int line_base = (line_num * nPicWidth);       // location of first pixel in the line in byte units
 
 			// Skip data that is off the bottom of the pic
-			if (line_num == nLines)
+			if (line_num == (int)nLines)
 				break;
 			// Skip data that is off the top of the pic
 			if (line_num < 0)
@@ -671,7 +670,7 @@ static unsigned int ReadYUVFrame_FSL_10b ( unsigned int nPicWidth,
 			unsigned int line_base = (line_num * nPicWidth);       // location of first pixel in the line in byte units
 
 			// Skip data that is off the bottom of the pic
-			if (line_num == nLines)
+			if (line_num == (int)nLines)
 				break;
 			// Skip data that is off the top of the pic
 			if (line_num < 0)
@@ -820,7 +819,8 @@ int isNumber(char *str)
 {
 	int ret = 1;
 	int len = strlen(str);
-	for(int i = 0; i < len; i++)
+	int i;
+	for(i = 0; i < len; i++)
 	{
 		if(str[i]<'0' || str[i]>'9')
 		{
@@ -896,10 +896,10 @@ void test_streamout(component_t *pComponent)
     int                         r;
     struct v4l2_event           evt;
 
-    int                         i;
+    unsigned int                i;
     zoe_bool_t                  seek_flag;
 	unsigned int                outFrameNum = 0;
-	int                         stream_type;
+	unsigned int                stream_type;
 	float                       used_time;
 
 
@@ -1229,7 +1229,7 @@ void test_streamin(component_t *pComponent)
     struct timeval              tv;
     int                         r;
 
-    int                         i;
+    unsigned int                i;
     unsigned int                total;
 	long                        file_size;
 	int                         stream_type;
@@ -1567,12 +1567,12 @@ int main(int argc,
 	int			                nHas2ndCmd;
 	component_t	                component[MAX_SUPPORTED_COMPONENTS];
     component_t                 *pComponent;
-	int			                i, j, k;
+	unsigned int			    i, j, k;
     uint32_t                    type = COMPONENT_TYPE_DECODER;  //COMPOENT_TYPE
 
 	struct v4l2_buffer			stV4lBuf;
     struct v4l2_plane           stV4lPlanes[3];
-	int							nV4lBufCnt;
+	unsigned int			    nV4lBufCnt;
     struct v4l2_format          format;
     struct v4l2_requestbuffers  req_bufs;
     struct v4l2_control         ctl;
@@ -2080,8 +2080,8 @@ Or reference the usage manual.\n\
 	}
 
 	printf("%s() VIDIOC_G_CTRL ioctl val=%d\n", __FUNCTION__, ctl.value);
-	if(pComponent->ports[STREAM_DIR_OUT].buf_count < ctl.value + 3)
-		pComponent->ports[STREAM_DIR_OUT].buf_count = ctl.value + 3;
+	if(pComponent->ports[STREAM_DIR_OUT].buf_count < (unsigned int)ctl.value + 3)
+		pComponent->ports[STREAM_DIR_OUT].buf_count = (unsigned int)ctl.value + 3;
 
     // setup memory for v4l2 capture (YUV output)
     // request number of buffer and memory type
@@ -2202,7 +2202,7 @@ CHECK_USER_INPUT:
 FUNCTION_STOP:
     // unsubscribe v4l2 events
     memset(&sub, 0, sizeof(struct v4l2_event_subscription));
-	for (i = MAX_SUPPORTED_COMPONENTS - 1; i >= 0; i--)
+	for (i = 0; i < MAX_SUPPORTED_COMPONENTS; i++)
 	{
 		if (component[i].hDev > 0)
 		{
