@@ -1075,8 +1075,9 @@ STREAMOUT_START:
 			else
 			{
 				outFrameNum++;
-				printf("\rframes = %d", outFrameNum);
-				//printf("\t\t\t\t\t\t\t encXferBufCnt[%d]: %8u %8u %8u %8u 0x%08x t=%ld\r\n", pComponent->hDev, ulXferBufCnt++, stV4lBuf.m.planes[0].bytesused, stV4lBuf.m.planes[0].length, stV4lBuf.m.planes[0].data_offset, stV4lBuf.flags, stV4lBuf.timestamp.tv_sec);
+				gettimeofday(&end, NULL);
+				used_time = (float)(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0);
+				printf("\rframes = %d, fps = %.2f, used_time = %.2f", outFrameNum, outFrameNum / used_time, used_time);
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
 					{
@@ -1152,19 +1153,11 @@ STREAMOUT_START:
 				printf("\r%s()  DQBUF failed(%d) errno(%d)\n", __FUNCTION__, lErr, errno);
 			}
 		}
-
-		if (pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived)
-		{
-			printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
-			break;
-		}
+		usleep(10);
 	}
 
 FUNC_END:
-	gettimeofday(&end, NULL);
 	printf("%s() ]\n", __FUNCTION__);
-	usleep(1000);
-    
 	fflush(stdout);
 	if (fpOutput)
 	{
@@ -1176,11 +1169,7 @@ FUNC_END:
 
 	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
-
-	used_time = (float)(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0);
-	printf("current cycle end.\n");
-	printf("time=%.2f,  frames=%d,  fps=%.2f\n",used_time, outFrameNum, outFrameNum/used_time);
-	
+		
 	if(!g_unCtrlCReceived)
 	{
 		while(preLoopTimes == loopTimes && !g_unCtrlCReceived); //sync stream in loopTimes
@@ -1430,26 +1419,24 @@ RETRY:
 
 			if (total != 0)
 			{
-				memcpy(&stV4lBuf, pstV4lBuf, sizeof(struct v4l2_buffer));
-
 				if (pComponent->ports[STREAM_DIR_IN].unUserPTS)
 				{
                     struct timespec now;
                     clock_gettime (CLOCK_MONOTONIC, &now);
-                    stV4lBuf.timestamp.tv_sec = now.tv_sec;
-                    stV4lBuf.timestamp.tv_usec = now.tv_nsec / 1000;	
-	                stV4lBuf.flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+                    pstV4lBuf->timestamp.tv_sec = now.tv_sec;
+                    pstV4lBuf->timestamp.tv_usec = now.tv_nsec / 1000;	
+	                pstV4lBuf->flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 				}
 				else
 				{
 					// not use PTS
-	                stV4lBuf.flags &= ~V4L2_BUF_FLAG_TIMESTAMP_MASK;
+	                pstV4lBuf->flags &= ~V4L2_BUF_FLAG_TIMESTAMP_MASK;
 				}
 
 				/***********************************************
 				** QBUF, put data to driver
 				***********************************************/
-				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stV4lBuf);
+				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, pstV4lBuf);
 				if (lErr)
 				{
 					if (errno == EAGAIN)
@@ -1460,18 +1447,18 @@ RETRY:
                     else
                     {
 					    printf("v4l2_buf index(%d) type(%d) memory(%d) sequence(%d) length(%d) planes(%p)\n",
-                            stV4lBuf.index,
-                            stV4lBuf.type,
-                            stV4lBuf.memory,
-                            stV4lBuf.sequence,
-                            stV4lBuf.length,
-                            stV4lBuf.m.planes
+                            pstV4lBuf->index,
+                            pstV4lBuf->type,
+                            pstV4lBuf->memory,
+                            pstV4lBuf->sequence,
+                            pstV4lBuf->length,
+                            pstV4lBuf->m.planes
                             );
 					}
 				}
 				else
 				{
-					stAppV4lBuf[stV4lBuf.index].sent = 1;
+					stAppV4lBuf[pstV4lBuf->index].sent = 1;
 					if(first_input_buffer)
 					{
 						gettimeofday(&start,NULL);
@@ -1492,32 +1479,17 @@ RETRY:
 					file_size = -1;
 					break;													
 				}
-				usleep(1000);
+				usleep(10);
 				goto RETRY;
 			}
-			fflush(stdout);
-		}
-
-		if (pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
-		{
-			printf("\n\n%s() CTRL+C received.\n", __FUNCTION__);
-			break;
-		}
-
-		if (pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN)
-		{
-			usleep(1000);
-		}
-		else
-		{
-			usleep(1000);
-		}
+			fflush(stdin);
+		}		
+		usleep(10);
 	}
 
 FUNC_END:
-	printf("%s() ]\n", __FUNCTION__);
-	usleep(1000);
-	fflush(stdout);
+	printf("\n%s() ]\n", __FUNCTION__);
+	fflush(stdin);
 	if (fpInput)
 	{
 		fclose(fpInput);
@@ -1948,8 +1920,8 @@ Or reference the usage manual.\n\
 		pComponent->ports[STREAM_DIR_IN].ulThreadCreated = 1;
 	}
 
-	// wait for 100 msec
-	usleep(100000);
+	// wait for 10 msec
+	usleep(10000);
    
     // wait for resoltion change
     p_fds.fd = pComponent->hDev;
@@ -2178,8 +2150,8 @@ Or reference the usage manual.\n\
 		pComponent->ports[STREAM_DIR_OUT].ulThreadCreated = 1;
 	}
 
-	// wait for 100 msec
-	usleep(100000);
+	// wait for 10 msec
+	usleep(10000);
 
 	if (nHas2ndCmd)
 	{
@@ -2191,11 +2163,11 @@ Or reference the usage manual.\n\
 CHECK_USER_INPUT:
 	while ((g_unCtrlCReceived == 0) && !kbhit())
 	{
-		usleep(30000);
+		usleep(1000);
 	}
 
 	if (!g_unCtrlCReceived) {
-		usleep(30000);
+		usleep(1000);
 		goto CHECK_USER_INPUT;
 	}
 
