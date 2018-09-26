@@ -223,7 +223,7 @@ static void global_vars_init(void)
 	g_out_height = HEIGHT;
 	g_capture_mode = 0;
 	g_camera_framerate = 30;
-	g_cap_fmt = V4L2_PIX_FMT_RGB32;
+	g_cap_fmt = V4L2_PIX_FMT_XRGB32;
 	g_mem_type = V4L2_MEMORY_MMAP;
 
 	quitflag = false;
@@ -256,7 +256,7 @@ static void print_help(const char *name)
 }
 
 static uint32_t fmt_array[] = {
-	V4L2_PIX_FMT_RGB32,
+	V4L2_PIX_FMT_XRGB32,
 	V4L2_PIX_FMT_NV12,
 };
 
@@ -380,7 +380,7 @@ static int parse_cmdline(int argc, const char *argv[])
 static void get_fmt_name(uint32_t fourcc)
 {
 	switch (fourcc) {
-	case V4L2_PIX_FMT_RGB32:
+	case V4L2_PIX_FMT_XRGB32:
 		strcpy(g_fmt_name, "rgb32");
 		break;
 	case V4L2_PIX_FMT_NV12:
