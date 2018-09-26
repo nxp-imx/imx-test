@@ -884,8 +884,6 @@ void test_streamout(component_t *pComponent)
     struct v4l2_plane           stV4lPlanes[3];
 	int							nV4lBufCnt;
 
-	//unsigned int				ulXferBufCnt = 0;
-
 	unsigned int				ulWidth;
 	unsigned int				ulHeight;
 
@@ -909,7 +907,6 @@ void test_streamout(component_t *pComponent)
 
 STREAMOUT_START:
 	printf("%s() [\n", __FUNCTION__);
-	//ulXferBufCnt = 0;
 	seek_flag = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 0;
 	frame_done = 0;
@@ -1077,7 +1074,7 @@ STREAMOUT_START:
 				outFrameNum++;
 				gettimeofday(&end, NULL);
 				used_time = (float)(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0);
-				printf("\rframes = %d, fps = %.2f, used_time = %.2f", outFrameNum, outFrameNum / used_time, used_time);
+				printf("\rframes = %d, fps = %.2f, used_time = %.2f\t\t", outFrameNum, outFrameNum / used_time, used_time);
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
 					{
@@ -1223,7 +1220,6 @@ void test_streamin(component_t *pComponent)
 	long                        file_size;
 	int                         stream_type;
 	int                         seek_flag;
-	int                         first_input_buffer;
 	int                         qbuf_times;
 	
 	frame_nb = pComponent->ports[STREAM_DIR_IN].buf_count;
@@ -1233,8 +1229,8 @@ STREAMIN_START:
 	printf("%s() [\n", __FUNCTION__);
 	pComponent->ports[STREAM_DIR_IN].done_flag = 0;
 	seek_flag = 1;
-	first_input_buffer = 1;
 	qbuf_times = 0;
+	gettimeofday(&start,NULL);
 
 	/***********************************************
 	** 1> Open output file descriptor
@@ -1459,11 +1455,6 @@ RETRY:
 				else
 				{
 					stAppV4lBuf[pstV4lBuf->index].sent = 1;
-					if(first_input_buffer)
-					{
-						gettimeofday(&start,NULL);
-						first_input_buffer = 0;
-					}
 					qbuf_times++;
 				}
 			}
