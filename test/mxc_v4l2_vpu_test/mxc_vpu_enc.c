@@ -1392,6 +1392,8 @@ HAS_2ND_CMD:
 	format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	format.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_H264;
 
+	format.fmt.pix_mp.width = enc_param.uOutWidth;
+	format.fmt.pix_mp.height = enc_param.uOutHeight;
 	format.fmt.pix_mp.num_planes = 1;
 	format.fmt.pix_mp.plane_fmt[0].sizeimage = pComponent->ports[STREAM_DIR_OUT].frame_size;
 
