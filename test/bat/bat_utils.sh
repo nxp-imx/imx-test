@@ -9,7 +9,7 @@ BAT_EXITCODE_TODO=3
 # skip not yet implemented features or not yet fixed bugs
 # (for unsupported features use the skip array below)
 declare -A todo=(\
-["i.MX6SLL"]="bat-busfreq.sh" \
+["i.MX6SLL"]="" \
 ["i.MX8QXP"]="bat-cpuidle.sh" \
 ["i.MX8QM"]="" \
 ["i.MX8MQ"]="" \
