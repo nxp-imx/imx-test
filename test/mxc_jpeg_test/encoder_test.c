@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2018 NXP
  */
 /*
  * The code contained herein is licensed under the GNU General Public
@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -24,49 +25,30 @@
 #include <linux/v4l2-subdev.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-
-void print_usage(void)
-{
-	printf("Usage: encoder_test -d </dev/videoX> -f <FILENAME.rgb>\n");
-}
+#include "mxc_jpeg_test.h"
 
 int main(int argc, char *argv[])
 {
 	int fd, i, j;
 	FILE *testrgb;
 	void *buf;
-	char *video_device = 0;
-	char *test_file = 0;
+	struct encoder_args ea;
 
-	if (argc != 5) {
-		print_usage();
-		exit(1);
-	}
+	parse_args(argc, argv, &ea);
 
-	for (i = 1; i < 5; i += 2) {
-		if (strcmp(argv[i], "-d") == 0)
-			video_device = argv[i+1];
-		else if (strcmp(argv[i], "-f") == 0)
-			test_file = argv[i+1];
-	}
-	if (video_device == 0 || test_file == 0) {
-		print_usage();
-		exit(1);
-	}
-
-	fd = open(video_device, O_RDWR);
+	fd = open(ea.video_device, O_RDWR);
 	if (fd < 0) {
 		perror("open");
 		exit(1);
 	}
 
-	testrgb = fopen(test_file, "rb");
+	testrgb = fopen(ea.test_file, "rb");
 	fseek(testrgb, 0, SEEK_END);
 	long filesize = ftell(testrgb);
 	fseek(testrgb, 0, SEEK_SET);
 	buf = malloc(filesize + 1);
 
-	printf("\n %s FILE SIZE %ld \n", test_file, filesize);
+	printf("\n%s FILE SIZE %ld\n", ea.test_file, filesize);
 
 	struct v4l2_capability capabilities;
 	if (ioctl(fd, VIDIOC_QUERYCAP, &capabilities) < 0) {
@@ -75,22 +57,23 @@ int main(int argc, char *argv[])
 	}
 
 	if (!(capabilities.capabilities & V4L2_CAP_VIDEO_M2M)) {
-		fprintf(stderr, "The device does not handle single-planar video capture.\n");
+		fprintf(stderr,
+		  "The device does not handle single-planar video capture.\n");
 		exit(1);
 	}
 
 	struct v4l2_format out_fmt;
 	out_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	out_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB32;
+	out_fmt.fmt.pix.pixelformat = ea.fourcc;
 	out_fmt.fmt.pix.sizeimage = filesize;
-	out_fmt.fmt.pix.width = 256;
-	out_fmt.fmt.pix.height = 256;
+	out_fmt.fmt.pix.width = ea.width;
+	out_fmt.fmt.pix.height = ea.height;
 
 	struct v4l2_format cap_fmt;
 	cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	cap_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_JPEG;
-	cap_fmt.fmt.pix.width = 256;
-	cap_fmt.fmt.pix.height = 256;
+	cap_fmt.fmt.pix.width = ea.width;
+	cap_fmt.fmt.pix.height = ea.height;
 
 	printf("\nIOCTL VIDIOC_S_FMT\n");
 
@@ -155,19 +138,16 @@ int main(int argc, char *argv[])
 		perror("VIDIOC_QUERYBUF OUT");
 		exit(1);
 	}
-	printf("after VIDIOC_QUERYBUF: bufferout.bytesused=%d\n", bufferout.bytesused);
-	
+
 	bufferout.bytesused = filesize;
-	
-	printf("refilled: bufferout.bytesused=%d\n", bufferout.bytesused);
 
 	void *bufferin_start = mmap(
 				    NULL,
-				    bufferin.length, /* buffer size (not the payload) in bytes for the single-planar API. This is set by the driver based on the calls to ioctl VIDIOC_REQBUFS */
+				    bufferin.length, /* set by the driver */
 				    PROT_READ | PROT_WRITE,
 				    MAP_SHARED,
 				    fd,
-				    bufferin.m.offset /* buffer offset from the start of the device memory */
+				    bufferin.m.offset
 				   );
 
 	/* empty capture buffer */
@@ -198,8 +178,10 @@ int main(int argc, char *argv[])
 	fread(bufferout_start, filesize, 1, testrgb);
 	fclose(testrgb);
 
-	printf("BUFFER STARTS: %lx, %ld, other size %ld\n", *(long *)bufferin_start,
-	       (unsigned long) bufferin.length, (unsigned long) bufferout.length);
+	printf("BUFFER STARTS: %lx, %ld, other size %ld\n",
+	       *(long *)bufferin_start,
+	       (unsigned long) bufferin.length,
+	       (unsigned long) bufferout.length);
 
 	/* Here is where you typically start two loops:
 	 * - One which runs for as long as you want to
@@ -247,22 +229,18 @@ int main(int argc, char *argv[])
 			exit(1);
 		}
 
-	for (j = 0; j < bufferin.length; j += 8) {
-			printf("%02x %02x %02x %02x %02x %02x %02x %02x",
-			       ((char *)bufferin_start)[j],
-			       ((char *)bufferin_start)[j+1],
-			       ((char *)bufferin_start)[j+2],
-			       ((char *)bufferin_start)[j+3],
-			       ((char *)bufferin_start)[j+4],
-			       ((char *)bufferin_start)[j+5],
-			       ((char *)bufferin_start)[j+6],
-			       ((char *)bufferin_start)[j+7]);
-	}
-	printf("DONE BUF %d %lx %lx\n", i, *((long *)bufferout_start),
-	       *((long *)bufferin_start));
+		for (j = 0; j < bufferin.bytesused; j++) {
+			printf("%02x ", ((char *)bufferin_start)[j]);
+			if ((j+1) % 32 == 0)
+				printf("\n");
+		}
+
+	printf("\nDONE BUF %d %lx %lx, bytesused=0x%x\n", i,
+	       *((long *)bufferout_start),
+	       *((long *)bufferin_start), bufferin.bytesused);
 	FILE *fout = fopen("outfile.jpeg", "wb");
 
-	fwrite(bufferin_start, bufferin.length, 1, fout);
+	fwrite(bufferin_start, bufferin.bytesused, 1, fout);
 	fclose(fout);
 
 
@@ -282,11 +260,11 @@ int main(int argc, char *argv[])
 	   perror("VIDIOC_STREAMOFF OUT");
 	   exit(1);
 	   }
-	
+
 	// dealocate buffers
 	munmap(bufferin_start, bufferin.length);
 	munmap(bufferout_start, bufferout.length);
-	
+
 	close(fd);
 	return 0;
 }
