@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -53,39 +54,71 @@ do {                                      \
 	    v4l2_printf(ERR_LEVEL, "\x1B[31m"fmt"\e[0m", ##args)
 
 #define TEST_BUFFER_NUM_IN		1
-#define TEST_BUFFER_NUM_OUT		1
+#define TEST_BUFFER_NUM_OUT		3
+
+#define TEST_WIDTH		640
+#define TEST_HEIGHT		480
 
 struct plane_buffer {
-	__u8 *start;
+	void *start;
 	__u32 plane_size;
 	__u32 length;
 	size_t offset;
 };
 
 struct mxc_buffer {
-	__u8 *start;
+	void *start;
 	__u32 length;
 	size_t offset;
 
 	struct plane_buffer planes[3];
 };
 
-FILE *in_file, *out_file;
-static struct mxc_buffer in_buffer;
-static struct mxc_buffer out_buffer;
+struct rect {
+	int width;
+	int height;
+};
+
+struct mxc_m2m_device {
+	int fd;
+	FILE *in_file;
+	FILE *out_file;
+
+	struct rect src;
+	struct rect dst;
+
+	int in_num_planes;
+	int o_num_planes;
+
+	int in_frame_num;
+	int out_frame_num;
+
+	int in_cur_buf_id;
+	int out_cur_buf_id;
+
+	int frames;
+
+	struct mxc_buffer in_buffers[TEST_BUFFER_NUM_IN];
+	struct mxc_buffer out_buffers[TEST_BUFFER_NUM_OUT];
+};
 
 static char in_file_name[32] = {"0.rgb32"};
 static char out_file_name[32] = {"out.dat"};
 static char dev_name[32] = {"/dev/video0"};
 static char in_format[32] = {"RGB32"};
 static char out_format[32] = {"YUYV"};
-static int in_width = 1280;
-static int in_height = 800;
-static int out_width = 1280;
-static int out_height = 800;
+static int in_width = TEST_WIDTH;
+static int in_height = TEST_HEIGHT;
+static int out_width = TEST_WIDTH;
+static int out_height = TEST_HEIGHT;
 static int log_level = 6;
 static int show_device_cap = 0;
-static int g_num_planes = 1;
+
+static void fill_param(struct rect *r, int width, int height)
+{
+	r->width = width;
+	r->height = height;
+}
 
 static void print_usage(char *name)
 {
@@ -113,7 +146,7 @@ static __u32 to_fourcc(char fmt[])
 	__u32 fourcc;
 
 	if (!strcmp(fmt, "RGB32"))
-		fourcc = V4L2_PIX_FMT_RGB32;
+		fourcc = V4L2_PIX_FMT_XRGB32;
 	else if (!strcmp(fmt, "ARGB32"))
 		fourcc = V4L2_PIX_FMT_ARGB32;
 	else if (!strcmp(fmt, "BGR32"))
@@ -132,7 +165,7 @@ static __u32 to_fourcc(char fmt[])
 		fourcc = V4L2_PIX_FMT_NV12;
 	else {
 		v4l2_err("Not support format, set default to RGB32\n");
-		fourcc = V4L2_PIX_FMT_RGB32;
+		fourcc = V4L2_PIX_FMT_XRGB32;
 	}
 	return fourcc;
 }
@@ -147,9 +180,9 @@ static void show_device_cap_list(int fd_v4l)
 
 	/* Show capture device */
 	fmtdesc.index = 0;
-	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	while (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) >= 0) {
-		v4l2_info("support input pixelformat %.4s\n",
+		v4l2_info("support output pixelformat %.4s\n",
 					(char *)&fmtdesc.pixelformat);
 					frmsize.pixel_format = fmtdesc.pixelformat;
 					frmsize.index = 0;
@@ -181,7 +214,7 @@ static void show_device_cap_list(int fd_v4l)
 	fmtdesc.index = 0;
 	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	while (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) >= 0) {
-		v4l2_info("support output pixelformat %.4s\n",
+		v4l2_info("support input pixelformat %.4s\n",
 					(char *)&fmtdesc.pixelformat);
 					frmsize.pixel_format = fmtdesc.pixelformat;
 					frmsize.index = 0;
@@ -208,7 +241,6 @@ static void show_device_cap_list(int fd_v4l)
 		}
 		fmtdesc.index++;
 	}
-
 }
 
 static int parse_cmdline(int argc, char *argv[])
@@ -256,7 +288,7 @@ static int get_bpp(char format[])
 	__u32 fourcc = to_fourcc(format);
 
 	switch(fourcc) {
-	case V4L2_PIX_FMT_RGB32:
+	case V4L2_PIX_FMT_XRGB32:
 	case V4L2_PIX_FMT_ARGB32:
 	case V4L2_PIX_FMT_BGR32:
 	case V4L2_PIX_FMT_YUV32:
@@ -275,20 +307,21 @@ static int get_bpp(char format[])
 	return bpp;
 }
 
-static int check_input_parameters(int fd)
+static int check_input_parameters(struct mxc_m2m_device *m2m_dev)
 {
 	long filesize;
 
-	if (out_width > in_width || out_height > in_height) {
+	if (m2m_dev->dst.width > m2m_dev->src.width ||
+		m2m_dev->dst.height > m2m_dev->src.height) {
 		v4l2_err("out w/h need equal to or less than input w/h\n");
 		return -1;
 	}
 
-	fseek(in_file, 0, SEEK_END);
-	filesize = ftell(in_file);
-	fseek(in_file, 0, SEEK_SET);
+	fseek(m2m_dev->in_file, 0, SEEK_END);
+	filesize = ftell(m2m_dev->in_file);
+	fseek(m2m_dev->in_file, 0, SEEK_SET);
 
-	if (filesize < in_width * in_height * get_bpp(in_format)) {
+	if (filesize < m2m_dev->src.width * m2m_dev->src.height * get_bpp(in_format)) {
 		v4l2_err("input width and height is wrong\n");
 		return -1;
 	}
@@ -296,18 +329,341 @@ static int check_input_parameters(int fd)
 	return 0;
 }
 
-static void free_src_resource(int fd)
+static int check_device_cap(struct mxc_m2m_device *m2m_dev)
 {
-	struct v4l2_requestbuffers req;
+	struct v4l2_capability capabilities;
+	int fd = m2m_dev->fd;
+
+	memset(&capabilities, 0, sizeof(capabilities));
+	if (ioctl(fd, VIDIOC_QUERYCAP, &capabilities) < 0) {
+		v4l2_err("VIDIOC_QUERYCAP fail\n");
+		return -1;
+	}
+
+	if (!(capabilities.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE)) {
+		v4l2_err("The device does not handle memory to memory video capture.\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static void calculate_frames_of_infile(FILE *f, struct mxc_m2m_device *m2m_dev)
+{
+	int frames;
+	long filesize;
+
+	fseek(f, 0, SEEK_END);
+	filesize = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	frames = filesize / (m2m_dev->src.width * m2m_dev->src.height * get_bpp(in_format));
+
+	m2m_dev->frames = frames;
+	v4l2_info("Input file size is = %lu, frames is = %d\n", filesize, frames);
+}
+
+static int mxc_m2m_open(struct mxc_m2m_device *m2m_dev)
+{
+	int fd;
+	FILE *in, *out;
+
+	fd = open(dev_name, O_RDWR, 0);
+	if (fd < 0) {
+		v4l2_err("Open %s fail\n", dev_name);
+		return -1;
+	}
+	v4l2_info("Open \"%s\" success\n", dev_name);
+
+	in = fopen(in_file_name, "rb");
+	if (in == NULL) {
+		v4l2_err("Open %s fail\n", in_file_name);
+		close(fd);
+		return -1;
+	}
+	v4l2_info("Open \"%s\" success\n", in_file_name);
+	calculate_frames_of_infile(in, m2m_dev);
+
+	out = fopen(out_file_name, "wb");
+	if (out == NULL) {
+		v4l2_err("Open \"%s\" fail\n", out_file_name);
+		fclose(in);
+		close(fd);
+		return -1;
+	}
+	v4l2_info("Open \"%s\" success\n", out_file_name);
+
+	m2m_dev->fd = fd;
+	m2m_dev->in_file = in;
+	m2m_dev->out_file = out;
+	return 0;
+}
+
+static void mxc_m2m_close(struct mxc_m2m_device *m2m_dev)
+{
+	close(m2m_dev->fd);
+	fclose(m2m_dev->in_file);
+	fclose(m2m_dev->out_file);
+}
+
+static int fill_in_buffer(int buf_id, struct mxc_m2m_device *m2m_dev)
+{
+	size_t rsize;
+	int j;
+
+	for (j = 0; j < m2m_dev->in_num_planes; j++) {
+		rsize = fread(m2m_dev->in_buffers[buf_id].planes[j].start,
+					m2m_dev->in_buffers[buf_id].planes[j].length,
+					1, m2m_dev->in_file);
+		if (rsize < 1) {
+			v4l2_err("No more data read from input file\n");
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static int save_to_file(struct mxc_m2m_device *m2m_dev)
+{
+	size_t wsize;
+	int buf_id = m2m_dev->out_cur_buf_id;
+	int j;
+
+	for (j = 0; j < m2m_dev->o_num_planes; j++) {
+		wsize = fwrite(m2m_dev->out_buffers[buf_id].planes[j].start,
+					   m2m_dev->out_buffers[buf_id].planes[j].length,
+					   1, m2m_dev->out_file);
+		if (wsize < 1) {
+			v4l2_err("No more device space for output file\n");
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static int mxc_m2m_prepare(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_format in_fmt;
+	struct v4l2_format out_fmt;
+	int i, fd = m2m_dev->fd;
 	int ret;
 
-	/* Free src buffer */
-	if (in_buffer.start != MAP_FAILED && in_buffer.start > 0)
-		munmap(in_buffer.start, in_buffer.length);
+	memset(&in_fmt, 0, sizeof(in_fmt));
+	in_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	in_fmt.fmt.pix_mp.pixelformat = to_fourcc(in_format);
+	in_fmt.fmt.pix_mp.width = m2m_dev->src.width;
+	in_fmt.fmt.pix_mp.height = m2m_dev->src.height;
+	ret = ioctl(fd, VIDIOC_S_FMT, &in_fmt);
+	if (ret < 0) {
+		v4l2_err("in VIDIOC_S_FMT fail\n");
+		return ret;
+	}
 
+	memset(&out_fmt, 0, sizeof(out_fmt));
+	out_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	out_fmt.fmt.pix_mp.pixelformat = to_fourcc(out_format);
+	out_fmt.fmt.pix_mp.width = m2m_dev->dst.width;
+	out_fmt.fmt.pix_mp.height = m2m_dev->dst.height;
+	ret = ioctl(fd, VIDIOC_S_FMT, &out_fmt);
+	if (ret < 0) {
+		v4l2_err("out VIDIOC_S_FMT fail\n");
+		return ret;
+	}
+
+	/* IN G_FMT */
+	memset(&in_fmt, 0, sizeof(in_fmt));
+	in_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	ret = ioctl(fd, VIDIOC_G_FMT, &in_fmt);
+	if (ret < 0) {
+		v4l2_err("in VIDIOC_G_FMT fail\n");
+		return ret;
+	}
+	v4l2_info("in: w/h=(%d,%d) pixelformat=%.4s num_planes=%d\n",
+			  in_fmt.fmt.pix_mp.width,
+			  in_fmt.fmt.pix_mp.height,
+			  (char *)&in_fmt.fmt.pix_mp.pixelformat,
+			  in_fmt.fmt.pix_mp.num_planes);
+	for (i = 0; i < in_fmt.fmt.pix_mp.num_planes; i++) {
+		v4l2_info("\t plane[%d]: bytesperline=%d sizeimage=%d\n", i,
+			  in_fmt.fmt.pix_mp.plane_fmt[i].bytesperline,
+			  in_fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
+	}
+	m2m_dev->in_num_planes = in_fmt.fmt.pix_mp.num_planes;
+
+	memset(&out_fmt, 0, sizeof(out_fmt));
+	out_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_G_FMT, &out_fmt);
+	if (ret < 0) {
+		v4l2_err("out VIDIOC_G_FMT fail\n");
+		return ret;
+	}
+	v4l2_info("out: w/h=(%d,%d) pixelformat=%.4s num_planes=%d\n",
+			  out_fmt.fmt.pix_mp.width,
+			  out_fmt.fmt.pix_mp.height,
+			  (char *)&out_fmt.fmt.pix_mp.pixelformat,
+			  out_fmt.fmt.pix_mp.num_planes);
+	for (i = 0; i < out_fmt.fmt.pix_mp.num_planes; i++) {
+		v4l2_info("\t plane[%d]: bytesperline=%d sizeimage=%d\n", i,
+				  out_fmt.fmt.pix_mp.plane_fmt[i].bytesperline,
+				  out_fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
+	}
+	m2m_dev->o_num_planes = out_fmt.fmt.pix_mp.num_planes;
+
+	return 0;
+}
+
+static int query_in_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_buffer bufferin;
+	struct v4l2_plane *planes;
+	int i, fd = m2m_dev->fd;
+
+	planes = malloc(m2m_dev->in_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d planes fail\n", m2m_dev->in_num_planes);
+		return -1;
+	}
+
+	/* Query Buffer for IN */
+	for (i = 0; i < TEST_BUFFER_NUM_IN; i++) {
+		memset(&bufferin, 0, sizeof(bufferin));
+		memset(planes, 0, m2m_dev->in_num_planes * sizeof(*planes));
+		bufferin.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+		bufferin.memory = V4L2_MEMORY_MMAP;
+		bufferin.m.planes = planes;
+		bufferin.length = m2m_dev->in_num_planes;
+		bufferin.index = i;
+		if (ioctl(fd, VIDIOC_QUERYBUF, &bufferin) < 0) {
+			v4l2_err("query buffer[%d] info fail\n", i);
+			free(planes);
+			return -1;
+		}
+
+		for (int j = 0; j < m2m_dev->in_num_planes; j++) {
+			m2m_dev->in_buffers[i].planes[j].length = bufferin.m.planes[j].length;
+			m2m_dev->in_buffers[i].planes[j].offset =
+							(size_t)bufferin.m.planes[j].m.mem_offset;
+			m2m_dev->in_buffers[i].planes[j].start = mmap(NULL,
+						bufferin.m.planes[j].length,
+						PROT_READ | PROT_WRITE, MAP_SHARED,
+						fd, (size_t)bufferin.m.planes[j].m.mem_offset);
+
+			v4l2_dbg("in buffer[%d]->planes[%d]:"
+					 "startAddr=0x%p, offset=0x%x, buf_size=%d\n",
+					 i, j,
+					 (unsigned int *)m2m_dev->in_buffers[i].planes[j].start,
+					 (unsigned int)m2m_dev->in_buffers[i].planes[j].offset,
+					 m2m_dev->in_buffers[i].planes[j].length);
+		}
+	}
+
+	free(planes);
+	return 0;
+}
+
+static void unmap_in_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	int i, j;
+
+	for (i = 0; i < TEST_BUFFER_NUM_IN; i++) {
+		for (j = 0; j < m2m_dev->in_num_planes; j++) {
+			if (m2m_dev->in_buffers[i].planes[j].start != MAP_FAILED &&
+				m2m_dev->in_buffers[i].planes[j].start > 0)
+				munmap(m2m_dev->in_buffers[i].planes[j].start,
+						m2m_dev->in_buffers[i].planes[j].length);
+		}
+	}
+}
+
+static void unmap_out_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	int i, j;
+
+	for (i = 0; i < TEST_BUFFER_NUM_OUT; i++) {
+		for (j = 0; j < m2m_dev->o_num_planes; j++) {
+			if (m2m_dev->out_buffers[i].planes[j].start != MAP_FAILED &&
+				m2m_dev->out_buffers[i].planes[j].start > 0)
+				munmap(m2m_dev->out_buffers[i].planes[j].start,
+						m2m_dev->out_buffers[i].planes[j].length);
+		}
+	}
+}
+
+static int query_out_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_buffer bufferout;
+	struct v4l2_plane *planes;
+	int i, fd = m2m_dev->fd;
+
+	planes = malloc(m2m_dev->o_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d planes fail\n", m2m_dev->o_num_planes);
+		return -1;
+	}
+
+	/* Query Buffer for IN */
+	for (i = 0; i < TEST_BUFFER_NUM_OUT; i++) {
+		memset(&bufferout, 0, sizeof(bufferout));
+		memset(planes, 0, m2m_dev->o_num_planes * sizeof(*planes));
+		bufferout.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		bufferout.memory = V4L2_MEMORY_MMAP;
+		bufferout.m.planes = planes;
+		bufferout.length = m2m_dev->o_num_planes;
+		bufferout.index = i;
+		if (ioctl(fd, VIDIOC_QUERYBUF, &bufferout) < 0) {
+			v4l2_err("query buffer[%d] info fail\n", i);
+			free(planes);
+			return -1;
+		}
+
+		for (int j = 0; j < m2m_dev->o_num_planes; j++) {
+			m2m_dev->out_buffers[i].planes[j].length = bufferout.m.planes[j].length;
+			m2m_dev->out_buffers[i].planes[j].offset =
+							(size_t)bufferout.m.planes[j].m.mem_offset;
+			m2m_dev->out_buffers[i].planes[j].start = mmap(NULL,
+						bufferout.m.planes[j].length,
+						PROT_READ | PROT_WRITE, MAP_SHARED,
+						fd, (size_t)bufferout.m.planes[j].m.mem_offset);
+
+			v4l2_dbg("out buffer[%d]->planes[%d]:"
+					 "startAddr=0x%p, offset=0x%x, buf_size=%d\n",
+					 i, j,
+					 (unsigned int *)m2m_dev->out_buffers[i].planes[j].start,
+					 (unsigned int)m2m_dev->out_buffers[i].planes[j].offset,
+					 m2m_dev->out_buffers[i].planes[j].length);
+		}
+	}
+
+	free(planes);
+	return 0;
+}
+
+static int request_in_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_requestbuffers bufrequestin;
+	int fd = m2m_dev->fd;
+
+	memset(&bufrequestin, 0, sizeof(bufrequestin));
+	bufrequestin.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	bufrequestin.memory = V4L2_MEMORY_MMAP;
+	bufrequestin.count = TEST_BUFFER_NUM_IN;
+	if (ioctl(fd, VIDIOC_REQBUFS, &bufrequestin) < 0) {
+		v4l2_err("VIDIOC_REQBUFS IN fail\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static void free_in_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_requestbuffers req;
+	int ret, fd = m2m_dev->fd;
+
+	/* Free src buffer */
 	memset(&req, 0, sizeof(req));
 	req.count = 0;
-	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	req.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	req.memory = V4L2_MEMORY_MMAP;
 	ret = ioctl(fd, VIDIOC_REQBUFS, &req);
 	if (ret < 0) {
@@ -316,21 +672,33 @@ static void free_src_resource(int fd)
 	}
 }
 
-static void free_dst_resource(int fd)
+static int request_out_buffer(struct mxc_m2m_device *m2m_dev)
 {
-	struct v4l2_requestbuffers req;
-	int i, ret;
+	struct v4l2_requestbuffers bufrequestout;
+	int fd = m2m_dev->fd;
 
-	/* Free out buffer */
-	for (i = 0; i < g_num_planes; i++) {
-		if (out_buffer.planes[i].start != MAP_FAILED &&
-			out_buffer.planes[i].start > 0)
-			munmap(out_buffer.planes[i].start, out_buffer.planes[i].length);
+	memset(&bufrequestout, 0, sizeof(bufrequestout));
+	bufrequestout.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	bufrequestout.memory = V4L2_MEMORY_MMAP;
+	bufrequestout.count = TEST_BUFFER_NUM_OUT;
+	if (ioctl(fd, VIDIOC_REQBUFS, &bufrequestout) < 0) {
+		v4l2_err("VIDIOC_REQBUFS OUT fail\n");
+		return -1;
 	}
 
+	return 0;
+}
+
+static void free_out_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_requestbuffers req;
+	int fd = m2m_dev->fd;
+	int ret;
+
+	/* Free out buffer */
 	memset(&req, 0, sizeof(req));
 	req.count = 0;
-	req.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	req.memory = V4L2_MEMORY_MMAP;
 	ret = ioctl(fd, VIDIOC_REQBUFS, &req);
 	if (ret < 0) {
@@ -339,10 +707,344 @@ static void free_dst_resource(int fd)
 	}
 }
 
+static int mxc_m2m_request_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	int ret;
+
+	ret = request_in_buffer(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	ret = request_out_buffer(m2m_dev);
+	if (ret < 0)
+		goto src;
+
+	ret = query_in_buffer(m2m_dev);
+	if (ret < 0)
+		goto dst;
+
+	ret = query_out_buffer(m2m_dev);
+	if (ret < 0) {
+		unmap_in_buffer(m2m_dev);
+		goto dst;
+	}
+
+	return 0;
+
+dst:
+	free_out_buffer(m2m_dev);
+src:
+	free_in_buffer(m2m_dev);
+	return ret;
+}
+
+static int mxc_m2m_queue_in_buffer(int buf_id, struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_buffer buf;
+	struct v4l2_plane *planes;
+	int fd = m2m_dev->fd;
+	int j;
+
+	planes = malloc(m2m_dev->in_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d plane fail\n", m2m_dev->in_num_planes);
+		return -ENOMEM;
+	}
+
+	memset(&buf, 0, sizeof(buf));
+	buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	buf.memory = V4L2_MEMORY_MMAP;
+	buf.m.planes = planes;
+	buf.length = m2m_dev->in_num_planes;
+	buf.index = buf_id;
+
+	for (j = 0; j < m2m_dev->in_num_planes; j++) {
+		buf.m.planes[j].length = m2m_dev->in_buffers[buf_id].planes[j].length;
+		buf.m.planes[j].m.mem_offset = m2m_dev->in_buffers[buf_id].planes[j].offset;
+		buf.m.planes[j].bytesused = m2m_dev->in_buffers[buf_id].planes[j].length;
+	}
+
+	if (ioctl(fd, VIDIOC_QBUF, &buf) < 0) {
+		v4l2_err("buffer[%d] VIDIOC_QBUF IN fail\n", buf_id);
+		return -1;
+	}
+
+	free(planes);
+	return 0;
+}
+
+static int mxc_m2m_queue_out_buffer(int buf_id, struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_buffer buf;
+	struct v4l2_plane *planes;
+	int fd = m2m_dev->fd;
+	int j;
+
+	planes = malloc(m2m_dev->o_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d plane fail\n", m2m_dev->o_num_planes);
+		return -ENOMEM;
+	}
+
+	memset(&buf, 0, sizeof(buf));
+	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	buf.memory = V4L2_MEMORY_MMAP;
+	buf.m.planes = planes;
+	buf.length = m2m_dev->o_num_planes;
+	buf.index = buf_id;
+
+	for (j = 0; j < m2m_dev->o_num_planes; j++) {
+		buf.m.planes[j].length = m2m_dev->out_buffers[buf_id].planes[j].length;
+		buf.m.planes[j].m.mem_offset = m2m_dev->out_buffers[buf_id].planes[j].offset;
+		buf.m.planes[j].bytesused = m2m_dev->out_buffers[buf_id].planes[j].length;
+	}
+
+	if (ioctl(fd, VIDIOC_QBUF, &buf) < 0) {
+		v4l2_err("buffer[%d] VIDIOC_QBUF OUT fail\n", buf_id);
+		return -1;
+	}
+
+	free(planes);
+	return 0;
+}
+
+static int mxc_m2m_dequeue_in_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_buffer buf;
+	struct v4l2_plane *planes;
+	int fd = m2m_dev->fd;
+	int ret;
+
+	planes = malloc(m2m_dev->o_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d plane fail\n", m2m_dev->o_num_planes);
+		return -ENOMEM;
+	}
+
+	memset(&buf, 0, sizeof(buf));
+	buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	buf.memory = V4L2_MEMORY_MMAP;
+	buf.m.planes = planes;
+	buf.length = m2m_dev->in_num_planes;
+
+	ret = ioctl(fd, VIDIOC_DQBUF, &buf);
+	if (ret < 0) {
+		v4l2_err("VIDIOC_DQBUF error\n");
+		free(planes);
+		return ret;
+	}
+	m2m_dev->in_frame_num++;
+	m2m_dev->in_cur_buf_id = buf.index;
+
+	free(planes);
+	return 0;
+}
+
+static int mxc_m2m_dequeue_out_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	struct v4l2_buffer buf;
+	struct v4l2_plane *planes;
+	int fd = m2m_dev->fd;
+	int ret;
+
+	planes = malloc(m2m_dev->o_num_planes * sizeof(*planes));
+	if (!planes) {
+		v4l2_err("alloc %d plane fail\n", m2m_dev->o_num_planes);
+		return -ENOMEM;
+	}
+
+	memset(&buf, 0, sizeof(buf));
+	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	buf.memory = V4L2_MEMORY_MMAP;
+	buf.m.planes = planes;
+	buf.length = m2m_dev->o_num_planes;
+
+	ret = ioctl(fd, VIDIOC_DQBUF, &buf);
+	if (ret < 0) {
+		v4l2_err("VIDIOC_DQBUF error\n");
+		free(planes);
+		return ret;
+	}
+	m2m_dev->out_frame_num++;
+	m2m_dev->out_cur_buf_id = buf.index;
+
+	free(planes);
+	return 0;
+}
+
+static int mxc_m2m_queue(struct mxc_m2m_device *m2m_dev)
+{
+	int i, ret;
+
+	for (i = 0; i < TEST_BUFFER_NUM_IN; i++) {
+		ret = mxc_m2m_queue_in_buffer(i, m2m_dev);
+		if (ret < 0)
+			return ret;
+	}
+
+	for (i = 0; i < TEST_BUFFER_NUM_OUT; i++) {
+		ret = mxc_m2m_queue_out_buffer(i, m2m_dev);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+#if 0
+static int mxc_m2m_dequeue(struct mxc_m2m_device *m2m_dev)
+{
+	int ret;
+
+	ret = mxc_m2m_dequeue_in_buffer(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	ret = mxc_m2m_dequeue_out_buffer(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+#endif
+static int mxc_m2m_in_streamon(struct mxc_m2m_device *m2m_dev)
+{
+	enum v4l2_buf_type type;
+	int ret, fd = m2m_dev->fd;
+
+	type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	ret = ioctl(fd, VIDIOC_STREAMON, &type);
+	if (ret < 0) {
+		v4l2_err("in VIDIOC_STREAMON error\n");
+		return ret;;
+	}
+	v4l2_info("in start capturing\n");
+
+	return 0;
+}
+
+static int mxc_m2m_out_streamon(struct mxc_m2m_device *m2m_dev)
+{
+	enum v4l2_buf_type type;
+	int ret, fd = m2m_dev->fd;
+
+	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_STREAMON, &type);
+	if (ret < 0) {
+		v4l2_err("out VIDIOC_STREAMON error\n");
+		return ret;;
+	}
+	v4l2_info("out start capturing\n");
+
+	return 0;
+}
+
+static int mxc_m2m_streamon(struct mxc_m2m_device *m2m_dev)
+{
+	int ret;
+
+	ret = mxc_m2m_in_streamon(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	ret = mxc_m2m_out_streamon(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static int mxc_m2m_in_streamoff(struct mxc_m2m_device *m2m_dev)
+{
+	enum v4l2_buf_type type;
+	int fd = m2m_dev->fd;
+	int ret;
+
+	type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	ret = ioctl(fd, VIDIOC_STREAMOFF, &type);
+	if (ret < 0) {
+		v4l2_err("in VIDIOC_STREAMOFF error\n");
+		return ret;;
+	}
+	v4l2_info("in stop capturing\n");
+
+	return 0;
+}
+
+static int mxc_m2m_out_streamoff(struct mxc_m2m_device *m2m_dev)
+{
+	enum v4l2_buf_type type;
+	int fd = m2m_dev->fd;
+	int ret;
+
+	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(fd, VIDIOC_STREAMOFF, &type);
+	if (ret < 0) {
+		v4l2_err("out VIDIOC_STREAMOFF error\n");
+		return ret;;
+	}
+	v4l2_info("out stop capturing\n");
+
+	return 0;
+
+}
+
+static int mxc_m2m_streamoff(struct mxc_m2m_device *m2m_dev)
+{
+	int ret;
+
+	ret = mxc_m2m_in_streamoff(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	ret = mxc_m2m_out_streamoff(m2m_dev);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static void mxc_m2m_free_buffer(struct mxc_m2m_device *m2m_dev)
+{
+	unmap_in_buffer(m2m_dev);
+	free_in_buffer(m2m_dev);
+
+	unmap_out_buffer(m2m_dev);
+	free_out_buffer(m2m_dev);
+}
+
+static int start_convert(struct mxc_m2m_device *m2m_dev)
+{
+	int count = 0;
+	int ret;
+
+	do {
+		ret = mxc_m2m_dequeue_out_buffer(m2m_dev);
+		if (ret < 0)
+			return -1;
+		ret = mxc_m2m_dequeue_in_buffer(m2m_dev);
+		if (ret < 0)
+			return -1;
+
+		ret = save_to_file(m2m_dev);
+		if (ret < 0)
+			return ret;
+
+		if (++count < m2m_dev->frames) {
+			fill_in_buffer(m2m_dev->in_cur_buf_id, m2m_dev);
+			mxc_m2m_queue_out_buffer(m2m_dev->out_cur_buf_id, m2m_dev);
+			mxc_m2m_queue_in_buffer(m2m_dev->in_cur_buf_id, m2m_dev);
+		}
+
+	} while (count < m2m_dev->frames);
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", " " };
-	int ret;
+	struct mxc_m2m_device *m2m_dev;
+	int ret = 0;
 
 	ret = soc_version_check(soc_list);
 	if (ret == 0) {
@@ -354,304 +1056,60 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		return ret;
 
-	int fd;
-	fd = open(dev_name, O_RDWR, 0);
-	if (fd < 0) {
-		v4l2_err("Open %s fail\n", dev_name);
+	m2m_dev = malloc(sizeof(*m2m_dev));
+	if (!m2m_dev) {
+		v4l2_err("alloc memory for m2m device fail\n");
 		return -1;
 	}
 
-	in_file = fopen(in_file_name, "rb");
-	if (in_file == NULL) {
-		v4l2_err("Open %s fail\n", in_file_name);
-		close(fd);
-		return -1;
-	}
+	fill_param(&m2m_dev->src, in_width, in_height);
+	fill_param(&m2m_dev->dst, out_width, out_height);
 
-	out_file = fopen(out_file_name, "wb");
-	if (in_file == NULL) {
-		v4l2_err("Open %s fail\n", in_file_name);
-		fclose(in_file);
-		close(fd);
-		return -1;
-	}
+	ret = mxc_m2m_open(m2m_dev);
+	if (ret < 0)
+		goto free;
 
-	ret = check_input_parameters(fd);
+	ret = check_input_parameters(m2m_dev);
 	if (ret < 0)
 		goto close;
 
-	struct v4l2_capability capabilities;
-	if (ioctl(fd, VIDIOC_QUERYCAP, &capabilities) < 0) {
-		v4l2_err("VIDIOC_QUERYCAP fail\n");
+	ret = check_device_cap(m2m_dev);
+	if (ret < 0)
 		goto close;
-	}
-
-	if (!(capabilities.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE)) {
-		v4l2_err("The device does not handle memory to memory video capture.\n");
-		goto close;
-	}
 
 	if (show_device_cap) {
-		show_device_cap_list(fd);
+		show_device_cap_list(m2m_dev->fd);
 		goto close;
 	}
 
-	/* IN S_FMT */
-	struct v4l2_format in_fmt;
-
-	memset(&in_fmt, 0, sizeof(in_fmt));
-	in_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	in_fmt.fmt.pix.pixelformat = to_fourcc(in_format);
-	in_fmt.fmt.pix.width = in_width;
-	in_fmt.fmt.pix.height = in_height;
-	ret = ioctl(fd, VIDIOC_S_FMT, &in_fmt);
-	if (ret < 0) {
-		v4l2_err("in VIDIOC_S_FMT fail\n");
+	ret = mxc_m2m_prepare(m2m_dev);
+	if (ret < 0)
 		goto close;
-	}
 
-	struct v4l2_format out_fmt;
-
-	memset(&out_fmt, 0, sizeof(out_fmt));
-	out_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	out_fmt.fmt.pix_mp.pixelformat = to_fourcc(out_format);
-	out_fmt.fmt.pix_mp.width = out_width;
-	out_fmt.fmt.pix_mp.height = out_height;
-	ret = ioctl(fd, VIDIOC_S_FMT, &out_fmt);
-	if (ret < 0) {
-		v4l2_err("out VIDIOC_S_FMT fail\n");
+	ret = mxc_m2m_request_buffer(m2m_dev);
+	if (ret < 0)
 		goto close;
-	}
 
-	/* IN G_FMT */
-	memset(&in_fmt, 0, sizeof(in_fmt));
-	in_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	ret = ioctl(fd, VIDIOC_G_FMT, &in_fmt);
-	if (ret < 0) {
-		v4l2_err("in VIDIOC_G_FMT fail\n");
-		return ret;
-	}
-	v4l2_info("in: w/h=(%d,%d) pixelformat=%.4s bytesperline=%d sizeimage=%d\n",
-			  in_fmt.fmt.pix.width,
-			  in_fmt.fmt.pix.height,
-			  (char *)&in_fmt.fmt.pix.pixelformat,
-			  in_fmt.fmt.pix.bytesperline,
-			  in_fmt.fmt.pix.sizeimage);
+	fill_in_buffer(0, m2m_dev);
+	ret = mxc_m2m_queue(m2m_dev);
+	if (ret < 0)
+		goto free_buf;
 
-	memset(&out_fmt, 0, sizeof(out_fmt));
-	out_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	ret = ioctl(fd, VIDIOC_G_FMT, &out_fmt);
-	if (ret < 0) {
-		v4l2_err("out VIDIOC_G_FMT fail\n");
-		return ret;
-	}
-	v4l2_info("out: w/h=(%d,%d) pixelformat=%.4s num_planes=%d\n",
-			  out_fmt.fmt.pix_mp.width,
-			  out_fmt.fmt.pix_mp.height,
-			  (char *)&out_fmt.fmt.pix_mp.pixelformat,
-			  out_fmt.fmt.pix_mp.num_planes);
-	int i;
-	for (i = 0; i < out_fmt.fmt.pix_mp.num_planes; i++) {
-		v4l2_info("\t plane[%d]: bytesperline=%d sizeimage=%d\n", i,
-				  out_fmt.fmt.pix_mp.plane_fmt[i].bytesperline,
-				  out_fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
-	}
-	g_num_planes = out_fmt.fmt.pix_mp.num_planes;
+	ret = mxc_m2m_streamon(m2m_dev);
+	if (ret < 0)
+		goto free_buf;
 
-	/* REQBUF IN */
-	struct v4l2_requestbuffers bufrequestin;
-	struct v4l2_buffer bufferin;
+	start_convert(m2m_dev);
 
-	memset(&bufrequestin, 0, sizeof(bufrequestin));
-	bufrequestin.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	bufrequestin.memory = V4L2_MEMORY_MMAP;
-	bufrequestin.count = TEST_BUFFER_NUM_IN;
-	if (ioctl(fd, VIDIOC_REQBUFS, &bufrequestin) < 0) {
-		v4l2_err("VIDIOC_REQBUFS IN fail\n");
-		goto close;
-	}
+	ret = mxc_m2m_streamoff(m2m_dev);
+	if (ret < 0)
+		goto free_buf;
 
-	/* Query Buffer for IN */
-	memset(&bufferin, 0, sizeof(bufferin));
-	bufferin.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	bufferin.memory = V4L2_MEMORY_MMAP;
-	bufferin.index = 0;
-	if (ioctl(fd, VIDIOC_QUERYBUF, &bufferin) < 0) {
-		v4l2_err("VIDIOC_QUERYBUF IN fail\n");
-		goto free_src;
-	}
-
-	in_buffer.length = bufferin.length;
-	in_buffer.offset = bufferin.m.offset;
-	in_buffer.start = mmap(NULL, bufferin.length,
-					 PROT_READ | PROT_WRITE, MAP_SHARED,
-					 fd,
-					 bufferin.m.offset);
-	if (in_buffer.start == MAP_FAILED) {
-		v4l2_err("mmap in fail\n");
-		goto free_src;
-	}
-
-	memset(in_buffer.start, 0, bufferin.length);
-	v4l2_info("in: buffer->planes[0]:"
-			  "startAddr=0x%p, offset=0x%x, buf_size=%d, bytesused=%d\n",
-			  (unsigned int *)in_buffer.start,
-			  (unsigned int)in_buffer.offset,
-			  in_buffer.length, bufferin.bytesused);
-
-	/* Request Buffer for OUT */
-	struct v4l2_requestbuffers bufrequestout;
-	struct v4l2_buffer bufferout;
-	struct v4l2_plane *planes;
-
-	/* REQBUF OUT */
-	planes = malloc(g_num_planes * sizeof(*planes));
-	if (planes == NULL) {
-		v4l2_err("alloc memory for plane fail\n");
-		goto free_src;
-	}
-	memset(planes, 0, g_num_planes * sizeof(*planes));
-
-	memset(&bufrequestout, 0, sizeof(bufrequestout));
-	bufrequestout.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	bufrequestout.memory = V4L2_MEMORY_MMAP;
-	bufrequestout.count = TEST_BUFFER_NUM_OUT;
-	if (ioctl(fd, VIDIOC_REQBUFS, &bufrequestout) < 0) {
-		v4l2_err("VIDIOC_REQBUFS OUT fail\n");
-		goto free;
-	}
-
-	/* QUERYBUF OUT */
-	memset(&bufferout, 0, sizeof(bufferout));
-	bufferout.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	bufferout.memory = V4L2_MEMORY_MMAP;
-	bufferout.m.planes = planes;
-	bufferout.length = g_num_planes;
-	bufferout.index = 0;
-	if (ioctl(fd, VIDIOC_QUERYBUF, &bufferout) < 0) {
-		v4l2_err("VIDIOC_QUERYBUF OUT fail\n");
-		goto free_dst;
-	}
-
-	int j;
-	for (j = 0; j < g_num_planes; j++) {
-		out_buffer.planes[j].length = bufferout.m.planes[j].length;
-		out_buffer.planes[j].offset = bufferout.m.planes[j].m.mem_offset;
-		out_buffer.planes[j].start = mmap(NULL,
-					bufferout.m.planes[j].length,
-					PROT_READ | PROT_WRITE, MAP_SHARED,
-					fd,
-					bufferout.m.planes[j].m.mem_offset);
-		if (out_buffer.planes[j].start == MAP_FAILED) {
-			v4l2_err("mmap out fail\n");
-			goto free_dst;
-		}
-
-		v4l2_info("out: buffer->planes[%d]:"
-			  "startAddr=0x%p, offset=0x%x, buf_size=%d\n", j,
-			  (unsigned int *)out_buffer.planes[j].start,
-			  (unsigned int)out_buffer.planes[j].offset,
-			  out_buffer.planes[j].length);
-	}
-
-	/* QBUF IN */
-	memset(&bufferin, 0, sizeof(bufferin));
-	bufferin.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	bufferin.memory = V4L2_MEMORY_MMAP;
-	bufferin.index = 0;
-	if (ioctl(fd, VIDIOC_QBUF, &bufferin) < 0) {
-		v4l2_err("VIDIOC_QBUF IN fail\n");
-		goto free_dst;
-	}
-
-	/* QBUF OUT */
-	memset(&bufferout, 0, sizeof(bufferout));
-	bufferout.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	bufferout.memory = V4L2_MEMORY_MMAP;
-	bufferout.m.planes = planes;
-	bufferout.index = 0;
-	bufferout.length = g_num_planes;
-
-	for (j = 0; j < g_num_planes; j++) {
-		bufferout.m.planes[j].length = out_buffer.planes[j].length;
-		bufferout.m.planes[j].m.mem_offset = out_buffer.planes[j].offset;
-		bufferout.m.planes[j].bytesused = out_buffer.planes[j].length;
-	}
-	if (ioctl(fd, VIDIOC_QBUF, &bufferout) < 0) {
-		v4l2_err("VIDIOC_QBUF OUT fail\n");
-		goto free;
-	}
-
-	fread(in_buffer.start, in_buffer.length, 1, in_file);
-
-	enum v4l2_buf_type in_type, out_type;
-
-	/* STREAM ON */
-	in_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(fd, VIDIOC_STREAMON, &in_type) < 0) {
-		v4l2_err("VIDIOC_STREAMON IN fail\n");
-		goto free_dst;
-	}
-
-	out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	if (ioctl(fd, VIDIOC_STREAMON, &out_type) < 0) {
-		v4l2_err("VIDIOC_STREAMON OUT fail\n");
-		goto free_dst;
-	}
-
-	size_t wsize;
-	memset(&bufferout, 0, sizeof(bufferout));
-	bufferout.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	bufferout.memory = V4L2_MEMORY_MMAP;
-	bufferout.m.planes = planes;
-	bufferout.length = g_num_planes;
-	if (ioctl(fd, VIDIOC_DQBUF, &bufferout) < 0) {
-		v4l2_err("VIDIOC_STREAMON OUT fail\n");
-		goto free_dst;
-	}
-
-	memset(&bufferin, 0, sizeof(bufferin));
-	bufferin.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	bufferin.memory = V4L2_MEMORY_MMAP;
-	if (ioctl(fd, VIDIOC_DQBUF, &bufferin) < 0) {
-		v4l2_err("VIDIOC_DQBUF IN fail\n");
-		goto free_dst;
-	}
-
-	for (j = 0; j < g_num_planes; j++) {
-		wsize = fwrite(out_buffer.planes[j].start,
-					out_buffer.planes[j].length, 1, out_file);
-		if (wsize < 1) {
-			v4l2_err("No space left on device\n");
-			goto finish;
-		}
-	}
-
-finish:
-	/* STREAM OFF */
-	in_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(fd, VIDIOC_STREAMOFF, &in_type) < 0) {
-		v4l2_err("VIDIOC_STREAMOFF IN fail\n");
-		goto free;
-	}
-
-	out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	if (ioctl(fd, VIDIOC_STREAMOFF, &out_type) < 0) {
-		v4l2_err("VIDIOC_STREAMOFF OUT fail\n");
-		goto free;
-	}
-
-	v4l2_info("\"%s\"->\"%s\" success\n", in_format, out_format);
-
-free_dst:
-	free_dst_resource(fd);
-free:
-	free(planes);
-free_src:
-	free_src_resource(fd);
+free_buf:
+	mxc_m2m_free_buffer(m2m_dev);
 close:
-	fclose(in_file);
-	fclose(out_file);
-	close(fd);
+	mxc_m2m_close(m2m_dev);
+free:
+	free(m2m_dev);
 	return ret;
 }
