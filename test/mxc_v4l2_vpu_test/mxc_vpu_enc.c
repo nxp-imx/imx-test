@@ -111,6 +111,7 @@ enum {
 	TARBR,
 	MAXBR,
 	MINBR,
+	FRAMERATE,
 	FRAMENUM,
 	LOOP,
 };
@@ -131,6 +132,7 @@ struct mxc_vpu_enc_option options[] = {
 	ENC_OPTION(TARBR, 1, "set encoder target boudrate", "target boudrate"),
 	ENC_OPTION(MAXBR, 1, "set encoder maximum boudrate", "maximum boudrate"),
 	ENC_OPTION(MINBR, 1, "set encoder minimum boudrate", "minimum boudrate"),
+	ENC_OPTION(FRAMERATE, 1, "frame rate(fps)", "frame rate (fps)"),
 	ENC_OPTION(FRAMENUM, 1, "set output frame number", "output frame number"),
 	ENC_OPTION(LOOP, 1, "set application in loops", "set application in loops and no output file"),
 	{NULL, 0, 0, NULL, NULL}
@@ -796,6 +798,28 @@ FUNC_END:
 	printf("%s() ]\n", __FUNCTION__);
 }
 
+static int set_fps(int fd, uint32_t type, uint32_t framerate)
+{
+	struct v4l2_streamparm parm;
+	int ret;
+
+	if (fd < 0 || !framerate)
+		return -1;
+
+	memset(&parm, 0, sizeof(parm));
+	parm.type = type;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = framerate;
+
+	ret = ioctl(fd, VIDIOC_S_PARM, &parm);
+	if (ret) {
+		printf("set framerate fail, %s\n", strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
 static int set_ctrl(int fd, int id, int value)
 {
 	struct v4l2_queryctrl qctrl;
@@ -913,6 +937,9 @@ static int parse_arg(struct mxc_vpu_enc_option *option, char *argv[],
 		break;
 	case MINBR:
 		param->min_bitrate = strtol(argv[0], NULL, 0);
+		break;
+	case FRAMERATE:
+		param->framerate = strtol(argv[0], NULL, 0);
 		break;
 	case FRAMENUM:
 		setFrameNum = strtol(argv[0], NULL, 0);
@@ -1148,6 +1175,8 @@ int main(int argc, char* argv[])
 		lErr = 6;
 		goto FUNC_END;
 	}
+	set_fps(pComponent->hDev,
+			V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, param.framerate);
 	// setup memory for v4l2 capture (encode stream output)
 	// request number of buffer and memory type
 	memset(&req_bufs, 0, sizeof(struct v4l2_requestbuffers));
@@ -1300,6 +1329,8 @@ int main(int argc, char* argv[])
 	printf("auto_rewind %d, pixelformat %d\n",
 	       pComponent->ports[STREAM_DIR_IN].auto_rewind, format.fmt.pix_mp.pixelformat);
 
+	set_fps(pComponent->hDev,
+			V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, param.framerate);
 	// setup memory for v4l2 output (compressed data input)
 	//
 	// request number of buffer and memory type
