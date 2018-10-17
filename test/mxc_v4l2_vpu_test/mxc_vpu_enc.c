@@ -105,6 +105,7 @@ enum {
 	OWIDTH,
 	OHEIGHT,
 	PROFILE,
+	LEVEL,
 	GOP,
 	QP,
 	TARBR,
@@ -124,6 +125,7 @@ struct mxc_vpu_enc_option options[] = {
 	ENC_OPTION(OWIDTH, 1, "set output file width", "output file width"),
 	ENC_OPTION(OHEIGHT, 1, "set output file height", "output file height"),
 	ENC_OPTION(PROFILE, 1, "set h264 profile", "h264 profile, 0 : baseline, 2 : main, 4 : high"),
+	ENC_OPTION(LEVEL, 1, "set h264 level", "h264 level, 0~15, 14:level_5_0(default)"),
 	ENC_OPTION(GOP, 1, "set group of picture", " Group of picture"),
 	ENC_OPTION(QP, 1, "set quantizer parameter", "quantizer parameter,between 0 and 51.The smaller the value,the finer the quantization,the higher the image quality,the longer the code stream"),
 	ENC_OPTION(TARBR, 1, "set encoder target boudrate", "target boudrate"),
@@ -840,74 +842,6 @@ static void set_encoder_parameters(struct mxc_vpu_enc_param *param,
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_ASO, param->low_latency_mode);
 }
 
-/***********help ********/
-void showAllArgs(void)
-{
-	printf("Type 'HELP' to see the list. Type 'HELP NAME' to find out more about parameter 'NAME'.\n");
-	printf("HELP     : fand out  more about parameter\n");
-	printf("IFILE    : input filename\n");
-	printf("OFILE    : output filename\n");
-	printf("WIDTH    : set input file width\n");
-	printf("OWIDTH   : set output file width\n");
-	printf("HEIGHT   : set input file height\n");
-	printf("OWIDTH   : set output file height\n");
-	printf("GOP      : set group of picture\n");
-	printf("QP       : set quantizer parameter\n");
-	printf("MAXBR    : set encoder maximum boudrate\n");
-	printf("MINBR    : set encoder minimum boudrate\n");
-	printf("FRAMENUM : set output frame number\n");
-	printf("LOOP     : set application in loops\n");
-	return ;
-}
-
-void showArgs(int allArgs, int count, char* p[])
-{
-	while (count < allArgs) {
-		if (!strcasecmp(p[count], "HELP")) {
-			count++;
-			printf("HELP: parameter 'HELP' is help to use the app\n");
-		} else if (!strcasecmp(p[count], "IFILE")) {
-			count++;
-			printf("IFILE: parameter 'IFILE' is input file\n");
-		} else if (!strcasecmp(p[count], "OFILE")) {
-			count++;
-			printf("OFILE: parameter 'OFILE' is output file\n");
-		} else if (!strcasecmp(p[count], "WIDTH")) {
-			count++;
-			printf("WIDTH: parameter 'WIDTH' is input file width\n");
-		} else if (!strcasecmp(p[count], "OWIDTH")) {
-			count++;
-			printf("OWIDTH: parameter 'OWIDTH' is output file width\n");
-		} else if (!strcasecmp(p[count], "HEIGHT")) {
-			count++;
-			printf("HEIGHT: parameter 'HEIGHT' is input file height\n");
-		} else if (!strcasecmp(p[count], "GOP")) {
-			count++;
-			printf("GOP: parameter 'GOP' is Group of picture\n");
-		} else if (!strcasecmp(p[count], "QP")) {
-			count++;
-			printf("QP: parameter 'QP' is quantizer parameter,between 0 and 31. The smaller the value,the finer the quantization,the higher the image quality,the longer the code stream \n");
-		} else if (!strcasecmp(p[count], "MAXBR")) {
-			count++;
-			printf("MAXBR: parameter 'MAXBR' is maximum boudrate \n");
-		} else if (!strcasecmp(p[count], "MINBR")) {
-			count++;
-			printf("MINBR: parameter 'MINBR' is minimum boudrate \n");
-		} else if (!strcasecmp(p[count], "FRAMENUM")) {
-			count++;
-			printf("FRAMENUM: parameter 'FRAMENUM' set output frame number \n");
-		} else if (!strcasecmp(p[count], "LOOP")) {
-			count++;
-			printf("LOOP: parameter 'LOOP' set application in loops and no output file  \n");
-		} else {
-			printf("no help topics match %s,please try help help\n", p[count]);
-			count++;
-		}
-	}
-	return ;
-}
-/*********help end********/
-
 static struct mxc_vpu_enc_option *find_option_by_name(const char *name)
 {
 	int i = 0;
@@ -961,6 +895,9 @@ static int parse_arg(struct mxc_vpu_enc_option *option, char *argv[],
 		break;
 	case PROFILE:
 		param->profile = strtol(argv[0], NULL, 0);
+		break;
+	case LEVEL:
+		param->level = strtol(argv[0], NULL, 0);
 		break;
 	case GOP:
 		param->gop = strtol(argv[0], NULL, 0);
@@ -1077,7 +1014,7 @@ static int show_help(int argc, char *argv[])
 			else
 				show_all_args();
 
-			return 0;
+			return 1;
 		}
 
 		index++;
