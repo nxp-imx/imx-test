@@ -112,6 +112,7 @@ enum {
 	MAXBR,
 	MINBR,
 	FRAMERATE,
+	LOWLATENCY,
 	FRAMENUM,
 	LOOP,
 };
@@ -133,6 +134,7 @@ struct mxc_vpu_enc_option options[] = {
 	ENC_OPTION(MAXBR, 1, "set encoder maximum boudrate", "maximum boudrate"),
 	ENC_OPTION(MINBR, 1, "set encoder minimum boudrate", "minimum boudrate"),
 	ENC_OPTION(FRAMERATE, 1, "frame rate(fps)", "frame rate (fps)"),
+	ENC_OPTION(LOWLATENCY, 0, "enable low latency mode", "enable low latency mode, it will disable the display re-ordering"),
 	ENC_OPTION(FRAMENUM, 1, "set output frame number", "output frame number"),
 	ENC_OPTION(LOOP, 1, "set application in loops", "set application in loops and no output file"),
 	{NULL, 0, 0, NULL, NULL}
@@ -941,6 +943,9 @@ static int parse_arg(struct mxc_vpu_enc_option *option, char *argv[],
 	case FRAMERATE:
 		param->framerate = strtol(argv[0], NULL, 0);
 		break;
+	case LOWLATENCY:
+		param->low_latency_mode = 1;
+		break;
 	case FRAMENUM:
 		setFrameNum = strtol(argv[0], NULL, 0);
 		break;
@@ -1008,7 +1013,7 @@ static void show_all_args(void)
 		if (!options[i].name)
 			break;
 
-		printf("%-9s: %s\n", options[i].name, options[i].desc);
+		printf("%-10s: %s\n", options[i].name, options[i].desc);
 		i++;
 	}
 }
