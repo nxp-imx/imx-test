@@ -160,7 +160,7 @@ struct media_dev {
 /*
  * Global variable definition
  */
-static sigset_t sigset;
+static sigset_t sigset_v;
 static uint32_t log_level;
 static uint32_t g_cam;
 static uint32_t g_cam_num;
@@ -189,10 +189,10 @@ static int signal_thread(void *arg)
 {
 	int sig;
 
-	pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+	pthread_sigmask(SIG_BLOCK, &sigset_v, NULL);
 
 	while (1) {
-		sigwait(&sigset, &sig);
+		sigwait(&sigset_v, &sig);
 		if (sig == SIGINT) {
 			v4l2_info("Ctrl-C received. Exiting.\n");
 		} else {
@@ -479,7 +479,11 @@ static int open_save_file(struct video_channel *video_ch)
 
 	for (i = 0; i < NUM_SENSORS; i++) {
 		if ((g_cam >> i) & 0x01) {
+#ifdef BUILD_FOR_ANDROID
+			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT, 0660);
+#else
 			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT);
+#endif
 			if (fd < 0) {
 				 v4l2_err("Channel[%d] unable to create recording file\n", i);
 				 while (i)
@@ -1593,9 +1597,9 @@ int main(int argc, const char *argv[])
 	global_vars_init();
 
 	pthread_t sigtid;
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGINT);
-	pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+	sigemptyset(&sigset_v);
+	sigaddset(&sigset_v, SIGINT);
+	pthread_sigmask(SIG_BLOCK, &sigset_v, NULL);
 	pthread_create(&sigtid, NULL, (void *)&signal_thread, NULL);
 
 	ret = parse_cmdline(argc, argv);
