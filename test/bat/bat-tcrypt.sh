@@ -20,6 +20,8 @@ while read -r line; do
         fail_tolerated=1
     elif [[ $line == *"alg: No test for "* ]]; then
         fail_tolerated=1
+    elif [[ $line == *"self-tests disabled"* ]]; then
+        fail_tolerated=1
     else
         fail_unexpected=1
         echo -E "$line"
