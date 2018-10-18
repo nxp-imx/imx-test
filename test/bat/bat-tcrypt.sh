@@ -37,4 +37,4 @@ if [[ $TCRYPT_RESULT == 0 && $fail_tolerated == 0 ]]; then
 else
     echo "tcrypt passed other than missing algs/tests"
 fi
-echo $BAT_EXITCODE_PASS
+exit $BAT_EXITCODE_PASS
