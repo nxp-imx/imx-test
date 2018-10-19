@@ -50,8 +50,8 @@ function do_decode()
 }
 
 # MP3 decode
-MP3_IN_FILE=/unit_tests/Audio/hihat_9_frames.mp3
-MP3_REF_FILE=/unit_tests/Audio/hihat_9_frames.mp3.pcm
+MP3_IN_FILE=/unit_tests/Audio/sample_22_frames.mp3
+MP3_REF_FILE=/unit_tests/Audio/sample_22_frames.mp3.pcm
 
 check_binaries
 
