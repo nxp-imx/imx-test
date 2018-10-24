@@ -173,6 +173,8 @@ static uint32_t g_cap_fmt;
 static uint32_t g_mem_type;
 static uint32_t g_out_width;
 static uint32_t g_out_height;
+static uint32_t g_cap_ow;
+static uint32_t g_cap_oh;
 
 static bool g_saved_to_file;
 static bool g_performance_test;
@@ -292,7 +294,7 @@ static void show_device_cap_list(const char *name)
 				fmtdesc.index = 0;
 				fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 				while (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) >= 0) {
-					v4l2_info("pixelformat (output by camera)%.4s\n",
+					v4l2_info("pixelformat (output by camera):%.4s\n",
 					          (char *)&fmtdesc.pixelformat);
 					frmsize.pixel_format = fmtdesc.pixelformat;
 					frmsize.index = 0;
@@ -369,6 +371,11 @@ static int parse_cmdline(int argc, const char *argv[])
 				return -1;
 			}
 			strcpy(g_v4l_device[0], argv[++i]);
+		} else if (strcmp(argv[i], "-ow") == 0) {
+			g_cap_ow = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-oh") == 0) {
+			g_cap_oh = atoi(argv[++i]);
+
 		} else {
 			print_help(argv[0]);
 			return -1;
@@ -981,6 +988,11 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 
 	if (g_cam_num == 1)
 		adjust_width_height_for_one_sensor(&video_ch[ch_id]);
+
+	if (g_cap_ow && g_cap_oh) {
+		video_ch[ch_id].out_width  = g_cap_ow;
+		video_ch[ch_id].out_height = g_cap_oh;
+	}
 
 	memset(&fmt, 0, sizeof(fmt));
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
