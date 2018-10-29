@@ -281,7 +281,7 @@ int main(int argc, char *argv[])
 	leftsize = params.dsd_chunk_size;
 
 	while (leftsize > 0) {
-		int r;
+		size_t r;
 		uint8_t buffer[block_size];
 		uint8_t interleaved_buffer[block_size];
 
@@ -291,16 +291,21 @@ int main(int argc, char *argv[])
 			readsize = leftsize;
 
 		r = read_full(fd, buffer, readsize);
-		if (r <= 0) {
-			fprintf(stderr, "read failed(%s)\n", strerror(errno));
+		if (r < 0) {
+			fprintf(stderr, "reading %lu bytes failed (%d-%s)\n",
+					readsize, errno, strerror(errno));
 			break;
 		}
+
+		/* r == 0 indicates end of file */
+		if (r == 0)
+			break;
 
 		if (r < block_size) {
 			memset(buffer + r, 0x00, block_size - r);
 		}
 
-		leftsize = leftsize - readsize;
+		leftsize = leftsize - r;
 
 		if (params.bits_per_sample == 8)
 			bit_reverse_buffer(buffer, buffer + block_size);
@@ -309,7 +314,6 @@ int main(int argc, char *argv[])
 
 		pcm_write(playback_handle, interleaved_buffer,
 			frames, bytes_per_frame);
-
 	}
 
 	snd_pcm_close(playback_handle);

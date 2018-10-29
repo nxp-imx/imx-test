@@ -22,7 +22,7 @@ struct dsd_params {
 int read_u16_t(int fd, uint16_t *val, int be);
 int read_u32_t(int fd, uint32_t *val, int be);
 int read_u64_t(int fd, uint64_t *val, int be);
-int read_full(int fd, void *_buffer, size_t size);
+size_t read_full(int fd, void *_buffer, size_t size);
 
 int read_dsf_file(int fd, struct dsd_params *params);
 int read_dff_file(int fd, struct dsd_params *params);

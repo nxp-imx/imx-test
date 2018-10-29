@@ -63,20 +63,23 @@ int read_u64_t(int fd, uint64_t *val, int be)
 	return 0;
 }
 
-int read_full(int fd, void *_buffer, size_t size)
+size_t read_full(int fd, void *_buffer, size_t size)
 {
 	uint8_t *buffer = (uint8_t *)_buffer;
-	int r = 0;
+	size_t r = 0, to_read = size;
 
-	while (size > 0) {
-		r = read(fd, buffer, size);
-		if (r <= 0) {
-			fprintf(stderr, "read failed(%s)\n", strerror(errno));
+	while (to_read > 0) {
+		r = read(fd, buffer, to_read);
+		if (r < 0)
 			return r;
+		if (r == 0) {
+			/* Indicates end of file */
+			break;
 		}
 		buffer += r;
-		size -= r;
+		to_read -= r;
 	}
-	return r;
+
+	return size - to_read;
 }
 
