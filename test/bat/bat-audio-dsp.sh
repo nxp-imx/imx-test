@@ -20,15 +20,15 @@ esac
 function check_binaries()
 {
     if [ ! -f /lib/firmware/imx/dsp/hifi4.bin ]; then
-        exit $BAT_EXITCODE_FAIL
+        exit $BAT_EXITCODE_SKIP
     fi
 
     if [ ! -f /usr/lib/imx-mm/audio-codec/dsp/lib_dsp_codec_wrap.so ]; then
-        exit $BAT_EXITCODE_FAIL
+        exit $BAT_EXITCODE_SKIP
     fi
 
     if [ ! -f /usr/lib/imx-mm/audio-codec/dsp/lib_dsp_mp3_dec.so ]; then
-        exit $BAT_EXITCODE_FAIL
+        exit $BAT_EXITCODE_SKIP
     fi
 }
 
