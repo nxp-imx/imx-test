@@ -145,24 +145,24 @@ static __u32 to_fourcc(char fmt[])
 {
 	__u32 fourcc;
 
-	if (!strcmp(fmt, "RGB32"))
+	if (!strcmp(fmt, "BX24"))
 		fourcc = V4L2_PIX_FMT_XRGB32;
-	else if (!strcmp(fmt, "ARGB32"))
+	else if (!strcmp(fmt, "BA24"))
 		fourcc = V4L2_PIX_FMT_ARGB32;
-	else if (!strcmp(fmt, "BGR32"))
-		fourcc = V4L2_PIX_FMT_BGR32;
-	else if (!strcmp(fmt, "RGB24"))
-		fourcc = V4L2_PIX_FMT_RGB24;
-	else if (!strcmp(fmt, "BGR24"))
+	else if (!strcmp(fmt, "BGR3"))
 		fourcc = V4L2_PIX_FMT_BGR24;
-	else if (!strcmp(fmt, "RGB565"))
+	else if (!strcmp(fmt, "RGB3"))
+		fourcc = V4L2_PIX_FMT_RGB24;
+	else if (!strcmp(fmt, "RGBP"))
 		fourcc = V4L2_PIX_FMT_RGB565;
-	else if (!strcmp(fmt, "YUV444"))
+	else if (!strcmp(fmt, "YUV32"))
 		fourcc = V4L2_PIX_FMT_YUV32;
 	else if (!strcmp(fmt, "YUYV"))
 		fourcc = V4L2_PIX_FMT_YUYV;
 	else if (!strcmp(fmt, "NV12"))
 		fourcc = V4L2_PIX_FMT_NV12;
+	else if (!strcmp(fmt, "YUV4"))
+		fourcc = V4L2_PIX_FMT_YUV444M;
 	else {
 		v4l2_err("Not support format, set default to RGB32\n");
 		fourcc = V4L2_PIX_FMT_XRGB32;
@@ -290,11 +290,13 @@ static int get_bpp(char format[])
 	switch(fourcc) {
 	case V4L2_PIX_FMT_XRGB32:
 	case V4L2_PIX_FMT_ARGB32:
-	case V4L2_PIX_FMT_BGR32:
 	case V4L2_PIX_FMT_YUV32:
+		bpp = 4;
+		break;
 	case V4L2_PIX_FMT_RGB24:
 	case V4L2_PIX_FMT_BGR24:
-		bpp = 4;
+	case V4L2_PIX_FMT_YUV444M:
+		bpp = 3;
 		break;
 	case V4L2_PIX_FMT_RGB565:
 	case V4L2_PIX_FMT_NV12:

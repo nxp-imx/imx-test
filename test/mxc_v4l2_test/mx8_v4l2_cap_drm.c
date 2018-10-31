@@ -246,21 +246,45 @@ static void print_help(const char *name)
 		   " -p test performance, need to combine with \"-of\" option\n"
 		   " -m <mode> specify camera sensor capture mode(mode:0, 1, 2, 3, 4)\n"
 		   " -fr <frame_rate> support 15fps and 30fps\n"
-		   " -fmt <format> support RGB32 and NV12, 0->RGB32, 1->NV12. NV12 not support playback\n"
+		   " -fmt <format> support BX24, BA24, RGBP, RGBP, RGB3, BGR3, YUV32, YUV4, YUYV and NV12, only BX24, BA24 and RGBP support playback\n"
 	       "example:\n"
 	       "./mx8_cap -cam 1        capture data from video0 and playback\n"
 	       "./mx8_cap -cam 3        capture data from video0/1 and playback\n"
-	       "./mx8_cap -cam 7 -of    capture data from video0~2 and save to 0~2.rgb32\n"
-	       "./mx8_cap -cam 255 -of  capture data from video0~7 and save to 0~7.rgb32\n"
-	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.rgb32\n"
-	       "./mx8_cap -cam 1 -fmt 1 -of capture data from video0 and save to 0.nv12\n"
+	       "./mx8_cap -cam 7 -of    capture data from video0~2 and save to 0~2.BX24\n"
+	       "./mx8_cap -cam 255 -of  capture data from video0~7 and save to 0~7.BX24\n"
+	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.BX24\n"
+	       "./mx8_cap -cam 1 -fmt NV12 -of capture data from video0 and save to 0.NV12\n"
 	       "./mx8_cap -cam 1 -of -p test video0 performace\n", name);
 }
 
-static uint32_t fmt_array[] = {
-	V4L2_PIX_FMT_XRGB32,
-	V4L2_PIX_FMT_NV12,
-};
+static __u32 to_fourcc(char fmt[])
+{
+	__u32 fourcc;
+
+	if (!strcmp(fmt, "BX24"))
+		fourcc = V4L2_PIX_FMT_XRGB32;
+	else if (!strcmp(fmt, "BA24"))
+		fourcc = V4L2_PIX_FMT_ARGB32;
+	else if (!strcmp(fmt, "BGR3"))
+		fourcc = V4L2_PIX_FMT_BGR24;
+	else if (!strcmp(fmt, "RGB3"))
+		fourcc = V4L2_PIX_FMT_RGB24;
+	else if (!strcmp(fmt, "RGBP"))
+		fourcc = V4L2_PIX_FMT_RGB565;
+	else if (!strcmp(fmt, "YUV32"))
+		fourcc = V4L2_PIX_FMT_YUV32;
+	else if (!strcmp(fmt, "YUYV"))
+		fourcc = V4L2_PIX_FMT_YUYV;
+	else if (!strcmp(fmt, "NV12"))
+		fourcc = V4L2_PIX_FMT_NV12;
+	else if (!strcmp(fmt, "YUV4"))
+		fourcc = V4L2_PIX_FMT_YUV444M;
+	else {
+		v4l2_err("Not support format, set default to RGB32\n");
+		fourcc = V4L2_PIX_FMT_XRGB32;
+	}
+	return fourcc;
+}
 
 static void show_device_cap_list(const char *name)
 {
@@ -307,7 +331,7 @@ static void show_device_cap_list(const char *name)
 						while (ioctl(fd_v4l, VIDIOC_ENUM_FRAMEINTERVALS,
 							        &frmival) >= 0) {
 							v4l2_info
-							    ("CaptureMode=%d, Width=%d, Height=%d %.3f fps\n",
+							    ("CaptureMode=%d, Width=%d, Height=%d, %.3f fps\n",
 							     frmsize.index,
 							     frmival.width,
 							     frmival.height,
@@ -364,7 +388,9 @@ static int parse_cmdline(int argc, const char *argv[])
 		} else if (strcmp(argv[i], "-fr") == 0) {
 			g_camera_framerate = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-fmt") == 0) {
-			g_cap_fmt = fmt_array[atoi(argv[++i])];
+			char temp_fmt[10];
+			strcpy(temp_fmt, argv[++i]);
+			g_cap_fmt = to_fourcc(temp_fmt);
 		} else if (strcmp(argv[i], "-d") == 0) {
 			if (g_cam != 1) {
 				print_help(argv[0]);
@@ -387,11 +413,32 @@ static int parse_cmdline(int argc, const char *argv[])
 static void get_fmt_name(uint32_t fourcc)
 {
 	switch (fourcc) {
+	case V4L2_PIX_FMT_RGB565:
+		strcpy(g_fmt_name, "RGBP");
+		break;
+	case V4L2_PIX_FMT_RGB24:
+		strcpy(g_fmt_name, "RGB3");
+		break;
 	case V4L2_PIX_FMT_XRGB32:
-		strcpy(g_fmt_name, "rgb32");
+		strcpy(g_fmt_name, "BX24");
+		break;
+	case V4L2_PIX_FMT_BGR24:
+		strcpy(g_fmt_name, "BGR3");
+		break;
+	case V4L2_PIX_FMT_ARGB32:
+		strcpy(g_fmt_name, "BA24");
+		break;
+	case V4L2_PIX_FMT_YUYV:
+		strcpy(g_fmt_name, "YUYV");
+		break;
+	case V4L2_PIX_FMT_YUV32:
+		strcpy(g_fmt_name, "YUV32");
 		break;
 	case V4L2_PIX_FMT_NV12:
-		strcpy(g_fmt_name, "nv12");
+		strcpy(g_fmt_name, "NV12");
+		break;
+	case V4L2_PIX_FMT_YUV444M:
+		strcpy(g_fmt_name, "YUV4");
 		break;
 	default:
 		strcpy(g_fmt_name, "null");
@@ -664,6 +711,24 @@ static int modeset_find_crtc(struct drm_device *drm,
 	return -ENOENT;
 }
 
+static int adjust(__u32 fourcc)
+{
+	int bpp;
+
+	switch(fourcc) {
+		case V4L2_PIX_FMT_XRGB32:
+		case V4L2_PIX_FMT_ARGB32:
+			bpp = 32;
+			break;
+		case V4L2_PIX_FMT_RGB565:
+			bpp = 16;
+			break;
+		default:
+			bpp = 32;
+	}
+	return bpp;
+}
+
 static int drm_create_fb(int fd, int index, struct drm_buffer *buf)
 {
 	struct drm_mode_create_dumb creq;
@@ -674,7 +739,7 @@ static int drm_create_fb(int fd, int index, struct drm_buffer *buf)
 	memset(&creq, 0, sizeof(creq));
 	creq.width = buf->width;
 	creq.height = buf->height;
-	creq.bpp = 32;
+	creq.bpp = adjust(g_cap_fmt);
 
 	ret = drmIoctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
 	if (ret < 0) {
@@ -686,8 +751,9 @@ static int drm_create_fb(int fd, int index, struct drm_buffer *buf)
 	buf->size = creq.size;
 	buf->handle = creq.handle;
 
-	ret = drmModeAddFB(fd, buf->width, buf->height, 24, 32,
+	ret = drmModeAddFB(fd, buf->width, buf->height, creq.bpp, creq.bpp,
 				buf->stride, buf->handle, &buf->buf_id);
+
 	if (ret < 0) {
 		v4l2_err("Add framebuffer (%d) fail\n", index);
 		goto destroy_fb;
@@ -758,7 +824,7 @@ static int modeset_setup_dev(struct drm_device *drm,
 				 i, buf[i].fb_base, buf[i].size,
 				 buf[i].width, buf[i].height, buf[i].buf_id);
 	}
-	drm->bits_per_pixel = 32;
+	drm->bits_per_pixel = adjust(g_cap_fmt);
 	drm->bytes_per_pixel = drm->bits_per_pixel >> 3;
 	return 0;
 }
@@ -1379,7 +1445,7 @@ static int media_device_start(struct media_dev *media)
 		if (v4l2->video_ch[i].on) {
 			ret = v4l2_device_streamon(i, v4l2->video_ch);
 			if (ret < 0) {
-				while(--i) {
+				while(--i >= 0) {
 					if (v4l2->video_ch[i].on)
 						v4l2_device_streamoff(i, v4l2->video_ch);
 				}
