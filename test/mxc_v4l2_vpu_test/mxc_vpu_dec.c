@@ -52,7 +52,6 @@
 
 #define DQEVENT
 
-
 volatile unsigned int g_unCtrlCReceived = 0;
 unsigned  long time_total =0;
 unsigned int num_total =0;
@@ -67,7 +66,7 @@ static __u32  formats_compressed[] =
 {
     VPU_PIX_FMT_LOGO,   //VPU_VIDEO_UNDEFINED = 0,
     V4L2_PIX_FMT_H264,  //VPU_VIDEO_AVC = 1,     ///< https://en.wikipedia.org/wiki/H.264/MPEG-4_AVC
-    V4L2_PIX_FMT_VC1_ANNEX_G,   //VPU_VIDEO_VC1 = 2,     ///< https://en.wikipedia.org/wiki/VC-1
+    V4L2_PIX_FMT_VC1_ANNEX_G,   //VPU_VIDEO_VC1_ANNEX_G = 2,     ///< https://en.wikipedia.org/wiki/VC-1
     V4L2_PIX_FMT_MPEG2, //VPU_VIDEO_MPEG2 = 3,   ///< https://en.wikipedia.org/wiki/H.262/MPEG-2_Part_2
     VPU_PIX_FMT_AVS,    //VPU_VIDEO_AVS = 4,     ///< https://en.wikipedia.org/wiki/Audio_Video_Standard
     V4L2_PIX_FMT_MPEG4,    //VPU_VIDEO_ASP = 5,     ///< https://en.wikipedia.org/wiki/MPEG-4_Part_2
@@ -79,7 +78,8 @@ static __u32  formats_compressed[] =
     V4L2_PIX_FMT_VP8,   //VPU_VIDEO_VP8 = 11,    ///< https://en.wikipedia.org/wiki/VP8
     V4L2_PIX_FMT_H264_MVC,  //VPU_VIDEO_AVC_MVC = 12,///< https://en.wikipedia.org/wiki/Multiview_Video_Coding
     VPU_PIX_FMT_HEVC,   //VPU_VIDEO_HEVC = 13,   ///< https://en.wikipedia.org/wiki/High_Efficiency_Video_Coding
-    VPU_PIX_FMT_VP9     //VPU_VIDEO_VP9 = 14,    ///< https://en.wikipedia.org/wiki/VP9
+    VPU_PIX_FMT_DIVX,   //VPU_VIDEO_VC1_ANNEX_L = 14,     ///< https://en.wikipedia.org/wiki/VC-1
+    V4L2_PIX_FMT_VC1_ANNEX_L,   //VPU_VIDEO_VC1_ANNEX_L = 15,     ///< https://en.wikipedia.org/wiki/VC-1
 };
 #define ZPU_NUM_FORMATS_COMPRESSED  SIZEOF_ARRAY(formats_compressed)
 
@@ -853,7 +853,7 @@ OPTIONS:\n\
                         VPU_VIDEO_VP8          11\n\
                         VPU_VIDEO_AVC_MVC      12\n\
                         VPU_VIDEO_HEVC         13\n\
-                        VPU_VIDEO_VP9          14\n\n\
+                        VPU_PIX_FMT_DIVX       14\n\n\
     OFMT            Specify decode format number. Format comparsion table:\n\
                         V4L2_PIX_FMT_NV12      0\n\
                         V4L2_PIX_FMT_YUV420    1\n\
@@ -1516,6 +1516,32 @@ FUNC_END:
 	}
 }
 
+static int set_ctrl(int fd, int id, int value)
+{
+	struct v4l2_queryctrl qctrl;
+	struct v4l2_control ctrl;
+	int ret;
+
+	memset(&qctrl, 0, sizeof(qctrl));
+	qctrl.id = id;
+	ret = ioctl(fd, VIDIOC_QUERYCTRL, &qctrl);
+	if (ret) {
+		printf("query ctrl(%d) fail, %s\n", id, strerror(errno));
+		return ret;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = id;
+	ctrl.value = value;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret) {
+		printf("VIDIOC_S_CTRL(%s : %d) fail, %s\n",
+		       qctrl.name, value, strerror(errno));
+		return ret;
+	}
+
+	return 0;
+}
 #define MAX_SUPPORTED_COMPONENTS	5
 
 #define HAS_ARG_NUM(argc, argnow, need) ((nArgNow + need) < argc)
@@ -1790,6 +1816,8 @@ Or reference the usage manual.\n\
 		lErr = 5;
 		goto FUNC_END;
 	}
+
+	set_ctrl(pComponent->hDev, V4L2_CID_USER_RAW_BASE, 1);
 
     // set v4l2 output format (compressed data input)
     memset(&format, 0, sizeof(struct v4l2_format));

@@ -27,8 +27,8 @@
 typedef unsigned int zoe_bool_t;
 #define VPU_PIX_FMT_AVS         v4l2_fourcc('A', 'V', 'S', '0') // AVS video
 #define VPU_PIX_FMT_ASP         v4l2_fourcc('A', 'S', 'P', '0') // MPEG4 ASP video
-#define VPU_PIX_FMT_RV8         v4l2_fourcc('R', 'V', '8', '0') // RV8 video
-#define VPU_PIX_FMT_RV9         v4l2_fourcc('R', 'V', '9', '0') // RV9 video
+#define VPU_PIX_FMT_RV8         v4l2_fourcc('R', 'V', '0', '0') // RV8 video
+#define VPU_PIX_FMT_RV9         v4l2_fourcc('R', 'V', '0', '0') // RV9 video
 #define VPU_PIX_FMT_VP6         v4l2_fourcc('V', 'P', '6', '0') // VP6 video
 #define VPU_PIX_FMT_SPK         v4l2_fourcc('S', 'P', 'K', '0') // VP6 video
 #define VPU_PIX_FMT_HEVC        v4l2_fourcc('H', 'E', 'V', 'C') // H.265 HEVC video
@@ -37,6 +37,10 @@ typedef unsigned int zoe_bool_t;
 
 #define VPU_PIX_FMT_TILED_8     v4l2_fourcc('Z', 'T', '0', '8') // 8 bit tiled
 #define VPU_PIX_FMT_TILED_10    v4l2_fourcc('Z', 'T', '1', '0') // 10 bit tiled
+
+#define VPU_PIX_FMT_DIVX        v4l2_fourcc('D', 'I', 'V', 'X')
+
+#define V4L2_CID_USER_RAW_BASE  (V4L2_CID_USER_BASE + 0x1100)
 
 #define ZV_YUV_DATA_TYPE_NV12   1
 #define ZV_YUV_DATA_TYPE_NV21   2
