@@ -21,11 +21,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <linux/v4l2-common.h>
 #include <linux/v4l2-controls.h>
 #include <linux/v4l2-dv-timings.h>
@@ -102,6 +105,7 @@ struct mxc_m2m_device {
 	struct mxc_buffer out_buffers[TEST_BUFFER_NUM_OUT];
 };
 
+static sigset_t sigset_v;
 static char in_file_name[32] = {"0.rgb32"};
 static char out_file_name[32] = {"out.dat"};
 static char dev_name[32] = {"/dev/video0"};
@@ -113,6 +117,32 @@ static int out_width = TEST_WIDTH;
 static int out_height = TEST_HEIGHT;
 static int log_level = 6;
 static int show_device_cap = 0;
+static bool quitflag;
+
+static bool g_cap_hfilp;
+static bool g_cap_vfilp;
+static int32_t g_cap_alpha;
+/*
+ *
+ */
+static int signal_thread(void *arg)
+{
+	int sig;
+
+	pthread_sigmask(SIG_BLOCK, &sigset_v, NULL);
+
+	while (1) {
+		sigwait(&sigset_v, &sig);
+		if (sig == SIGINT) {
+			v4l2_info("Ctrl-C received. Exiting.\n");
+		} else {
+			v4l2_err("Unknown signal. Still exiting\n");
+		}
+		quitflag = 1;
+		break;
+	}
+	return 0;
+}
 
 static void fill_param(struct rect *r, int width, int height)
 {
@@ -134,9 +164,12 @@ static void print_usage(char *name)
 		   " -ofmt <fmt>   : fmt is intput file format.You can run \"%s -l\" to acquire supported out format\n"
 		   " -ow <output_w>: output_w is output width. It should be equal to or less than input width\n"
 		   " -oh <output_h>: output_h is output height. It should be equal to or less than input height\n"
+		   " -hflip <num> enable horizontal flip, num: 0->disable or 1->enable\n"
+		   " -vflip <num> enable vertical flip, num: 0->disable or 1->enable\n"
+		   " -alpha <num> enable and set global alpha for camera, num equal to 0~255\n"
 		   "examples:\n"
 		   "\t %s\n"
-		   "\t %s -i 0.rgb32 -iw 1280 -ih 800 -ifmt \"RGB32\" "
+		   "\t %s -i 0.rgb32 -iw 1280 -ih 800 -ifmt \"XR24\" "
 		   "-o out.dat -ow 1280 -oh 800 -ofmt \"NV12\"\n",
 		   name, name, name, name, name);
 }
@@ -155,17 +188,21 @@ static __u32 to_fourcc(char fmt[])
 		fourcc = V4L2_PIX_FMT_RGB24;
 	else if (!strcmp(fmt, "RGBP"))
 		fourcc = V4L2_PIX_FMT_RGB565;
-	else if (!strcmp(fmt, "YUV32"))
+	else if (!strcmp(fmt, "YUV4"))
 		fourcc = V4L2_PIX_FMT_YUV32;
 	else if (!strcmp(fmt, "YUYV"))
 		fourcc = V4L2_PIX_FMT_YUYV;
 	else if (!strcmp(fmt, "NV12"))
 		fourcc = V4L2_PIX_FMT_NV12;
-	else if (!strcmp(fmt, "YUV4"))
+	else if (!strcmp(fmt, "YM24"))
 		fourcc = V4L2_PIX_FMT_YUV444M;
+	else if (!strcmp(fmt, "XR24"))
+		fourcc = V4L2_PIX_FMT_XBGR32;
+	else if (!strcmp(fmt, "AR24"))
+		fourcc = V4L2_PIX_FMT_ABGR32;
 	else {
-		v4l2_err("Not support format, set default to RGB32\n");
-		fourcc = V4L2_PIX_FMT_XRGB32;
+		v4l2_err("Not support format, set default to XR24\n");
+		fourcc = V4L2_PIX_FMT_XBGR32;
 	}
 	return fourcc;
 }
@@ -271,6 +308,12 @@ static int parse_cmdline(int argc, char *argv[])
 			log_level = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-l") == 0) {
 			show_device_cap = 1;
+		} else if (strcmp(argv[i], "-hflip") == 0) {
+			g_cap_hfilp = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-vflip") == 0) {
+			g_cap_vfilp = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-alpha") == 0) {
+			g_cap_alpha = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-h") == 0) {
 			print_usage(argv[0]);
 			return -1;
@@ -289,7 +332,9 @@ static int get_bpp(char format[])
 
 	switch(fourcc) {
 	case V4L2_PIX_FMT_XRGB32:
+	case V4L2_PIX_FMT_XBGR32:
 	case V4L2_PIX_FMT_ARGB32:
+	case V4L2_PIX_FMT_ABGR32:
 	case V4L2_PIX_FMT_YUV32:
 		bpp = 4;
 		break;
@@ -377,6 +422,11 @@ static int mxc_m2m_open(struct mxc_m2m_device *m2m_dev)
 	}
 	v4l2_info("Open \"%s\" success\n", dev_name);
 
+	if (show_device_cap) {
+		m2m_dev->fd = fd;
+		return 0;
+	}
+
 	in = fopen(in_file_name, "rb");
 	if (in == NULL) {
 		v4l2_err("Open %s fail\n", in_file_name);
@@ -404,6 +454,8 @@ static int mxc_m2m_open(struct mxc_m2m_device *m2m_dev)
 static void mxc_m2m_close(struct mxc_m2m_device *m2m_dev)
 {
 	close(m2m_dev->fd);
+	if (show_device_cap)
+		return;
 	fclose(m2m_dev->in_file);
 	fclose(m2m_dev->out_file);
 }
@@ -447,6 +499,7 @@ static int mxc_m2m_prepare(struct mxc_m2m_device *m2m_dev)
 {
 	struct v4l2_format in_fmt;
 	struct v4l2_format out_fmt;
+	struct v4l2_control ctrl;
 	int i, fd = m2m_dev->fd;
 	int ret;
 
@@ -510,6 +563,33 @@ static int mxc_m2m_prepare(struct mxc_m2m_device *m2m_dev)
 				  out_fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
 	}
 	m2m_dev->o_num_planes = out_fmt.fmt.pix_mp.num_planes;
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = V4L2_CID_HFLIP;
+	ctrl.value = (g_cap_hfilp > 0) ? 1 : 0;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		v4l2_err("VIDIOC_S_CTRL set hflip failed\n");
+		return ret;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = V4L2_CID_VFLIP;
+	ctrl.value = (g_cap_vfilp > 0) ? 1 : 0;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		v4l2_err("VIDIOC_S_CTRL set vflip failed\n");
+		return ret;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = V4L2_CID_ALPHA_COMPONENT;
+	ctrl.value = g_cap_alpha;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		v4l2_err("VIDIOC_S_CTRL set alpha failed\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -1037,7 +1117,7 @@ static int start_convert(struct mxc_m2m_device *m2m_dev)
 			mxc_m2m_queue_in_buffer(m2m_dev->in_cur_buf_id, m2m_dev);
 		}
 
-	} while (count < m2m_dev->frames);
+	} while (count < m2m_dev->frames && !quitflag);
 
 	return 0;
 }
@@ -1053,6 +1133,12 @@ int main(int argc, char *argv[])
 		v4l2_err("not supported on current soc\n");
 		return 0;
 	}
+
+	pthread_t sigtid;
+	sigemptyset(&sigset_v);
+	sigaddset(&sigset_v, SIGINT);
+	pthread_sigmask(SIG_BLOCK, &sigset_v, NULL);
+	pthread_create(&sigtid, NULL, (void *)&signal_thread, NULL);
 
 	ret = parse_cmdline(argc, argv);
 	if (ret < 0)
@@ -1071,10 +1157,6 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto free;
 
-	ret = check_input_parameters(m2m_dev);
-	if (ret < 0)
-		goto close;
-
 	ret = check_device_cap(m2m_dev);
 	if (ret < 0)
 		goto close;
@@ -1083,6 +1165,10 @@ int main(int argc, char *argv[])
 		show_device_cap_list(m2m_dev->fd);
 		goto close;
 	}
+
+	ret = check_input_parameters(m2m_dev);
+	if (ret < 0)
+		goto close;
 
 	ret = mxc_m2m_prepare(m2m_dev);
 	if (ret < 0)

@@ -184,6 +184,10 @@ static char g_v4l_device[NUM_SENSORS][100];
 static char g_saved_filename[NUM_SENSORS][100];
 static char g_fmt_name[10];
 
+static bool g_cap_hfilp;
+static bool g_cap_vfilp;
+static int32_t g_cap_alpha;
+
 /*
  *
  */
@@ -214,7 +218,7 @@ static void global_vars_init(void)
 		sprintf(g_v4l_device[i], "/dev/video%d", i);
 		sprintf(g_saved_filename[i], "%d.", i);
 	}
-	sprintf(g_fmt_name, "rgb32");
+	sprintf(g_fmt_name, "XR24");
 
 	log_level = DEFAULT;
 	g_cam_num = 0;
@@ -225,12 +229,16 @@ static void global_vars_init(void)
 	g_out_height = HEIGHT;
 	g_capture_mode = 0;
 	g_camera_framerate = 30;
-	g_cap_fmt = V4L2_PIX_FMT_XRGB32;
+	g_cap_fmt = V4L2_PIX_FMT_XBGR32;
 	g_mem_type = V4L2_MEMORY_MMAP;
 
 	quitflag = false;
 	g_saved_to_file = false;
 	g_performance_test = false;
+
+	g_cap_hfilp = false;
+	g_cap_vfilp = false;
+	g_cap_alpha = 0;
 }
 
 static void print_help(const char *name)
@@ -246,7 +254,12 @@ static void print_help(const char *name)
 		   " -p test performance, need to combine with \"-of\" option\n"
 		   " -m <mode> specify camera sensor capture mode(mode:0, 1, 2, 3, 4)\n"
 		   " -fr <frame_rate> support 15fps and 30fps\n"
-		   " -fmt <format> support BX24, BA24, RGBP, RGBP, RGB3, BGR3, YUV32, YUV4, YUYV and NV12, only BX24, BA24 and RGBP support playback\n"
+		   " -fmt <format> support XR24, AR24, RGBP, RGB3, BGR3, YUV4, YM24, YUYV and NV12, only XR24, AR24 and RGBP support playback\n"
+		   " -ow <width> specify output width\n"
+		   " -oh <height> specify output height\n"
+		   " -hflip <num> enable horizontal flip, num: 0->disable or 1->enable\n"
+		   " -vflip <num> enable vertical flip, num: 0->disable or 1->enable\n"
+		   " -alpha <num> enable and set global alpha for camera, num equal to 0~255\n"
 	       "example:\n"
 	       "./mx8_cap -cam 1        capture data from video0 and playback\n"
 	       "./mx8_cap -cam 3        capture data from video0/1 and playback\n"
@@ -271,17 +284,21 @@ static __u32 to_fourcc(char fmt[])
 		fourcc = V4L2_PIX_FMT_RGB24;
 	else if (!strcmp(fmt, "RGBP"))
 		fourcc = V4L2_PIX_FMT_RGB565;
-	else if (!strcmp(fmt, "YUV32"))
+	else if (!strcmp(fmt, "YUV4"))
 		fourcc = V4L2_PIX_FMT_YUV32;
 	else if (!strcmp(fmt, "YUYV"))
 		fourcc = V4L2_PIX_FMT_YUYV;
 	else if (!strcmp(fmt, "NV12"))
 		fourcc = V4L2_PIX_FMT_NV12;
-	else if (!strcmp(fmt, "YUV4"))
+	else if (!strcmp(fmt, "YM24"))
 		fourcc = V4L2_PIX_FMT_YUV444M;
+	else if (!strcmp(fmt, "XR24"))
+		fourcc = V4L2_PIX_FMT_XBGR32;
+	else if (!strcmp(fmt, "AR24"))
+		fourcc = V4L2_PIX_FMT_ABGR32;
 	else {
-		v4l2_err("Not support format, set default to RGB32\n");
-		fourcc = V4L2_PIX_FMT_XRGB32;
+		v4l2_err("Not support format, set default to XR24\n");
+		fourcc = V4L2_PIX_FMT_XBGR32;
 	}
 	return fourcc;
 }
@@ -401,7 +418,12 @@ static int parse_cmdline(int argc, const char *argv[])
 			g_cap_ow = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-oh") == 0) {
 			g_cap_oh = atoi(argv[++i]);
-
+		} else if (strcmp(argv[i], "-hflip") == 0) {
+			g_cap_hfilp = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-vflip") == 0) {
+			g_cap_vfilp = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-alpha") == 0) {
+			g_cap_alpha = atoi(argv[++i]);
 		} else {
 			print_help(argv[0]);
 			return -1;
@@ -432,13 +454,19 @@ static void get_fmt_name(uint32_t fourcc)
 		strcpy(g_fmt_name, "YUYV");
 		break;
 	case V4L2_PIX_FMT_YUV32:
-		strcpy(g_fmt_name, "YUV32");
+		strcpy(g_fmt_name, "YUV4");
 		break;
 	case V4L2_PIX_FMT_NV12:
 		strcpy(g_fmt_name, "NV12");
 		break;
 	case V4L2_PIX_FMT_YUV444M:
-		strcpy(g_fmt_name, "YUV4");
+		strcpy(g_fmt_name, "YM24");
+		break;
+	case V4L2_PIX_FMT_XBGR32:
+		strcpy(g_fmt_name, "XR24");
+		break;
+	case V4L2_PIX_FMT_ABGR32:
+		strcpy(g_fmt_name, "AR24");
 		break;
 	default:
 		strcpy(g_fmt_name, "null");
@@ -717,7 +745,9 @@ static int adjust(__u32 fourcc)
 
 	switch(fourcc) {
 		case V4L2_PIX_FMT_XRGB32:
+		case V4L2_PIX_FMT_XBGR32:
 		case V4L2_PIX_FMT_ARGB32:
+		case V4L2_PIX_FMT_ABGR32:
 			bpp = 32;
 			break;
 		case V4L2_PIX_FMT_RGB565:
@@ -1029,6 +1059,7 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	struct v4l2_dbg_chip_ident chipident;
 	struct v4l2_format fmt;
 	struct v4l2_streamparm parm;
+	struct v4l2_control ctrl;
 	int fd = video_ch[ch_id].v4l_fd;
 	int ret;
 
@@ -1086,6 +1117,33 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	ret = ioctl(fd, VIDIOC_G_PARM, &parm);
 	if (ret < 0) {
 		v4l2_err("channel[%d] VIDIOC_G_PARM failed\n", ch_id);
+		return ret;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = V4L2_CID_HFLIP;
+	ctrl.value = (g_cap_hfilp > 0) ? 1 : 0;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_S_CTRL set hflip failed\n", ch_id);
+		return ret;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = V4L2_CID_VFLIP;
+	ctrl.value = (g_cap_vfilp > 0) ? 1 : 0;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_S_CTRL set vflip failed\n", ch_id);
+		return ret;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = V4L2_CID_ALPHA_COMPONENT;
+	ctrl.value = g_cap_alpha;
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		v4l2_err("channel[%d] VIDIOC_S_CTRL set alpha failed\n", ch_id);
 		return ret;
 	}
 
