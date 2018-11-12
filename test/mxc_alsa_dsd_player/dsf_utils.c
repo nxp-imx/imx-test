@@ -114,55 +114,17 @@ int read_dsf_file(int fd, struct dsd_params *params)
 	return 0;
 }
 
-void interleaveDsfBlock(uint8_t *dest, const uint8_t *src, unsigned channels, unsigned format)
+void interleaveDsfBlock(uint8_t *dest, const uint8_t *src, unsigned channels, snd_pcm_format_t format)
 {
 	unsigned i, c;
-	uint8_t *d;
+	int bytes = snd_pcm_format_physical_width(format) / 8;
 
-	switch (channels) {
-	case 1:
-		memcpy(dest, src, DSF_BLOCK_SIZE);
-		break;
-	case 2:
-		if (format == SND_PCM_FORMAT_DSD_U32_LE) {
-			for (i = 0; i < DSF_BLOCK_SIZE/4; i=i+1) {
-				dest[8*i]   = src[4*i ];
-				dest[8*i + 1]   = src[4*i + 1];
-				dest[8*i + 2]   = src[4*i + 2];
-				dest[8*i + 3]   = src[4*i + 3];
-
-				dest[8*i+4] = src[DSF_BLOCK_SIZE + 4*i];
-				dest[8*i+5] = src[DSF_BLOCK_SIZE + 4*i+1];
-				dest[8*i+6] = src[DSF_BLOCK_SIZE + 4*i+2];
-				dest[8*i+7] = src[DSF_BLOCK_SIZE + 4*i+3];
-			}
-
+	for (i = 0; i < DSF_BLOCK_SIZE / bytes; i++) {
+		for (c = 0; c < channels; c++) {
+			int dst_off = channels*bytes*i + c*bytes;
+			int src_off = c*DSF_BLOCK_SIZE + i*bytes;
+			memcpy(dest + dst_off, src + src_off, bytes);
 		}
-
-		if (format == SND_PCM_FORMAT_DSD_U16_LE) {
-			for (i = 0; i < DSF_BLOCK_SIZE/2; i=i+1) {
-				dest[4*i]       = src[2*i ];
-				dest[4*i + 1]   = src[2*i + 1];
-
-				dest[4*i + 2]   = src[DSF_BLOCK_SIZE + 2*i];
-				dest[4*i + 3]   = src[DSF_BLOCK_SIZE + 2*i+1];
-			}
-		}
-
-		if (format == SND_PCM_FORMAT_DSD_U8) {
-			for (i = 0; i < DSF_BLOCK_SIZE; i=i+1) {
-				dest[2*i]     = src[i ];
-				dest[2*i + 1] = src[DSF_BLOCK_SIZE + i];
-			}
-
-		}
-		break;
-	default:
-		for (c = 0; c < channels; c++, dest++, src += DSF_BLOCK_SIZE) {
-			for (i = 0, d = dest; i < DSF_BLOCK_SIZE; i++, d += channels, src++)
-				*d = *src;
-		}
-		break;
 	}
 }
 

@@ -207,7 +207,7 @@ static ssize_t pcm_write(snd_pcm_t *handle, uint8_t *data, size_t count, int byt
 static struct file_parser {
 	char ext[4];
 	int (*read_file)(int fd, struct dsd_params *params);
-	void (*interleave)(uint8_t *dest, const uint8_t *src, unsigned ch, unsigned fmt);
+	void (*interleave)(uint8_t *dest, const uint8_t *src, unsigned ch, snd_pcm_format_t fmt);
 } parsers[] = {
   { .ext = ".dsf", .read_file = read_dsf_file, .interleave = interleaveDsfBlock },
   { .ext = ".dff", .read_file = read_dff_file, .interleave = interleaveDffBlock },

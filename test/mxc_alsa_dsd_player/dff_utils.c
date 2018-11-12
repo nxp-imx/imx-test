@@ -228,7 +228,7 @@ int read_dff_file(int fd, struct dsd_params *params)
 	return 0;
 }
 
-void interleaveDffBlock(uint8_t *dest, const uint8_t *src, unsigned channels, unsigned format)
+void interleaveDffBlock(uint8_t *dest, const uint8_t *src, unsigned channels, snd_pcm_format_t format)
 {
 	unsigned i, c;
 	uint8_t *d;

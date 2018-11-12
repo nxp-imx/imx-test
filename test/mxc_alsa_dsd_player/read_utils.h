@@ -36,7 +36,7 @@ size_t read_full(int fd, void *_buffer, size_t size);
 int read_dsf_file(int fd, struct dsd_params *params);
 int read_dff_file(int fd, struct dsd_params *params);
 
-void interleaveDsfBlock(uint8_t *dest, const uint8_t *src, unsigned channels, unsigned format);
-void interleaveDffBlock(uint8_t *dest, const uint8_t *src, unsigned channels, unsigned format);
+void interleaveDsfBlock(uint8_t *dest, const uint8_t *src, unsigned channels, snd_pcm_format_t format);
+void interleaveDffBlock(uint8_t *dest, const uint8_t *src, unsigned channels, snd_pcm_format_t format);
 
 #endif
