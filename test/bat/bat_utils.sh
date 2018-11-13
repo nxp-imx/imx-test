@@ -22,7 +22,7 @@ declare -A skip=(\
 ["i.MX8QM"]="bat-gpio-keypad.sh" \
 ["i.MX8MQ"]="bat-pwm.sh" \
 ["i.MX8MM"]="bat-pwm.sh" \
-["i.MX7ULP"]="bat-thermal-read.sh bat-thermal-trip.sh"
+["i.MX7ULP"]="bat-thermal-read.sh bat-thermal-trip.sh bat-cpuidle-sleeptime.sh" \
 )
 
 # Check if running with nfsroot
