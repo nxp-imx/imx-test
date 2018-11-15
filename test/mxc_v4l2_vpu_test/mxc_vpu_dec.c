@@ -1185,7 +1185,10 @@ FUNC_END:
 			}
 			else
 			{
-				while(pComponent->ports[STREAM_DIR_IN].done_flag && !g_unCtrlCReceived);
+				while(pComponent->ports[STREAM_DIR_IN].done_flag && !g_unCtrlCReceived)
+				{
+					usleep(10);
+				}
 				
 				preLoopTimes = loopTimes;
 				goto STREAMOUT_START;
@@ -1272,9 +1275,9 @@ STREAMIN_START:
     	goto FUNC_END;
     }
 
-	while(frame_done && !g_unCtrlCReceived)
+	while(pComponent->ports[STREAM_DIR_OUT].done_flag && !g_unCtrlCReceived)
 	{
-		usleep(1000);
+		usleep(10);
 	}
 
 	/***********************************************
@@ -1282,7 +1285,7 @@ STREAMIN_START:
 	***********************************************/
 	while (!g_unCtrlCReceived && !pComponent->ports[STREAM_DIR_IN].unCtrlCReceived)
 	{
-		if(frame_done)
+		if(frame_done || pComponent->ports[STREAM_DIR_OUT].done_flag)
 		{
 			break;
 		}
