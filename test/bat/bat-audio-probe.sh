@@ -12,13 +12,10 @@ machine=$(cat /sys/devices/soc0/machine)
 
 # check available audio cards
 case $machine in
-'Freescale i.MX8MQ EVK'\
-)
-    expected_cards_no=4
-    ;;
 'Freescale i.MX6 DualLite/Solo SABRE Automotive Board'|\
 'Freescale i.MX6 Quad Plus SABRE Automotive Board'|\
-'FSL i.MX8MM EVK board'\
+'FSL i.MX8MM EVK board'|\
+'Freescale i.MX8MQ EVK'\
 )
     expected_cards_no=3
     ;;
