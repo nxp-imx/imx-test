@@ -83,6 +83,7 @@ struct mxc_vpu_enc_param {
 	uint32_t max_bitrate;
 	uint32_t min_bitrate;
 	uint32_t qp;
+	struct v4l2_rect rect;
 };
 
 struct mxc_vpu_enc_option {
@@ -115,6 +116,7 @@ enum {
 	LOWLATENCY,
 	FRAMENUM,
 	LOOP,
+	CROP,
 };
 
 struct mxc_vpu_enc_option options[] = {
@@ -137,6 +139,7 @@ struct mxc_vpu_enc_option options[] = {
 	ENC_OPTION(LOWLATENCY, 0, "enable low latency mode", "enable low latency mode, it will disable the display re-ordering"),
 	ENC_OPTION(FRAMENUM, 1, "set output frame number", "output frame number"),
 	ENC_OPTION(LOOP, 1, "set application in loops", "set application in loops and no output file"),
+	ENC_OPTION(CROP, 4, "<left> <top> <width> <height>, set crop info", "set crop position and size"),
 	{NULL, 0, 0, NULL, NULL}
 };
 
@@ -849,6 +852,32 @@ static int set_ctrl(int fd, int id, int value)
 	return 0;
 }
 
+static int set_crop(int fd, struct mxc_vpu_enc_param *param)
+{
+	struct v4l2_crop crop;
+	int ret;
+
+	if (fd < 0 || !param)
+		return -1;
+
+	if (!param->rect.width || !param->rect.height)
+		return 0;
+
+	crop.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	crop.c.left = param->rect.left;
+	crop.c.top = param->rect.top;
+	crop.c.width = param->rect.width;
+	crop.c.height = param->rect.height;
+
+	ret = ioctl(fd, VIDIOC_S_CROP, &crop);
+	if (ret) {
+		printf("set crop fail\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static void set_encoder_parameters(struct mxc_vpu_enc_param *param,
 				   component_t *pComponent)
 {
@@ -952,6 +981,12 @@ static int parse_arg(struct mxc_vpu_enc_option *option, char *argv[],
 	case LOOP:
 		loopFlag = 1;
 		break;
+	case CROP:
+		param->rect.left = strtol(argv[0], NULL, 0);
+		param->rect.top = strtol(argv[1], NULL, 0);
+		param->rect.width = strtol(argv[2], NULL, 0);
+		param->rect.height = strtol(argv[3], NULL, 0);
+		break;
 	default:
 		break;
 	}
@@ -982,21 +1017,45 @@ static int parse_args(int argc, char *argv[], struct mxc_vpu_enc_param *param,
 	while (index < argc) {
 		option = find_option_by_name(argv[index]);
 		if (!option) {
-			index++;
-			continue;
+			printf("unknown parameter : %s\n", argv[index]);
+			return -1;
 		}
-		if (index + option->arg_num >= argc)
-			break;
+		if (index + option->arg_num >= argc) {
+			printf("%s need %d arguments\n",
+				argv[index], option->arg_num);
+			return -1;
+		}
 
 		parse_arg(option, option->arg_num ? argv + index + 1 : NULL,
 			  param, in, out);
 		index += (1 + option->arg_num);
 	}
 
-	if (!param->out.width)
+	if (param->rect.left + param->rect.width > param->src.width) {
+		param->rect.left = 0;
+		param->rect.width = param->src.width;
+	}
+	if (!param->out.width) {
+		if (!param->rect.width)
+			param->out.width = param->src.width;
+		else
+			param->out.width = param->rect.width;
+	}
+	if (param->out.width > param->src.width)
 		param->out.width = param->src.width;
-	if (!param->out.height)
-		param->out.height = param->src.width;
+
+	if (param->rect.top + param->rect.height > param->src.height) {
+		param->rect.top = 0;
+		param->rect.height = param->src.height;
+	}
+	if (!param->out.height) {
+		if (!param->rect.height)
+			param->out.height = param->src.height;
+		else
+			param->out.height = param->rect.height;
+	}
+	if (param->out.height > param->src.height)
+		param->out.height = param->src.height;
 	param->stride = param->src.width;
 
 	return 0;
@@ -1327,6 +1386,8 @@ int main(int argc, char* argv[])
 		lErr = 12;
 		goto FUNC_END;
 	}
+
+	set_crop(pComponent->hDev, &param);
 
 	set_encoder_parameters(&param, pComponent);
 	pComponent->ports[STREAM_DIR_IN].auto_rewind = ((VPU_PIX_FMT_LOGO ==
