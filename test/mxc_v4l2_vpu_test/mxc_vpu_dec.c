@@ -879,11 +879,12 @@ OPTIONS:\n\
     frames count    Specify the count of decode frames. Default total decode.\n\n\
     bs count        Specify the count of input buffer block size, the unit is Kb.\n\n\
     iqc count       Specify the count of input reqbuf.\n\n\
-    oqc count       Specify the count of output reqbuf.\n\n\n\
+    oqc count       Specify the count of output reqbuf.\n\n\
+    dev device     Specify the VPU decoder device node(generally /dev/video12).\n\n\n\
 EXAMPLES:\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 bs 500 ofmt 1 ofile test.yuv\n\n\
-    ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 ofile test.yuv frames 100 loop 10\n\n\
+    ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 ofile test.yuv frames 100 loop 10 dev /dev/video12\n\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 loop\n\n");
 
 }
