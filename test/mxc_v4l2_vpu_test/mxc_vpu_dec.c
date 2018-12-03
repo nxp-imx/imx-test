@@ -1588,7 +1588,7 @@ int main(int argc,
 
     int                         r;
     struct pollfd               p_fds;
-
+	int                         wait_pollpri_times;
 	signal(SIGINT, SigIntHanlder);
 	signal(SIGSTOP, SigStopHanlder);
 	signal(SIGCONT, SigContHanlder);
@@ -1993,19 +1993,30 @@ Or reference the usage manual.\n\
     p_fds.fd = pComponent->hDev;
     p_fds.events = POLLPRI;
 
-    while (!g_unCtrlCReceived)
+	wait_pollpri_times = 0;
+	while (!g_unCtrlCReceived)
     {
         r = poll(&p_fds, 1, 2000);
 		printf("%s() r %d\n", __FUNCTION__, r);
         if (-1 == r) 
         {
             fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
-            goto FUNCTION_STOP;
+			g_unCtrlCReceived = 1;
+			goto FUNCTION_STOP;
         }
         if (0 == r) 
         {
             fprintf(stderr, "%s() select timeout\n", __FUNCTION__);
-            continue;
+			if(++wait_pollpri_times >= 3)
+			{
+				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
+				g_unCtrlCReceived = 1;
+				goto FUNCTION_STOP;
+			}
+			else
+			{
+				continue;
+			}
         }
         if (r > 0)
         {
