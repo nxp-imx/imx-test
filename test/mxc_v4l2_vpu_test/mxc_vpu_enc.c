@@ -920,11 +920,21 @@ static int parse_arg(struct mxc_vpu_enc_option *option, char *argv[],
 		     stream_media_t *in, stream_media_t *out)
 {
 	out->eMediaType = MEDIA_NULL_OUT;
+	int fd;
+	int ret = 0;
 
 	switch (option->key) {
 	case IFILE:
 		in->eMediaType = MEDIA_FILE_IN;
-		in->pszNameOrAddr = argv[0];
+		fd = open(argv[0], O_RDONLY);
+		if (fd >= 0) {
+			in->pszNameOrAddr = argv[0];
+			close(fd);
+			fd = -1;
+		} else {
+			printf("invalid input file : %s\n", argv[0]);
+			ret = -1;
+		}
 		break;
 	case OFILE:
 		out->eMediaType = MEDIA_FILE_OUT;
@@ -988,10 +998,11 @@ static int parse_arg(struct mxc_vpu_enc_option *option, char *argv[],
 		param->rect.height = strtol(argv[3], NULL, 0);
 		break;
 	default:
+		ret = -1;
 		break;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int parse_args(int argc, char *argv[], struct mxc_vpu_enc_param *param,
@@ -999,6 +1010,7 @@ static int parse_args(int argc, char *argv[], struct mxc_vpu_enc_param *param,
 {
 	struct mxc_vpu_enc_option *option;
 	int index = 1;
+	int ret;
 
 	if (!param || !in || !out)
 		return -1;
@@ -1026,8 +1038,13 @@ static int parse_args(int argc, char *argv[], struct mxc_vpu_enc_param *param,
 			return -1;
 		}
 
-		parse_arg(option, option->arg_num ? argv + index + 1 : NULL,
-			  param, in, out);
+		ret = parse_arg(option,
+				option->arg_num ? argv + index + 1 : NULL,
+				param, in, out);
+		if (ret < 0) {
+			printf("parse option[%s] fail\n", argv[index]);
+			return ret;
+		}
 		index += (1 + option->arg_num);
 	}
 
@@ -1163,7 +1180,7 @@ int main(int argc, char* argv[])
 
 	if (argc == 1) {
 		printf("ERROR: Lack of necessary parameters\n");
-		return 0;
+		return -1;
 	}
 	if (show_help(argc, argv))
 		return 0;
