@@ -52,6 +52,7 @@
 
 #define DQEVENT
 
+volatile int ret_err = 0;
 volatile unsigned int g_unCtrlCReceived = 0;
 unsigned  long time_total =0;
 unsigned int num_total =0;
@@ -913,7 +914,7 @@ void test_streamout(component_t *pComponent)
     zoe_bool_t                  seek_flag;
 	unsigned int                outFrameNum = 0;
 	unsigned int                stream_type;
-	float                       used_time;
+	float                       used_time = 0.01;
 
 
 	ulWidth = pComponent->ulWidth;
@@ -936,10 +937,10 @@ STREAMOUT_START:
 		fpOutput = fopen(pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr, "w+");
 		if (fpOutput == NULL)
 		{
-			printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
-			lErr = 1;
+			printf("%s() error: Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
 			g_unCtrlCReceived = 1;
-			return;			
+			ret_err = 41;
+			return;
 		}
 	}
 	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
@@ -949,7 +950,9 @@ STREAMOUT_START:
 	else
 	{
 		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].eMediaType);
-		goto FUNC_END;
+		g_unCtrlCReceived = 1;
+		ret_err = 42;
+		return;
 	}
 
     // stream on v4l2 capture	
@@ -962,7 +965,8 @@ STREAMOUT_START:
     else
     {
 		printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 20;
+		g_unCtrlCReceived = 1;
+		ret_err = 43;
 		goto FUNC_END;
     }
 
@@ -1181,7 +1185,8 @@ FUNC_END:
 
 	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
-		
+	printf("Total: frames = %d, fps = %.2f, used_time = %.2f \n", outFrameNum, outFrameNum / used_time, used_time);
+
 	if(!g_unCtrlCReceived)
 	{
 		while(preLoopTimes == loopTimes && !g_unCtrlCReceived); //sync stream in loopTimes
@@ -1258,9 +1263,9 @@ STREAMIN_START:
 		fpInput = fopen(pComponent->ports[STREAM_DIR_IN].pszNameOrAddr, "r+");
 		if (fpInput == NULL)
 		{
-            printf("%s() Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
-			lErr = 1;
+            printf("%s() error: Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
 			g_unCtrlCReceived = 1;
+			ret_err = 31;
 			return;
 		}
         else
@@ -1273,7 +1278,10 @@ STREAMIN_START:
 	}
 	else
 	{
-		goto FUNC_END;
+		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].eMediaType);
+		g_unCtrlCReceived = 1;
+		ret_err = 32;
+		return;
 	}
 
 	//  stream on v4l2 output
@@ -1286,7 +1294,8 @@ STREAMIN_START:
     else
     {
     	printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
-    	lErr = 11;
+		g_unCtrlCReceived = 1;
+		ret_err = 33;
     	goto FUNC_END;
     }
 
@@ -1783,8 +1792,8 @@ Usage:\n\
 	./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 loop\n\n\
 Or reference the usage manual.\n\
 	");
-		
-		return 0;
+		ret_err = 1;
+		goto FUNC_END;
 	}
 
 	if (strstr(component[nCmdIdx].szDevName, "/dev/video"))
@@ -1800,13 +1809,12 @@ Or reference the usage manual.\n\
 		{
 			printf("%s(): error: The selected device(%s) does not match VPU decoder!\nplease select: /dev/video12\n", 
 					__FUNCTION__, component[nCmdIdx].szDevName);
-			lErr = 2;
+			ret_err = 2;
 			goto FUNC_END;
 		}
 	}
 	else 
 	{
-		printf("====== lookup devices =====\n");
 		// lookup and open the device
 		lErr = lookup_video_device_node(component[nCmdIdx].devInstance,
 										&component[nCmdIdx].busType,
@@ -1815,8 +1823,8 @@ Or reference the usage manual.\n\
 										);
 		if (lErr)
 		{
-			printf("Unable to find device.\n");
-			lErr = 2;
+			printf("%s() error: Unable to find device.\n", __FUNCTION__);
+			ret_err = 3;
 			goto FUNC_END;
 		}
 	}
@@ -1825,8 +1833,8 @@ Or reference the usage manual.\n\
 								   );
 	if (component[nCmdIdx].hDev <= 0)
 	{
-		printf("Unable to Open %s.\n", component[nCmdIdx].szDevName);
-		lErr = 1;
+		printf("%s() error: Unable to Open %s.\n", __FUNCTION__, component[nCmdIdx].szDevName);
+		ret_err = 4;
 		goto FUNC_END;
 	}
 
@@ -1838,8 +1846,8 @@ Or reference the usage manual.\n\
 				  );
 	if (lErr)
 	{
-		printf("Unable to config device.\n");
-		lErr = 3;
+		printf("%s() error: Unable to config device.\n", __FUNCTION__);
+		ret_err = 5;
 		goto FUNC_END;
 	}
 
@@ -1851,7 +1859,7 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_SUBSCRIBE_EVENT(V4L2_EVENT_SOURCE_CHANGE) ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 4;
+		ret_err = 6;
 		goto FUNC_END;
 	}
 #endif
@@ -1860,7 +1868,7 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_SUBSCRIBE_EVENT(V4L2_EVENT_EOS) ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 5;
+		ret_err = 7;
 		goto FUNC_END;
 	}
 
@@ -1884,8 +1892,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_S_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 6;
-		goto FUNC_END;
+		ret_err = 8;
+		goto FUNCTION_STOP;
 	}
 
     pComponent->ports[STREAM_DIR_IN].auto_rewind = ((VPU_PIX_FMT_LOGO == format.fmt.pix_mp.pixelformat) ? ZOE_TRUE : ZOE_FALSE);
@@ -1902,8 +1910,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_REQBUFS ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 7;
-		goto FUNC_END;
+		ret_err = 9;
+		goto FUNCTION_STOP;
 	}
 
     // save memory type and actual buffer number
@@ -1914,8 +1922,8 @@ Or reference the usage manual.\n\
 	if (!pComponent->ports[STREAM_DIR_IN].stAppV4lBuf)
 	{
 		printf("%s() Unable to allocate memory for V4L app structure \n", __FUNCTION__);
-		lErr = 8;
-		goto FUNC_END;
+		ret_err = 10;
+		goto FUNCTION_STOP;
 	}
 
 	memset(pComponent->ports[STREAM_DIR_IN].stAppV4lBuf, 0, pComponent->ports[STREAM_DIR_IN].buf_count * sizeof(struct zvapp_v4l_buf_info));
@@ -1950,8 +1958,8 @@ Or reference the usage manual.\n\
 				    if (!pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].addr[i])
 				    {
 					    printf("%s() V4L mmap failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-					    lErr = 9;
-					    goto FUNC_END;
+					    ret_err = 11;
+					    goto FUNCTION_STOP;
 				    }
 
 		            pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].m.mem_offset = stV4lBuf.m.planes[i].m.mem_offset;
@@ -1963,8 +1971,8 @@ Or reference the usage manual.\n\
 			else
 			{
 				printf("%s() VIDIOC_QUERYBUF failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-				lErr = 10;
-				goto FUNC_END;
+				ret_err = 12;
+				goto FUNCTION_STOP;
 			}
 		}
     }
@@ -1985,6 +1993,12 @@ Or reference the usage manual.\n\
 	{
 		pComponent->ports[STREAM_DIR_IN].ulThreadCreated = 1;
 	}
+	else
+	{
+		printf("%s() pthread create failed, threadId: %lu \n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].threadId);
+		ret_err = 13;
+		goto FUNCTION_STOP;
+	}
 
 	// wait for 10 msec
 	usleep(10000);
@@ -2002,6 +2016,7 @@ Or reference the usage manual.\n\
         {
             fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
 			g_unCtrlCReceived = 1;
+			ret_err = 14;
 			goto FUNCTION_STOP;
         }
         if (0 == r) 
@@ -2011,6 +2026,7 @@ Or reference the usage manual.\n\
 			{
 				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
 				g_unCtrlCReceived = 1;
+				ret_err = 15;
 				goto FUNCTION_STOP;
 			}
 			else
@@ -2035,6 +2051,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		ret_err = 16;
+		goto FUNCTION_STOP;
 	}
     else
     {
@@ -2060,8 +2078,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_G_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 12;
-		goto FUNC_END;
+		ret_err = 17;
+		goto FUNCTION_STOP;
 	}
     else
     {
@@ -2087,8 +2105,8 @@ Or reference the usage manual.\n\
 	    if (lErr)
 	    {
 	        printf("%s() VIDIOC_S_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-	        lErr = 13;
-	        goto FUNC_END;
+	        ret_err = 18;
+	        goto FUNCTION_STOP;
 	    }
     }
     else
@@ -2109,8 +2127,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_G_CROP ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 14;
-		goto FUNC_END;
+		ret_err = 19;
+		goto FUNCTION_STOP;
 	}
     else
     {
@@ -2124,8 +2142,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_G_CTRL ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 15;
-		goto FUNC_END;
+		ret_err = 20;
+		goto FUNCTION_STOP;
 	}
 
 	printf("%s() VIDIOC_G_CTRL ioctl val=%d\n", __FUNCTION__, ctl.value);
@@ -2143,8 +2161,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		lErr = 16;
-		goto FUNC_END;
+		ret_err = 21;
+		goto FUNCTION_STOP;
 	}
     else
     {
@@ -2159,8 +2177,8 @@ Or reference the usage manual.\n\
 	if (!pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf)
 	{
 		printf("%s() Unable to allocate memory for V4L app structure \n", __FUNCTION__);
-		lErr = 17;
-		goto FUNC_END;
+		ret_err = 22;
+		goto FUNCTION_STOP;
 	}
 
 	memset(pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf, 0, pComponent->ports[STREAM_DIR_OUT].buf_count * sizeof(struct zvapp_v4l_buf_info));
@@ -2195,8 +2213,8 @@ Or reference the usage manual.\n\
 				    if (pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].addr[i] <= 0)
 				    {
 					    printf("%s() V4L mmap failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-					    lErr = 18;
-					    goto FUNC_END;
+					    ret_err = 23;
+					    goto FUNCTION_STOP;
 				    }
 		            pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].m.mem_offset = stV4lBuf.m.planes[i].m.mem_offset;
                     pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].bytesused = 0;
@@ -2207,8 +2225,8 @@ Or reference the usage manual.\n\
 			else
 			{
 				printf("%s() VIDIOC_QUERYBUF failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-				lErr = 19;
-				goto FUNC_END;
+				ret_err = 24;
+				goto FUNCTION_STOP;
 			}
 		}
     }
@@ -2225,6 +2243,12 @@ Or reference the usage manual.\n\
 	if (!lErr)
 	{
 		pComponent->ports[STREAM_DIR_OUT].ulThreadCreated = 1;
+	}
+	else
+	{
+		printf("%s() pthread create failed, threadId: %lu \n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].threadId);
+		ret_err = 25;
+		goto FUNCTION_STOP;
 	}
 
 	// wait for 10 msec
@@ -2267,7 +2291,6 @@ FUNCTION_STOP:
 FUNC_END:
 	// wait for 100 msec
 	usleep(100000);
-
 	for (i = 0; i < MAX_SUPPORTED_COMPONENTS; i++)
 	{
 		for (j = 0; j < MAX_STREAM_DIR; j++)
@@ -2328,6 +2351,6 @@ FUNC_END:
 
 	printf("\nEND.\t loop_times=%d\n",(initLoopTimes - loopTimes));
 
-	return (lErr);
+	return (ret_err);
 }
 
