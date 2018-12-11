@@ -19,24 +19,53 @@
 #include "bit_reverse.h"
 #include "read_utils.h"
 #include <sys/time.h>
+#include <getopt.h>
+#include <string.h>
+
+#define error(...) do {\
+        fprintf(stderr, "%s: %s:%d: ", command, __FUNCTION__, __LINE__); \
+        fprintf(stderr, __VA_ARGS__); \
+        putc('\n', stderr); \
+} while (0)
+
+#define _(X) X
+
+static char *command;
+static unsigned period_time = 0;
+static unsigned buffer_time = 0;
+static snd_pcm_uframes_t period_frames = 0;
+static snd_pcm_uframes_t buffer_frames = 0;
+static snd_pcm_uframes_t chunk_size = 0;
+static int open_mode = 0;
+static int verbose = 0;
+static int nonblock = 0;
+static int no_period_wakeup = 0;
 
 #define ALSA_FORMAT	SND_PCM_FORMAT_DSD_U32_LE
 #define FRAMECOUNT	(1024 * 128)
 
 static int open_stream(snd_pcm_t **handle, const char *name, int dir,
-		       unsigned int rate, unsigned int channels)
+			unsigned int rate, unsigned int channels)
 {
 	snd_pcm_hw_params_t *hw_params;
 	snd_pcm_sw_params_t *sw_params;
-	snd_pcm_uframes_t period_size = 512;
-/*	snd_pcm_uframes_t buffer_size = 4096 * 4; */
+	snd_pcm_uframes_t buffer_size;
+
 	const char *dirname = (dir == SND_PCM_STREAM_PLAYBACK) ? "PLAYBACK" : "CAPTURE";
 	int err;
 
-	if ((err = snd_pcm_open(handle, name, dir, 0)) < 0) {
+	if ((err = snd_pcm_open(handle, name, dir, open_mode)) < 0) {
 		fprintf(stderr, "%s (%s): cannot open audio device (%s)\n",
 			name, dirname, snd_strerror(err));
 		return err;
+	}
+
+	if (nonblock) {
+		err = snd_pcm_nonblock(*handle, 1);
+		if(err < 0 ) {
+			error(_("nonblock setting error: %s"), snd_strerror(err));
+			return err;
+		}
 	}
 
 	if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
@@ -69,28 +98,65 @@ static int open_stream(snd_pcm_t **handle, const char *name, int dir,
 		return err;
 	}
 
-	if ((err = snd_pcm_hw_params_set_period_size_near(*handle, hw_params, &period_size, 0)) < 0) {
-		fprintf(stderr, "%s (%s): cannot set period time(%s)\n",
-			name, dirname, snd_strerror(err));
-		return err;
-	}
-/*
-	if ((err = snd_pcm_hw_params_set_buffer_size_near(*handle, hw_params, &buffer_size)) < 0) {
-		fprintf(stderr, "%s (%s): cannot set period time(%s)\n",
-			name, dirname, snd_strerror(err));
-		return err;
-	}
-*/
 	if ((err = snd_pcm_hw_params_set_channels(*handle, hw_params, channels)) < 0) {
 		fprintf(stderr, "%s (%s): cannot set channel count(%s)\n",
 			name, dirname, snd_strerror(err));
 		return err;
 	}
 
+	if (buffer_time == 0 && buffer_frames == 0) {
+		err = snd_pcm_hw_params_get_buffer_time_max(hw_params, &buffer_time, 0);
+		if (err < 0 )
+			return err;
+		if (buffer_time > 500000)
+			buffer_time = 500000;
+	}
+
+	if (period_time == 0 && period_frames == 0) {
+		if (buffer_time > 0 )
+			period_time = buffer_time / 4;
+		else
+			period_frames = buffer_frames / 4;
+	}
+
+	if (period_time > 0)
+		err = snd_pcm_hw_params_set_period_time_near(*handle, hw_params,
+							&period_time, 0);
+	else
+		err = snd_pcm_hw_params_set_period_size_near(*handle, hw_params,
+							&period_frames, 0);
+	if (err < 0) {
+		fprintf(stderr, "%s (%s): cannot set period time(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if (buffer_time > 0 )
+		err = snd_pcm_hw_params_set_buffer_time_near(*handle, hw_params,
+							&buffer_time, 0);
+	else
+		err = snd_pcm_hw_params_set_buffer_size_near(*handle, hw_params,
+							&buffer_frames);
+	if (err  < 0) {
+		fprintf(stderr, "%s (%s): cannot set period time(%s)\n",
+			name, dirname, snd_strerror(err));
+		return err;
+	}
+
+	if (no_period_wakeup)
+		snd_pcm_hw_params_set_period_wakeup(*handle, hw_params, 0);
+
 	if ((err = snd_pcm_hw_params(*handle, hw_params)) < 0) {
 		fprintf(stderr, "%s (%s): cannot set parameters(%s)\n",
 			name, dirname, snd_strerror(err));
 		return err;
+	}
+
+	snd_pcm_hw_params_get_period_size(hw_params, &chunk_size, 0);
+	snd_pcm_hw_params_get_buffer_size(hw_params, &buffer_size);
+	if (chunk_size == buffer_size) {
+		error(_("can't use period equal to buffer size"));
+		return -1;
 	}
 
 	snd_pcm_hw_params_free(hw_params);
@@ -105,13 +171,13 @@ static int open_stream(snd_pcm_t **handle, const char *name, int dir,
 			name, dirname, snd_strerror(err));
 		return err;
 	}
-	if ((err = snd_pcm_sw_params_set_avail_min(*handle, sw_params, FRAMECOUNT / 2)) < 0) {
+	if ((err = snd_pcm_sw_params_set_avail_min(*handle, sw_params, chunk_size)) < 0) {
 		fprintf(stderr, "%s (%s): cannot set minimum available count(%s)\n",
 			name, dirname, snd_strerror(err));
 		return err;
 	}
-	if ((err = snd_pcm_sw_params_set_start_threshold(*handle, sw_params, 0U)) < 0) {
-		fprintf(stderr, "%s (%s): cannot set start mode(%s)\n",
+	if ((err = snd_pcm_sw_params_set_start_threshold(*handle, sw_params, buffer_size)) < 0) {
+		fprintf(stderr, "%s (%s): cannot set start threshold(%s)\n",
 			name, dirname, snd_strerror(err));
 		return err;
 	}
@@ -213,6 +279,51 @@ static struct file_parser {
   { .ext = ".dff", .read_file = read_dff_file, .interleave = interleaveDffBlock },
 };
 
+enum {
+	OPT_VERSION = 1,
+	OPT_PERIOD_SIZE,
+	OPT_BUFFER_SIZE,
+	OPT_NO_PERIOD_WAKEUP,
+};
+
+static void usage(char *command)
+{
+	printf(
+_("Usage: %s [OPTION]... [FILE]...\n"
+"\n"
+"-h, --help              help\n"
+"    --version           print current version\n"
+"-D, --device=NAME       select PCM by name\n"
+"-F, --period-time=#     distance between interrupts is # microseconds\n"
+"-B, --buffer-time=#     buffer duration is # microseconds\n"
+"    --period-size=#     distance between interrupts is # frames\n"
+"    --buffer-size=#     buffer duration is # frames\n"
+"    --no-period-wakeup  set no period wakeup flag\n"
+)
+		, command);
+}
+
+static void version(void)
+{
+	printf("version 0.0.1\n");
+}
+
+static long parse_long(const char *str, int *err)
+{
+	long val;
+	char *endptr;
+
+	errno = 0;
+	val = strtol(str, &endptr, 0);
+
+	if (errno != 0 || *endptr != '\0')
+		*err = -1;
+	else
+		*err = 0;
+
+	return val;
+}
+
 int main(int argc, char *argv[])
 {
 	int fd, err, block_size, bytes_per_frame, frames;
@@ -222,15 +333,91 @@ int main(int argc, char *argv[])
 	struct dsd_params params;
 	uint64_t readsize=0;
 	uint64_t leftsize=0;
+	uint64_t writesize = 0;
 	int i, n;
 	struct file_parser parser;
+	char *pcm_name = "default";
+	int c, option_index;
 
-	if (argc < 3) {
-		fprintf(stderr, "Usage: %s <device> <filename>\n", argv[0]);
+	static const char short_options[] = "hD:NF:B:v";
+	static const struct option long_options[] = {
+		{"help", 0, 0, 'h'},
+		{"version", 0, 0, OPT_VERSION},
+		{"device", 1, 0, 'D'},
+		{"nonblock", 0, 0, 'N'},
+		{"period-time", 1, 0, 'F'},
+		{"period-size", 1, 0, OPT_PERIOD_SIZE},
+		{"buffer-time", 1, 0, 'B'},
+		{"buffer-size", 1, 0, OPT_BUFFER_SIZE},
+		{"verbose", 0, 0, 'v'},
+		{"no-period-wakeup", 0, 0, OPT_NO_PERIOD_WAKEUP},
+		{0, 0, 0, 0}
+	};
+
+	command = argv[0];
+
+	while ((c = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
+		switch (c) {
+		case 'h':
+			usage(command);
+			return 0;
+		case OPT_VERSION:
+			version();
+			return 0;
+		case 'D':
+			pcm_name = optarg;
+			break;
+		case 'N':
+			nonblock = 1;
+			open_mode |= SND_PCM_NONBLOCK;
+			break;
+		case 'F':
+			period_time = parse_long(optarg, &err);
+			if (err < 0) {
+				error(_("invalid period time argument '%s'"), optarg);
+				return 1;
+			}
+			break;
+		case 'B':
+			buffer_time = parse_long(optarg, &err);
+			if (err < 0) {
+				error(_("invalid buffer time argument '%s'"), optarg);
+				return 1;
+			}
+			break;
+		case OPT_PERIOD_SIZE:
+			period_frames = parse_long(optarg, &err);
+			if (err < 0) {
+				error(_("invalid period size argument '%s'"), optarg);
+				return 1;
+			}
+			break;
+		case OPT_BUFFER_SIZE:
+			buffer_frames = parse_long(optarg, &err);
+			if (err < 0) {
+				error(_("invalid buffer size argument '%s'"), optarg);
+				return 1;
+			}
+			break;
+		case OPT_NO_PERIOD_WAKEUP:
+			no_period_wakeup = 1;
+			break;
+		case 'v':
+			verbose++;
+			break;
+		default:
+			fprintf(stderr, _("Try `%s --help' for more information.\n"), command);
+			return 1;
+		}
+	}
+
+	if (optind <= argc - 1)
+		name = argv[optind++];
+	else {
+		usage(command);
 		return EXIT_FAILURE;
 	}
 
-	name = argv[2];
 	fd = open(name, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "Unable to open file (%m)\n");
@@ -262,7 +449,7 @@ int main(int argc, char *argv[])
 	if (err < 0)
 		return err;
 
-	if ((err = open_stream(&playback_handle, argv[1],
+	if ((err = open_stream(&playback_handle, pcm_name,
 				SND_PCM_STREAM_PLAYBACK,
 				params.sampling_freq / snd_pcm_format_width(ALSA_FORMAT),
 				params.channel_num) < 0))
@@ -314,9 +501,23 @@ int main(int argc, char *argv[])
 
 		pcm_write(playback_handle, interleaved_buffer,
 			frames, bytes_per_frame);
+
+		writesize += frames;
 	}
 
+	if (writesize % chunk_size) {
+		uint8_t *zero_buf = malloc((chunk_size - (writesize % chunk_size)) * bytes_per_frame);
+
+		memset(zero_buf, 0, (chunk_size - (writesize % chunk_size)) * bytes_per_frame);
+		pcm_write(playback_handle, zero_buf,
+				(chunk_size - (writesize % chunk_size)),
+				bytes_per_frame);
+		free(zero_buf);
+	}
+
+	snd_pcm_nonblock(playback_handle, 0);
 	snd_pcm_drain(playback_handle);
+	snd_pcm_nonblock(playback_handle, nonblock);
 
 	snd_pcm_close(playback_handle);
 	close(fd);
