@@ -242,14 +242,15 @@ int update_datachunk_length(struct audio_info_s *info, int format_size)
 int update_blockalign(struct audio_info_s *info)
 {
 	*(unsigned short *)&header[32] = info->blockalign;
-	*(int *)&header[28] =
-		info->output_sample_rate * info->blockalign;
 	return 0;
 }
 
 int update_sample_bitdepth(struct audio_info_s *info)
 {
 	*(unsigned short *)&header[34] = info->frame_bits;
+	*(int *)&header[28] =
+		info->output_sample_rate * (info->frame_bits / 8)
+					* info->channel;
 	return 0;
 }
 
@@ -270,10 +271,10 @@ void bitshift(FILE * src, struct audio_info_s *info)
 	else
 		nleft = (info->input_data_len >> 2);
 	/*allocate input buffer*/
-	input_buffer = (int *)malloc(sizeof(int) * nleft + 4096);
+	input_buffer = (int *)malloc(sizeof(int) * nleft + DMA_BUF_SIZE);
 	if (input_buffer == NULL)
 		printf("allocate input buffer error\n");
-	input_null = (int *)malloc(4096);
+	input_null = (int *)malloc(DMA_BUF_SIZE);
 	if (input_null == NULL)
 		printf("allocate input null error\n");
 
@@ -289,9 +290,6 @@ void bitshift(FILE * src, struct audio_info_s *info)
 		info->input_data_len = info->input_data_len << 1;
 		info->output_data_len = info->output_data_len << 1;
 		update_datachunk_length(info, format_size);
-		/*change block align*/
-		info->blockalign = 8;
-		update_blockalign(info);
 	} else if (info->frame_bits == 24) {
 		/*change data format*/
 		do {
@@ -307,6 +305,10 @@ void bitshift(FILE * src, struct audio_info_s *info)
 			input_buffer[i++] = zero;
 		} while (--nleft);
 	}
+
+	/*change block align*/
+	info->blockalign = info->channel * 4;
+	update_blockalign(info);
 
 	/*All output format is fixed to 24bit*/
 	info->frame_bits = 24;
