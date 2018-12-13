@@ -182,7 +182,7 @@ int play_file(FILE * fd_dst, int fd_asrc, struct audio_info_s *info)
 	output_dma_size =
 	    asrc_get_output_buffer_size(DMA_BUF_SIZE, info->sample_rate,
 					info->output_sample_rate);
-	tail = info->channel * 4 * 2;
+	tail = info->channel * 4 * 16;
 
 	output_p = (char *)malloc(output_dma_size + tail);
 
