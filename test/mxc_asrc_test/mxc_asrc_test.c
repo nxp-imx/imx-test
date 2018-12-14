@@ -50,6 +50,7 @@ struct audio_info_s {
 	unsigned short blockalign;
 	enum asrc_word_width input_word_width;
 	enum asrc_word_width output_word_width;
+	int input_dma_buf_size;
 };
 struct audio_buf {
 	char *start;
@@ -130,7 +131,7 @@ int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
 
 	config.pair = req.index;
 	config.channel_num = req.chn_num;
-	config.dma_buffer_size = DMA_BUF_SIZE;
+	config.dma_buffer_size = info->input_dma_buf_size;
 	config.input_sample_rate = info->sample_rate;
 	config.output_sample_rate = info->output_sample_rate;
 	config.input_word_width = info->input_word_width;
@@ -145,11 +146,13 @@ int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
 }
 
 int asrc_get_output_buffer_size(int input_buffer_size,
-				int input_sample_rate, int output_sample_rate)
+				int input_sample_rate, int output_sample_rate,
+				int input_word_width, int output_word_width)
 {
 	int i = 0;
 	int outbuffer_size = 0;
 	int outsample = output_sample_rate;
+	int in_word_size, out_word_size;
 	while (outsample >= input_sample_rate) {
 		++i;
 		outsample -= input_sample_rate;
@@ -166,6 +169,39 @@ int asrc_get_output_buffer_size(int input_buffer_size,
 		i++;
 	}
 	outbuffer_size = (outbuffer_size >> 3) << 3;
+
+	switch (input_word_width) {
+	case ASRC_WIDTH_24_BIT:
+		in_word_size = 4;
+		break;
+	case ASRC_WIDTH_16_BIT:
+		in_word_size = 2;
+		break;
+	case ASRC_WIDTH_8_BIT:
+		in_word_size = 1;
+		break;
+	default:
+		in_word_size = 4;
+		break;
+	}
+
+	switch (output_word_width) {
+	case ASRC_WIDTH_24_BIT:
+		out_word_size = 4;
+		break;
+	case ASRC_WIDTH_16_BIT:
+		out_word_size = 2;
+		break;
+	case ASRC_WIDTH_8_BIT:
+		out_word_size = 1;
+		break;
+	default:
+		out_word_size = 4;
+		break;
+	}
+
+	outbuffer_size = outbuffer_size * out_word_size / in_word_size;
+
 	return outbuffer_size;
 }
 
@@ -180,35 +216,40 @@ int play_file(FILE * fd_dst, int fd_asrc, struct audio_info_s *info)
 
 	input_p = (char *)input_buffer;
 	output_dma_size =
-	    asrc_get_output_buffer_size(DMA_BUF_SIZE, info->sample_rate,
-					info->output_sample_rate);
+	    asrc_get_output_buffer_size(info->input_dma_buf_size,
+					info->sample_rate,
+					info->output_sample_rate,
+					info->input_word_width,
+					info->output_word_width);
 	tail = info->channel * 4 * 16;
 
 	output_p = (char *)malloc(output_dma_size + tail);
 
 	convert_flag = 1;
-	memset(input_null, 0, DMA_BUF_SIZE);
+	memset(input_null, 0, info->input_dma_buf_size);
 	if ((err = ioctl(fd_asrc, ASRC_START_CONV, &pair_index)) < 0)
 		goto error;
 
 	info->output_used = 0;
 	while (convert_flag) {
 		buf_info.input_buffer_length =
-		    (info->input_data_len > DMA_BUF_SIZE) ? DMA_BUF_SIZE : info->input_data_len;
+		    (info->input_data_len > info->input_dma_buf_size) ?
+			info->input_dma_buf_size : info->input_data_len;
 
 		if (info->input_data_len > 0) {
 			buf_info.input_buffer_vaddr = input_p;
 			input_p = input_p + buf_info.input_buffer_length;
 			info->input_data_len -= buf_info.input_buffer_length;
-			buf_info.input_buffer_length = DMA_BUF_SIZE;
+			buf_info.input_buffer_length = info->input_dma_buf_size;
 		} else {
 			buf_info.input_buffer_vaddr = (void *)input_null;
-			buf_info.input_buffer_length = DMA_BUF_SIZE;
+			buf_info.input_buffer_length = info->input_dma_buf_size;
 		}
 
 		buf_info.output_buffer_length = output_dma_size + tail;
 		buf_info.output_buffer_vaddr = output_p;
 		if ((err = ioctl(fd_asrc, ASRC_CONVERT, &buf_info)) < 0)
+
 			goto error;
 		if (info->output_data_len > buf_info.output_buffer_length) {
 			info->output_data_len -= buf_info.output_buffer_length;
@@ -262,40 +303,98 @@ void bitshift(FILE * src, struct audio_info_s *info)
 	int nleft;
 	int format_size;
 	int i = 0;
-	int bitdepth = info->frame_bits;
+	int slotwidth = 8 * info->blockalign / info->channel;
 	format_size = *(int *)&header[16];
 
-	/*caculate the input buffer size*/
-	if (bitdepth <= 16)
+	info->input_dma_buf_size = DMA_BUF_SIZE;
+
+	switch (slotwidth) {
+	case 8:
+		nleft = info->input_data_len;
+		info->input_dma_buf_size = DMA_BUF_SIZE / 2;
+		break;
+	case 16:
 		nleft = (info->input_data_len >> 1);
-	else
+		break;
+	case 24:
+		nleft = info->input_data_len / 3;
+		break;
+	case 32:
 		nleft = (info->input_data_len >> 2);
+		break;
+	default:
+		printf("wrong slot width\n");
+		return;
+	}
+
 	/*allocate input buffer*/
-	input_buffer = (int *)malloc(sizeof(int) * nleft + DMA_BUF_SIZE);
+	input_buffer = (int *)malloc(sizeof(int) * nleft +
+				info->input_dma_buf_size);
 	if (input_buffer == NULL)
 		printf("allocate input buffer error\n");
-	input_null = (int *)malloc(DMA_BUF_SIZE);
+	input_null = (int *)malloc(info->input_dma_buf_size);
 	if (input_null == NULL)
 		printf("allocate input null error\n");
 
-	if (info->frame_bits <= 16) {
+	if (info->frame_bits == 8) {
+		char * buf = (char *) input_buffer;
+		unsigned char c;
+		signed char d;
+		/*change data format*/
+		do {
+			fread(&c, 1, 1, src);
+			d = (char)((int)c - 128);
+			buf[i++] = d;
+		} while (--nleft);
+		/*change data length*/
+		info->output_data_len = info->output_data_len << 1;
+		update_datachunk_length(info, format_size);
+
+		info->frame_bits = 16;
+		info->blockalign = info->channel * 2;
+		info->input_word_width = ASRC_WIDTH_8_BIT;
+		info->output_word_width = ASRC_WIDTH_16_BIT;
+
+	} else if (info->frame_bits == 16) {
+		short * buf = (short *) input_buffer;
 		/*change data format*/
 		do {
 			fread(&data, 2, 1, src);
-			/*change data bit from 16bit to 24bit*/
-			zero = ((data << 8) & 0xFFFF00);
+			buf[i++] = (short)(data & 0xFFFF);
+		} while (--nleft);
+
+		info->frame_bits = 16;
+		info->blockalign = info->channel * 2;
+		info->input_word_width = ASRC_WIDTH_16_BIT;
+		info->output_word_width = ASRC_WIDTH_16_BIT;
+
+	} else if (info->frame_bits == 24 && (slotwidth == 24)) {
+		do {
+			fread(&data, 3, 1, src);
+			zero = (data & 0xFFFF00);
 			input_buffer[i++] = zero;
 		} while (--nleft);
 		/*change data length*/
-		info->input_data_len = info->input_data_len << 1;
-		info->output_data_len = info->output_data_len << 1;
+		info->input_data_len = info->input_data_len * 4 / 3;
+		info->output_data_len = info->output_data_len * 4 / 3;
 		update_datachunk_length(info, format_size);
-	} else if (info->frame_bits == 24) {
+
+		info->frame_bits = 24;
+		info->blockalign = info->channel * 4;
+		info->input_word_width = ASRC_WIDTH_24_BIT;
+		info->output_word_width = ASRC_WIDTH_24_BIT;
+
+	} else if (info->frame_bits == 24 && (slotwidth == 32)) {
 		/*change data format*/
 		do {
 			fread(&data, 4, 1, src);
 			input_buffer[i++] = data;
 		} while (--nleft);
+
+		info->frame_bits = 24;
+		info->blockalign = info->channel * 4;
+		info->input_word_width = ASRC_WIDTH_24_BIT;
+		info->output_word_width = ASRC_WIDTH_24_BIT;
 	} else if (info->frame_bits == 32) {
 		/*change data format*/
 		do {
@@ -304,17 +403,17 @@ void bitshift(FILE * src, struct audio_info_s *info)
 			zero = (data >> 8) & 0x00FFFFFF;
 			input_buffer[i++] = zero;
 		} while (--nleft);
+
+		info->frame_bits = 24;
+		info->blockalign = info->channel * 4;
+		info->input_word_width = ASRC_WIDTH_24_BIT;
+		info->output_word_width = ASRC_WIDTH_24_BIT;
 	}
 
 	/*change block align*/
-	info->blockalign = info->channel * 4;
 	update_blockalign(info);
 
-	/*All output format is fixed to 24bit*/
-	info->frame_bits = 24;
-	info->input_word_width = ASRC_WIDTH_24_BIT;
 	update_sample_bitdepth(info);
-	/*allocate input buffer*/
 }
 
 int header_parser(FILE * src, struct audio_info_s *info)
@@ -390,7 +489,9 @@ int header_parser(FILE * src, struct audio_info_s *info)
 	info->output_data_len =
 	    asrc_get_output_buffer_size(info->input_data_len,
 					info->sample_rate,
-					info->output_sample_rate);
+					info->output_sample_rate,
+					ASRC_WIDTH_16_BIT,
+					ASRC_WIDTH_16_BIT);
 
 	*(int *)&header[24 + format_size] = info->output_data_len;
 
