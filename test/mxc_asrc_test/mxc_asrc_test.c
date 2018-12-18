@@ -75,38 +75,100 @@ int fd_asrc;
 void *asrc_input_thread(void *info);
 void *asrc_output_thread(void *info);
 
+static const char * const in_clocks_name[] = {
+"INCLK_NONE",			/* 0 */
+"INCLK_ESAI_RX",		/* 1 */
+"INCLK_SSI1_RX",		/* 2 */
+"INCLK_SSI2_RX",		/* 3 */
+"INCLK_SPDIF_RX",		/* 4 */
+"INCLK_MLB_CLK",		/* 5 */
+"INCLK_ESAI_TX",		/* 6 */
+"INCLK_SSI1_TX",		/* 7 */
+"INCLK_SSI2_TX",		/* 8 */
+"INCLK_SPDIF_TX",		/* 9 */
+"INCLK_ASRCK1_CLK",		/* 10 */
+"INCLK_AUD_PLL_DIV_CLK0",	/* 11 */
+"INCLK_AUD_PLL_DIV_CLK1",	/* 12 */
+"INCLK_AUD_CLK0",		/* 13 */
+"INCLK_AUD_CLK1",		/* 14 */
+"INCLK_ESAI0_RX_CLK",		/* 15 */
+"INCLK_ESAI0_TX_CLK",		/* 16 */
+"INCLK_SPDIF0_RX",		/* 17 */
+"INCLK_SPDIF1_RX",		/* 18 */
+"INCLK_SAI0_RX_BCLK",		/* 19 */
+"INCLK_SAI0_TX_BCLK",		/* 20 */
+"INCLK_SAI1_RX_BCLK",		/* 21 */
+"INCLK_SAI1_TX_BCLK",		/* 22 */
+"INCLK_SAI2_RX_BCLK",		/* 23 */
+"INCLK_SAI3_RX_BCLK",		/* 24 */
+"INCLK_ASRC0_MUX_CLK",		/* 25 */
+"INCLK_ESAI1_RX_CLK",		/* 26 */
+"INCLK_ESAI1_TX_CLK",		/* 27 */
+"INCLK_SAI6_TX_BCLK",		/* 28 */
+"INCLK_HDMI_RX_SAI0_RX_BCLK",	/* 29 */
+"INCLK_HDMI_TX_SAI0_TX_BCLK",	/* 30 */
+};
+
+static const char * const out_clocks_name[] = {
+"OUTCLK_NONE",			/* 0 */
+"OUTCLK_ESAI_TX",		/* 1 */
+"OUTCLK_SSI1_TX",		/* 2 */
+"OUTCLK_SSI2_TX",		/* 3 */
+"OUTCLK_SPDIF_TX",		/* 4 */
+"OUTCLK_MLB_CLK",		/* 5 */
+"OUTCLK_ESAI_RX",		/* 6 */
+"OUTCLK_SSI1_RX",		/* 7 */
+"OUTCLK_SSI2_RX",		/* 8 */
+"OUTCLK_SPDIF_RX",		/* 9 */
+"OUTCLK_ASRCK1_CLK",		/* 10 */
+"OUTCLK_AUD_PLL_DIV_CLK0",	/* 11 */
+"OUTCLK_AUD_PLL_DIV_CLK1",	/* 12 */
+"OUTCLK_AUD_CLK0",		/* 13 */
+"OUTCLK_AUD_CLK1",		/* 14 */
+"OUTCLK_ESAI0_RX_CLK",		/* 15 */
+"OUTCLK_ESAI0_TX_CLK",		/* 16 */
+"OUTCLK_SPDIF0_RX",		/* 17 */
+"OUTCLK_SPDIF1_RX",		/* 18 */
+"OUTCLK_SAI0_RX_BCLK",		/* 19 */
+"OUTCLK_SAI0_TX_BCLK",		/* 20 */
+"OUTCLK_SAI1_RX_BCLK",		/* 21 */
+"OUTCLK_SAI1_TX_BCLK",		/* 22 */
+"OUTCLK_SAI2_RX_BCLK",		/* 23 */
+"OUTCLK_SAI3_RX_BCLK",		/* 24 */
+"OUTCLK_ASRC0_MUX_CLK",		/* 25 */
+"OUTCLK_ESAI1_RX_CLK",		/* 26 */
+"OUTCLK_ESAI1_TX_CLK",		/* 27 */
+"OUTCLK_SAI6_TX_BCLK",		/* 28 */
+"OUTCLK_HDMI_RX_SAI0_RX_BCLK",	/* 29 */
+"OUTCLK_HDMI_TX_SAI0_TX_BCLK",	/* 30 */
+};
+
 void help_info(int ac, char *av[])
 {
+	int i;
+
 	printf("\n\n**************************************************\n");
 	printf("* Test aplication for ASRC\n");
 	printf("* Options : \n\n");
 	printf("-to <output sample rate> <origin.wav> <converted.wav>\n");
 	printf("<input clock source> <output clock source>\n");
 	printf("input clock source types are:\n\n");
-	printf("0  --  INCLK_NONE\n");
-	printf("1  --  INCLK_ESAI_RX\n");
-	printf("2  --  INCLK_SSI1_RX\n");
-	printf("3  --  INCLK_SSI2_RX\n");
-	printf("4  --  INCLK_SPDIF_RX\n");
-	printf("5  --  INCLK_MLB_CLK\n");
-	printf("6  --  INCLK_ESAI_TX\n");
-	printf("7  --  INCLK_SSI1_TX\n");
-	printf("8  --  INCLK_SSI2_TX\n");
-	printf("9  --  INCLK_SPDIF_TX\n");
-	printf("10 --  INCLK_ASRCK1_CLK\n");
+
+	for (i = 0; i <= 10; i++)
+		printf("%d  --  %s\n", i, in_clocks_name[i]);
+	printf("    --  in clocks for imx8 platform\n");
+	for (i = 11; i <= 30; i++)
+		printf("%d  --  %s\n", i, in_clocks_name[i]);
+
 	printf("default option for output clock source is 0\n");
 	printf("output clock source types are:\n\n");
-	printf("0  --  OUTCLK_NONE\n");
-	printf("1  --  OUTCLK_ESAI_TX\n");
-	printf("2  --  OUTCLK_SSI1_TX\n");
-	printf("3  --  OUTCLK_SSI2_TX\n");
-	printf("4  --  OUTCLK_SPDIF_TX\n");
-	printf("5  --  OUTCLK_MLB_CLK\n");
-	printf("6  --  OUTCLK_ESAI_RX\n");
-	printf("7  --  OUTCLK_SSI1_RX\n");
-	printf("8  --  OUTCLK_SSI2_RX\n");
-	printf("9  --  OUTCLK_SPDIF_RX\n");
-	printf("10 --  OUTCLK_ASRCK1_CLK\n");
+
+	for (i = 0; i <= 10; i++)
+		printf("%d  --  %s\n", i, out_clocks_name[i]);
+	printf("    --  out clocks for imx8 platform\n");
+	for (i = 11; i <= 30; i++)
+		printf("%d  --  %s\n", i, out_clocks_name[i]);
+
 	printf("default option for output clock source is 10\n");
 	printf("**************************************************\n\n");
 }
@@ -249,7 +311,6 @@ int play_file(FILE * fd_dst, int fd_asrc, struct audio_info_s *info)
 		buf_info.output_buffer_length = output_dma_size + tail;
 		buf_info.output_buffer_vaddr = output_p;
 		if ((err = ioctl(fd_asrc, ASRC_CONVERT, &buf_info)) < 0)
-
 			goto error;
 		if (info->output_data_len > buf_info.output_buffer_length) {
 			info->output_data_len -= buf_info.output_buffer_length;
@@ -297,7 +358,6 @@ int update_sample_bitdepth(struct audio_info_s *info)
 
 void bitshift(FILE * src, struct audio_info_s *info)
 {
-
 	unsigned int data;
 	unsigned int zero;
 	int nleft;
@@ -623,6 +683,32 @@ int main(int ac, char *av[])
 			    inclk = INCLK_ASRCK1_CLK;
 			    printf("inclk : INCLK_ASRCK1_CLK\n");
 			    break;
+			case 11:
+			case 12:
+			case 13:
+			case 14:
+			case 15:
+			case 16:
+			case 17:
+			case 18:
+			case 19:
+			case 20:
+			case 21:
+			case 22:
+			case 23:
+			case 24:
+			case 25:
+			    inclk = i + 5;
+			    printf("inclk : %s\n", in_clocks_name[i]);
+			    break;
+			case 26:
+			case 27:
+			case 28:
+			case 29:
+			case 30:
+			    inclk = i + 6;
+			    printf("inclk : %s\n", in_clocks_name[i]);
+			    break;
 			default:
 			    printf("Incorrect clock source\n");
 			    return 1;
@@ -674,6 +760,32 @@ int main(int ac, char *av[])
 			case 10:
 			    outclk = OUTCLK_ASRCK1_CLK;
 			    printf("outclk : OUTCLK_ASRCK1_CLK\n");
+			    break;
+			case 11:
+			case 12:
+			case 13:
+			case 14:
+			case 15:
+			case 16:
+			case 17:
+			case 18:
+			case 19:
+			case 20:
+			case 21:
+			case 22:
+			case 23:
+			case 24:
+			case 25:
+			    outclk = i + 5;
+			    printf("outclk : %s\n", out_clocks_name[i]);
+			    break;
+			case 26:
+			case 27:
+			case 28:
+			case 29:
+			case 30:
+			    outclk = i + 6;
+			    printf("outclk : %s\n", out_clocks_name[i]);
 			    break;
 			default:
 			    printf("Incorrect clock source\n");
