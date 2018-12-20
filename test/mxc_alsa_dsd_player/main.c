@@ -316,6 +316,8 @@ int main(int argc, char *argv[])
 			frames, bytes_per_frame);
 	}
 
+	snd_pcm_drain(playback_handle);
+
 	snd_pcm_close(playback_handle);
 	close(fd);
 
