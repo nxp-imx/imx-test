@@ -890,7 +890,7 @@ static void set_encoder_parameters(struct mxc_vpu_enc_param *param,
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_PROFILE, param->profile);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_LEVEL, param->level);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, param->bitrate_mode);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, param->target_bitrate);
+	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, param->target_bitrate * 1024);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, param->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_PERIOD, param->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, param->qp);
