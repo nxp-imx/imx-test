@@ -25,3 +25,43 @@ run the command as follows：
 for example:
 ./mxc_v4l2_vpu_enc.out ifile test.yuv WIDTH 1920 HEIGHT 1080 OWIDTH 1920 OHEIGHT 1080 GOP 3 QP 22 MAXBR 9000 TARBR 7000 MINBR 6000 ofile test.h264
 
+Alternative for encoder:
+fot the bitrate, the unit is b
+
+run the command as follows:
+./mxc_v4l2_vpu_test.out \
+	ifile --key <key> --name <filename> --fmt <fmt> --size <width> <height> --framenum <number> --loop <loop times> \
+	camera --key <key> --device <devnode> --fmt <fmt> --size <width> <height> --framerate <f> --framenum <number> \
+	encoder --key <key> --source <key no> --device <devnode> --size <width> <height> --framerate <f> --profile <profile> --level <level> \
+		--gop <gop> --bframes <number> --mode <mode> --qp <qp> --bitrate <br> --lowlatency <mode> --crop <left> <top> <width> <height> \
+	ofile --key <key> --name <filename> --source <key no> \
+	convert --key <key> --source <key no> --fmt <fmt>
+
+for examples:
+encode input file and output to file:
+	./mxc_v4l2_vpu_test.out \
+		ifile --key 0 --name test.yuv  --fmt nv12 --size 1920 1080 --framenum 10 \
+		encoder --key 1 --source 0 --size 1920 1080 --framerate 30 --bitrate 4194304 --lowlatency 0 \
+		ofile --key 2 --source 1 --name test.h264
+
+encode camera and output to file:
+	./mxc_v4l2_vpu_test.out \
+		camera  --key 0 --device /dev/video0 --size 1920 1080 --fmt nv12 --framerate 30 --framenum 300 \
+		encoder --key 1 --source 0 --size 1920 1080 --framerate 30 \
+		ofile --key 4 --source 1 --name camera.h264
+
+one camera with 2 encoder streams:
+	./mxc_v4l2_vpu_test.out \
+		camera  --key 0 --device /dev/video0 --size 1920 1080 --fmt nv12 --framerate 30 \
+		encoder --key 1 --source 0 --size 1920 1080 --framerate 30 \
+		encoder --key 2 --source 0 --size 1280 720 --framerate 30 \
+		ofile --key 4 --source 1 --name camera_1.h264 \
+		ofile --key 5 --source 2 --name camera_2.h264
+
+convert file fmt from I420 to nv12 and encode:
+	./mxc_v4l2_vpu_test.out \
+		ifile --key 0 --name test_i420.yuv --fmt I420 --size 1920 1080 \
+		convert --key 3 --source 0 --fmt nv12 \
+		encoder --key 1 --source 3 --size 1920 1080 --framerate 30 --bitrate 4194304 --lowlatency 0 \
+		ofile --key 2 --source 1 --name test.h264
+
