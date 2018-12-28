@@ -277,6 +277,9 @@ int pitcher_unit_run(Unit u)
 	assert(unit);
 	assert(unit->desc.runfunc);
 
+	if (!unit->enable)
+		return -RET_E_NOT_READY;
+
 	if (unit->in)
 		buffer = pitcher_pipe_pop(unit->in);
 

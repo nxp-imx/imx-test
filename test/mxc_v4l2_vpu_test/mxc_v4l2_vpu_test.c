@@ -28,13 +28,14 @@
 #define DEFAULT_WIDTH		1920
 #define DEFAULT_HEIGHT		1080
 #define DEFAULT_FRAMERATE	30
+#define MIN_BS			128
 
 enum {
 	TEST_TYPE_ENCODER = 0,
 	TEST_TYPE_CAMERA,
 	TEST_TYPE_FILEIN,
 	TEST_TYPE_FILEOUT,
-	TEST_TYPE_CONVERT
+	TEST_TYPE_CONVERT,
 };
 
 struct test_node {
@@ -128,7 +129,7 @@ struct mxc_vpu_test_subcmd {
 };
 
 static uint32_t bitmask;
-struct test_node *nodes[MAX_NODE_COUNT];
+static struct test_node *nodes[MAX_NODE_COUNT];
 
 #define FORCE_EXIT_MASK		0x8000
 static int g_exit;
@@ -194,7 +195,7 @@ static int is_vpu_encoder(struct v4l2_capability cap)
 		return FALSE;
 }
 
-int lookup_encoder_and_open(void)
+static int lookup_encoder_and_open(void)
 {
 	const int offset = 13;
 	const int MAX_INDEX = 64;
@@ -555,7 +556,7 @@ static int init_camera_node(struct test_node *node)
 	camera->capture.width = camera->node.width;
 	camera->capture.height = camera->node.height;
 	camera->capture.framerate = camera->node.framerate;
-	camera->capture.sizeimage = camera->node.width * camera->node.height;
+	camera->capture.sizeimage = 0;
 	camera->capture.bytesperline = camera->node.width;
 	camera->capture.is_end = is_camera_finish;
 
@@ -859,7 +860,7 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->node.source = -1;
 	encoder->fd = -1;
 	encoder->node.type = TEST_TYPE_ENCODER;
-	encoder->node.pixelformat = V4L2_PIX_FMT_NV12;
+	encoder->node.pixelformat = V4L2_PIX_FMT_H264;
 	encoder->node.width = DEFAULT_WIDTH;
 	encoder->node.height = DEFAULT_HEIGHT;
 	encoder->node.framerate = DEFAULT_FRAMERATE;
@@ -884,7 +885,7 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->output.memory = V4L2_MEMORY_MMAP;
 	encoder->capture.memory = V4L2_MEMORY_MMAP;
 	encoder->output.pixelformat = V4L2_PIX_FMT_NV12;
-	encoder->capture.pixelformat = V4L2_PIX_FMT_H264;
+	encoder->capture.pixelformat = encoder->node.pixelformat;
 
 	return &encoder->node;
 }
@@ -1200,6 +1201,18 @@ static int parse_ifile_option(struct test_node *node,
 	return RET_OK;
 }
 
+static int ofile_start(void *arg)
+{
+	struct test_file_t *file = arg;
+
+	if (!file || !file->filp)
+		return -RET_E_INVAL;
+
+	file->end = false;
+
+	return RET_OK;
+}
+
 static int ofile_checkready(void *arg, int *is_end)
 {
 	struct test_file_t *file = arg;
@@ -1258,6 +1271,7 @@ static int init_ofile_node(struct test_node *node)
 	}
 
 	file->desc.fd = -1;
+	file->desc.start = ofile_start;
 	file->desc.check_ready = ofile_checkready;
 	file->desc.runfunc = ofile_run;
 	snprintf(file->desc.name, sizeof(file->desc.name), "output.%s.%d",
@@ -1879,7 +1893,9 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 
 	schn = src->get_source_chnno(src);
 	dchn = dst->get_sink_chnno(dst);
-	if (schn < 0 || dchn < 0)
+	if (schn < 0)
+		return RET_OK;
+	if (dchn < 0)
 		return -RET_E_INVAL;
 
 	PITCHER_LOG("connect <%d, %d>\n", src->key, dst->key);
@@ -1905,9 +1921,97 @@ static int disconnect_node(struct test_node *src, struct test_node *dst)
 	return pitcher_disconnect(schn, dchn);
 }
 
+static int check_ctrl_ready(void *arg, int *is_end)
+{
+	int end = true;
+	int i;
+
+	if (is_termination())
+		end = true;
+
+	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
+		struct test_node *src;
+		struct test_node *dst = nodes[i];
+		int dchn;
+		int schn;
+		int ret = 0;
+
+		if (!dst)
+			continue;
+		if (dst->source < 0 || dst->source >= MAX_NODE_COUNT)
+			continue;
+		src = nodes[dst->source];
+		if (!src)
+			continue;
+
+		schn = src->get_source_chnno(src);
+		if (schn < 0)
+			continue;
+		dchn = dst->get_sink_chnno(dst);
+		if (dchn < 0)
+			continue;
+		if (pitcher_get_source(dchn) != schn) {
+			ret = connect_node(src, dst);
+
+			if (ret < 0) {
+				PITCHER_ERR("can't connect <%d, %d>\n",
+						src->key, dst->key);
+				end = true;
+				force_exit();
+			}
+			ret = pitcher_start_chn(schn);
+			if (ret < 0) {
+				PITCHER_ERR("start %d fail\n", src->key);
+				end = true;
+				force_exit();
+			}
+			ret = pitcher_start_chn(dchn);
+			if (ret < 0) {
+				PITCHER_ERR("start %d fail\n", dst->key);
+				end = true;
+				force_exit();
+			}
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
+		int chnno = -1;
+
+		if (!nodes[i])
+			continue;
+
+		if (nodes[i]->get_sink_chnno) {
+			chnno = nodes[i]->get_sink_chnno(nodes[i]);
+			if (chnno >= 0 && pitcher_get_status(chnno)) {
+				end = false;
+				break;
+			}
+		}
+		if (nodes[i]->get_source_chnno) {
+			chnno = nodes[i]->get_source_chnno(nodes[i]);
+			if (chnno >= 0 && pitcher_get_status(chnno)) {
+				end = false;
+				break;
+			}
+		}
+	}
+
+	if (is_end)
+		*is_end = end;
+
+	return false;
+}
+
+static int ctrl_run(void *arg, struct pitcher_buffer *pbuf)
+{
+	return RET_OK;
+}
+
 int main(int argc, char *argv[])
 {
 	PitcherContext context = NULL;
+	struct pitcher_unit_desc desc;
+	int ctrl = -1;
 	int ret;
 	int i;
 
@@ -1930,6 +2034,15 @@ int main(int argc, char *argv[])
 		PITCHER_ERR("pitcher init fail\n");
 		goto exit;
 	}
+	memset(&desc, 0, sizeof(desc));
+	desc.check_ready = check_ctrl_ready;
+	desc.runfunc = ctrl_run;
+	ctrl = pitcher_register_chn(context, &desc, NULL);
+	if (ctrl < 0) {
+		PITCHER_ERR("register ctrl chn fail\n");
+		goto exit;
+	}
+
 	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
 		int source;
 
@@ -2000,6 +2113,7 @@ exit:
 		nodes[i] = NULL;
 	}
 
+	SAFE_CLOSE(ctrl, pitcher_unregister_chn);
 	PITCHER_LOG("release\n");
 	SAFE_RELEASE(context, pitcher_release);
 

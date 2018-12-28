@@ -91,6 +91,8 @@ struct pitcher_buffer *pitcher_get_idle_buffer(unsigned int chnno);
 void pitcher_put_buffer_idle(unsigned int chnno, struct pitcher_buffer *buffer);
 void pitcher_push_back_output(unsigned int chnno, struct pitcher_buffer *buf);
 int pitcher_chn_poll_input(unsigned int chnno);
+int pitcher_start_chn(unsigned int chnno);
+int pitcher_stop_chn(unsigned int chnno);
 
 #ifdef __cplusplus
 }

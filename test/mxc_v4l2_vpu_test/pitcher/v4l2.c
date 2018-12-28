@@ -47,15 +47,25 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 	fd = component->fd;
 
 	memset(&format, 0, sizeof(format));
-	if (V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
-		format.type = component->type;
+	format.type = component->type;
+	if (!component->width || !component->height) {
+		ioctl(fd, VIDIOC_G_FMT, &format);
+		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
+			component->width = format.fmt.pix.width;
+			component->height = format.fmt.pix.height;
+		} else {
+			component->width = format.fmt.pix_mp.width;
+			component->height = format.fmt.pix_mp.height;
+		}
+	}
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
 		format.fmt.pix.pixelformat = component->pixelformat;
 		format.fmt.pix.width = component->width;
 		format.fmt.pix.height = component->height;
 		format.fmt.pix.bytesperline = component->bytesperline;
 		format.fmt.pix.sizeimage = component->sizeimage;
 	} else {
-		format.type = component->type;
 		format.fmt.pix_mp.pixelformat = component->pixelformat;
 		format.fmt.pix_mp.width = component->width;
 		format.fmt.pix_mp.height = component->height;
@@ -90,6 +100,9 @@ static int __set_v4l2_fps(struct v4l2_component_t *component)
 	assert(component && component->fd >= 0);
 	fd = component->fd;
 
+	if (!component->framerate)
+		return RET_OK;
+
 	memset(&parm, 0, sizeof(parm));
 	parm.type = component->type;
 	parm.parm.capture.timeperframe.numerator = 1;
@@ -104,14 +117,49 @@ static int __set_v4l2_fps(struct v4l2_component_t *component)
 	return RET_OK;
 }
 
+static int __get_v4l2_min_buffers(int fd, uint32_t type)
+{
+	uint32_t id;
+	struct v4l2_queryctrl qctrl;
+	struct v4l2_control ctrl;
+	int ret;
+
+	if (V4L2_TYPE_IS_OUTPUT(type))
+		id = V4L2_CID_MIN_BUFFERS_FOR_OUTPUT;
+	else
+		id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE;
+
+	memset(&qctrl, 0, sizeof(qctrl));
+	qctrl.id = id;
+	ret = ioctl(fd, VIDIOC_QUERYCTRL, &qctrl);
+	if (ret < 0)
+		return 0;
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = id;
+	ret = ioctl(fd, VIDIOC_G_CTRL, &ctrl);
+	if (ret < 0)
+		return 0;
+
+	return ctrl.value;
+}
+
 static int __req_v4l2_buffer(struct v4l2_component_t *component)
 {
 	int fd;
 	int ret;
 	struct v4l2_requestbuffers req_bufs;
+	unsigned int min_buffer_count;
 
 	assert(component && component->fd >= 0);
 	fd = component->fd;
+
+	min_buffer_count = __get_v4l2_min_buffers(component->fd,
+							component->type);
+	if (component->buffer_count < min_buffer_count)
+		component->buffer_count = min_buffer_count;
+	if (component->buffer_count > MAX_BUFFER_COUNT)
+		component->buffer_count = MAX_BUFFER_COUNT;
 
 	memset(&req_bufs, 0, sizeof(req_bufs));
 	req_bufs.count = component->buffer_count;

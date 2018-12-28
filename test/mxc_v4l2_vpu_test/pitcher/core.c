@@ -192,6 +192,14 @@ static struct pitcher_chn *__find_chn(unsigned int chnno)
 	return NULL;
 }
 
+static void __set_chn_status(struct pitcher_chn *chn, int enable)
+{
+	if (enable)
+		chn->enable = true;
+	else
+		chn->enable = false;
+}
+
 static int __start_chn(unsigned long item, void *arg)
 {
 	struct pitcher_chn *chn = (struct pitcher_chn *)item;
@@ -205,7 +213,7 @@ static int __start_chn(unsigned long item, void *arg)
 
 	ret = pitcher_unit_start(chn->unit);
 	if (!ret) {
-		chn->enable = true;
+		__set_chn_status(chn, true);
 		if (chn->pfd.func)
 			pitcher_loop_add_poll_fd(chn->core->loop, &chn->pfd);
 	}
@@ -231,7 +239,7 @@ static int __stop_chn(unsigned long item, void *arg)
 		pitcher_loop_del_poll_fd(chn->core->loop, &chn->pfd);
 
 	pitcher_unit_stop(chn->unit);
-	chn->enable = false;
+	__set_chn_status(chn, false);
 
 	return 0;
 }
@@ -253,7 +261,7 @@ static int __process_chn_run(struct pitcher_chn *chn)
 
 	if (is_end) {
 		pitcher_unit_stop(chn->unit);
-		chn->enable = false;
+		__set_chn_status(chn, false);
 	}
 
 	return RET_OK;
@@ -599,4 +607,26 @@ int pitcher_chn_poll_input(unsigned int chnno)
 		return false;
 
 	return pitcher_pipe_poll(pipe);
+}
+
+int pitcher_start_chn(unsigned int chnno)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return false;
+
+	return __start_chn((unsigned long)chn, NULL);
+}
+
+int pitcher_stop_chn(unsigned int chnno)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return false;
+
+	return __stop_chn((unsigned long)chn, NULL);
 }
