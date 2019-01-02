@@ -484,7 +484,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"gop", 1, "--gop <gop>\n\t\t\tset group of picture"},
 	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default)"},
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
-	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is kb"},
+	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is b"},
 	{"lowlatency", 1, "--lowlatency <mode>\n\t\t\tenable low latency mode, it will disable the display re-ordering"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
@@ -817,7 +817,7 @@ static int init_encoder_node(struct test_node *node)
 	if (encoder->capture.width > encoder->output.width)
 		encoder->capture.width = encoder->output.width;
 	if (encoder->capture.height > encoder->output.height)
-		encoder->capture.width = encoder->output.height;
+		encoder->capture.height = encoder->output.height;
 	if (encoder->crop.width && encoder->capture.width > encoder->crop.width)
 		encoder->capture.width = encoder->crop.width;
 	if (encoder->crop.height &&
