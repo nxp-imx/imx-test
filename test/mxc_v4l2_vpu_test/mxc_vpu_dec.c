@@ -1155,7 +1155,7 @@ STREAMOUT_START:
 				else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
 				{
 				}
-				fflush(stdout);
+				fflush(fpOutput);
 			}
 		}
 		else	
@@ -1174,14 +1174,24 @@ STREAMOUT_START:
 
 FUNC_END:
 	printf("%s() ]\n", __FUNCTION__);
-	fflush(stdout);
+	fflush(fpOutput);
 	if (fpOutput)
 	{
 		fclose(fpOutput);
 	}
 	
 	stream_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
+	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
+	if (lErr)
+	{
+		printf("warning: %s() VIDIOC_STREAMOFF has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
+		g_unCtrlCReceived = 1;
+		ret_err = 44;
+	}
+    else
+	{
+		printf("%s() sent cmd: VIDIOC_STREAMOFF\n", __FUNCTION__);
+	}
 
 	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
@@ -1260,7 +1270,7 @@ STREAMIN_START:
 	***********************************************/
 	if (pComponent->ports[STREAM_DIR_IN].eMediaType == MEDIA_FILE_IN)
 	{
-		fpInput = fopen(pComponent->ports[STREAM_DIR_IN].pszNameOrAddr, "r+");
+		fpInput = fopen(pComponent->ports[STREAM_DIR_IN].pszNameOrAddr, "r");
 		if (fpInput == NULL)
 		{
             printf("%s() error: Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
@@ -1433,29 +1443,15 @@ RETRY:
                     {
 					    fseek(fpInput, 0, SEEK_SET);
                     }
-				}
-				else
-				{
-					pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
+					else
+					{
+						pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
+					}
 				}
 			}
 
 			if (total != 0)
 			{
-				if (pComponent->ports[STREAM_DIR_IN].unUserPTS)
-				{
-                    struct timespec now;
-                    clock_gettime (CLOCK_MONOTONIC, &now);
-                    pstV4lBuf->timestamp.tv_sec = now.tv_sec;
-                    pstV4lBuf->timestamp.tv_usec = now.tv_nsec / 1000;	
-	                pstV4lBuf->flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-				}
-				else
-				{
-					// not use PTS
-	                pstV4lBuf->flags &= ~V4L2_BUF_FLAG_TIMESTAMP_MASK;
-				}
-
 				/***********************************************
 				** QBUF, put data to driver
 				***********************************************/
@@ -1500,14 +1496,12 @@ RETRY:
 				usleep(10);
 				goto RETRY;
 			}
-			fflush(stdin);
 		}		
 		usleep(10);
 	}
 
 FUNC_END:
 	printf("\n%s() ]\n", __FUNCTION__);
-	fflush(stdin);
 	if (fpInput)
 	{
 		fclose(fpInput);
@@ -1519,10 +1513,14 @@ FUNC_END:
 	v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
 	lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
 	if (lErr)
-		printf("VIDIOC_DECODER_CMD has error\n");
+	{
+		printf("warning: %s() VIDIOC_DECODER_CMD has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
+		g_unCtrlCReceived = 1;
+		ret_err = 34;
+	}
     else
 	{
-		printf("sent cmd: V4L2_DEC_CMD_STOP\n");
+		printf("%s() sent cmd: V4L2_DEC_CMD_STOP\n", __FUNCTION__);
 	}
 	pComponent->ports[STREAM_DIR_IN].done_flag = 1;
 	while(!pComponent->ports[STREAM_DIR_OUT].done_flag && !g_unCtrlCReceived)
@@ -1532,7 +1530,18 @@ FUNC_END:
 	
 	//Cannot streamoff unitl current stream out thread is done.
 	stream_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
+	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
+	if (lErr)
+	{
+		printf("warning: %s() VIDIOC_STREAMOFF has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
+		g_unCtrlCReceived = 1;
+		ret_err = 35;
+	}
+    else
+	{
+		printf("%s() sent cmd: VIDIOC_STREAMOFF\n", __FUNCTION__);
+	}
+
 	loopTimes--;	
 	if(!g_unCtrlCReceived)
 	{
@@ -1615,9 +1624,8 @@ HAS_2ND_CMD:
 	component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_NULL_OUT;
 	component[nCmdIdx].ports[STREAM_DIR_IN].fmt = 0xFFFFFFFF;
 	component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
-   	pComponent = &component[nCmdIdx];
-    pComponent->ports[STREAM_DIR_OUT].fmt = 0xFFFFFFFF;
 	component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr = NULL;
+	pComponent = &component[nCmdIdx];
 
 	if(argc >= 2 && strstr(argv[1],"help"))
 	{
@@ -1635,7 +1643,10 @@ HAS_2ND_CMD:
             }
 			nArgNow++;
 			component[nCmdIdx].ports[STREAM_DIR_IN].eMediaType = MEDIA_FILE_IN;
-			component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr = argv[nArgNow++];
+			component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr = malloc(sizeof(char)*(strlen(argv[nArgNow])+1));
+			memset(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr, 0x00, sizeof(char)*(strlen(argv[nArgNow])+1));
+			memcpy(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr, argv[nArgNow], strlen(argv[nArgNow]));
+			nArgNow++;
 		}
 		else if (!strcasecmp(argv[nArgNow],"OFILE"))
 		{
@@ -1644,9 +1655,15 @@ HAS_2ND_CMD:
 				break;
             }
 			nArgNow++;
-			component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr = argv[nArgNow++];
-			if(strcasecmp(component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr, "NONE"))
+			if(strcasecmp(argv[nArgNow], "NONE"))
+			{
 				component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_FILE_OUT;
+				component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr = malloc(sizeof(char)*(strlen(argv[nArgNow])+1));
+				memset(component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr, 0x00, sizeof(char)*(strlen(argv[nArgNow])+1));
+				memcpy(component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr, argv[nArgNow], strlen(argv[nArgNow]));
+			}
+			nArgNow++;
+
 		}
 		else if (!strcasecmp(argv[nArgNow],"NULL"))
 		{
@@ -2297,9 +2314,15 @@ FUNC_END:
 		{
 			if (component[i].ports[j].ulThreadCreated)
 			{
-				pthread_join(component[i].ports[j].threadId,
+				lErr = pthread_join(component[i].ports[j].threadId,
 							 NULL
 							 );
+				if(lErr)
+				{
+					printf("warning: %s() pthread_join failed: errno(%d)  \n", __FUNCTION__, lErr);
+					ret_err = 26;
+				}
+
 				component[i].ports[j].ulThreadCreated = 0;
 			}
 		}
@@ -2338,6 +2361,15 @@ FUNC_END:
 			{
 				component[i].ports[j].opened = ZOE_FALSE;
 			}
+		}
+
+		if(component[i].ports[STREAM_DIR_IN].pszNameOrAddr)
+		{
+			free(component[i].ports[STREAM_DIR_IN].pszNameOrAddr);
+		}
+		if(component[i].ports[STREAM_DIR_OUT].pszNameOrAddr)
+		{
+			free(component[i].ports[STREAM_DIR_OUT].pszNameOrAddr);
 		}
 
 		// close device

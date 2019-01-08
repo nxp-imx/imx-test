@@ -134,7 +134,7 @@ typedef struct _stream_media_t
 	unsigned int		        ulThreadCreated;
 
 	media_type_e		        eMediaType;
-	const char		            *pszNameOrAddr;
+	char		            *pszNameOrAddr;
 	unsigned int		        unPort;
 	int					        displayType;
 
