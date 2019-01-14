@@ -22,6 +22,9 @@
 #include "pitcher/pitcher.h"
 #include "pitcher/pitcher_v4l2.h"
 
+#define VERSION_MAJOR		1
+#define VERSION_MINOR		0
+
 #define VPU_ENCODER_DRIVER	"vpu encoder"
 #define MAX_NODE_COUNT		16
 #define DEFAULT_FMT		V4L2_PIX_FMT_NV12
@@ -1822,7 +1825,9 @@ static int show_help(int argc, char *argv[])
 {
 	int i;
 
-	printf("Type 'HELP' to see the list. Type 'HELP NAME' to find out more about subcmd 'NAME'\n");
+	printf("mxc_v4l2_vpu_test.out V%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
+	printf("Type 'HELP' to see the list. ");
+	printf("Type 'HELP NAME' to find out more about subcmd 'NAME'\n");
 
 	for (i = 0; i < ARRAY_SIZE(subcmds); i++) {
 		struct mxc_vpu_test_option *option;
