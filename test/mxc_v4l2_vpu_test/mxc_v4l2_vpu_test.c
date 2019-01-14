@@ -52,6 +52,7 @@ struct test_node {
 	void (*free_node)(struct test_node *node);
 	int (*get_source_chnno)(struct test_node *node);
 	int (*get_sink_chnno)(struct test_node *node);
+	int frame_skip;
 	PitcherContext context;
 };
 
@@ -886,6 +887,8 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->capture.memory = V4L2_MEMORY_MMAP;
 	encoder->output.pixelformat = V4L2_PIX_FMT_NV12;
 	encoder->capture.pixelformat = encoder->node.pixelformat;
+
+	encoder->node.frame_skip = true;
 
 	return &encoder->node;
 }
@@ -1887,6 +1890,7 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 {
 	int schn;
 	int dchn;
+	int ret;
 
 	if (!src || !src->get_source_chnno || !dst || !dst->get_sink_chnno)
 		return -RET_E_NULL_POINTER;
@@ -1900,7 +1904,16 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 
 	PITCHER_LOG("connect <%d, %d>\n", src->key, dst->key);
 
-	return pitcher_connect(schn, dchn);
+	ret = pitcher_connect(schn, dchn);
+	if (ret < 0)
+		return ret;
+
+	if (dst->frame_skip && src->framerate > dst->framerate)
+		pitcher_set_skip(schn, dchn,
+				src->framerate - dst->framerate,
+				src->framerate);
+
+	return RET_OK;
 }
 
 static int disconnect_node(struct test_node *src, struct test_node *dst)

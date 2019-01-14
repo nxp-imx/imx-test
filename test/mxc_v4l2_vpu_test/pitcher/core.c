@@ -43,6 +43,7 @@ struct pitcher_chn {
 struct connect_t {
 	struct pitcher_chn *src;
 	struct pitcher_chn *dst;
+	void *priv;
 };
 
 static unsigned long chn_bitmap[256];
@@ -629,4 +630,53 @@ int pitcher_stop_chn(unsigned int chnno)
 		return false;
 
 	return __stop_chn((unsigned long)chn, NULL);
+}
+
+static int __get_pipe(unsigned long item, void *arg)
+{
+	Pipe pipe = (Pipe)item;
+	struct connect_t *ct = arg;
+
+	if (!item || !ct)
+		return 0;
+
+	if (pitcher_get_pipe_src(pipe) != ct->src)
+		return 0;
+	if (pitcher_get_pipe_dst(pipe) != ct->dst)
+		return 0;
+
+	ct->priv = pipe;
+
+	return 0;
+}
+
+int pitcher_set_skip(unsigned int src, unsigned int dst,
+			uint32_t numerator, uint32_t denominator)
+{
+	struct pitcher_core *core;
+	struct connect_t ct;
+
+	ct.src = __find_chn(src);
+	ct.dst = __find_chn(dst);
+	ct.priv = NULL;
+	if (!ct.src || !ct.dst)
+		return -RET_E_INVAL;
+	if (ct.src->core != ct.dst->core)
+		return -RET_E_NOT_MATCH;
+
+	core = ct.src->core;
+	assert(core);
+	if (!core->chns || !core->pipes)
+		return -RET_E_INVAL;
+
+	pitcher_queue_enumerate(core->pipes, __get_pipe, (void *)&ct);
+	if (!ct.priv)
+		return -RET_E_NOT_MATCH;
+
+	if (numerator > denominator)
+		numerator = denominator;
+
+	PITCHER_LOG("<%s, %s> skip %d/%d\n",
+			ct.src->name, ct.dst->name, numerator, denominator);
+	return pitcher_set_pipe_skip((Pipe)ct.priv, numerator, denominator);
 }

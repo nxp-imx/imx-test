@@ -93,6 +93,8 @@ void pitcher_push_back_output(unsigned int chnno, struct pitcher_buffer *buf);
 int pitcher_chn_poll_input(unsigned int chnno);
 int pitcher_start_chn(unsigned int chnno);
 int pitcher_stop_chn(unsigned int chnno);
+int pitcher_set_skip(unsigned int src, unsigned int dst,
+			uint32_t numerator, uint32_t denominator);
 
 #ifdef __cplusplus
 }
