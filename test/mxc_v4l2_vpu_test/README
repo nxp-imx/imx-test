@@ -4,16 +4,51 @@ For decoder
 The YUV frame is tiled NV12 pixel format (semi-planar, 2 planes 420 Y + UV)
 which is got from the decoder, and for the unittest the actual output is
 converted to linear YV12 3 planes 420 Y + U + V. The YUV frame buffer is hence
-You can try by use the command as follows
-./mxc_v4l2_vpu_dec.out ifile file_name ifmt fmt_num ofmt fmt_num ofile file_name
+The usage as follow:
+Usage: ./mxc_v4l2_vpu_dec.out ifile [PATH] ifmt [IFMT] ofmt [OFMT] [OPTIONS]
+OPTIONS:
+    --help          Show usage manual.
+    PATH            Specify the input file path.
+    IFMT            Specify input file encode format number. Format comparsion table:
+                        VPU_VIDEO_UNDEFINED    0
+                        VPU_VIDEO_AVC          1
+                        VPU_VIDEO_VC1          2
+                        VPU_VIDEO_MPEG2        3
+                        VPU_VIDEO_AVS          4
+                        VPU_VIDEO_ASP          5
+                        VPU_VIDEO_JPEG         6
+                        VPU_VIDEO_RV8          7
+                        VPU_VIDEO_RV9          8
+                        VPU_VIDEO_VP6          9
+                        VPU_VIDEO_SPK          10
+                        VPU_VIDEO_VP8          11
+                        VPU_VIDEO_AVC_MVC      12
+                        VPU_VIDEO_HEVC         13
+                        VPU_PIX_FMT_DIVX       14
+    OFMT            Specify decode format number. Format comparsion table:
+                        V4L2_PIX_FMT_NV12      0
+                        V4L2_PIX_FMT_YUV420    1
+                        VPU_PIX_FMT_TILED_8    2
+                        VPU_PIX_FMT_TILED_10   3
+    ofile path      Specify the output file path.
+    loop times      Specify loop decode times to the same file. If the times not set, the loop continues.
+    frames count    Specify the count of decode frames. Default total decode.
+    bs count        Specify the count of input buffer block size, the unit is Kb.
+    iqc count       Specify the count of input reqbuf.
+    oqc count       Specify the count of output reqbuf.
+    dev device      Specify the VPU decoder device node(generally /dev/video12).
 
-For example:
-when decode the stream BasketballDrive_1920x1080_qp32_100.bin
-you can use the command like this
-./mxc_v4l2_vpu_dec.out ifile BasketballDrive_1920x1080_qp32_100.bin ifmt 13 ofmt 1 ofile test.yuv
-for h264 stream h_i_352x288.h264
-./mxc_v4l2_vpu_dec.out ifile h_i_352x288.h264 ifmt 1 ofmt 1 ofile test.yuv
-and you can read sdk_release_2f7d492015_gpl/README for more details
+EXAMPLES:
+case 1: decode h264 stream to test.yuv
+    ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv
+case 2: decode h265 stream and don't output file
+    ./mxc_v4l2_vpu_dec.out ifile decode.265 ifmt 13 ofmt 1
+case 3: decode mpeg4 stream and don't output file and specify decode 100 frames and loop 10 times
+    ./mxc_v4l2_vpu_dec.out ifile decode.m4v ifmt 5 ofmt 1 frames 100 loop 10
+case 4: decode mpeg2 stream and specify device node, input buffer block size, input reqbuf counts and output content type
+	./mxc_v4l2_vpu_dec.out ifile decode.m2v ifmt 3 ofmt 1 dev /dev/video12 bs 1000 iqc 10 oct 1
+And you can reference usage manual
+    ./mxc_v4l2_vpu_dec.out --help
 
 For encoder:
 

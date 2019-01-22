@@ -1857,6 +1857,7 @@ Usage:\n\
 	./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
 	./mxc_v4l2_vpu_dec.out ifile decode.bit ifmt 13 ofmt 1 loop\n\n\
 Or reference the usage manual.\n\
+	./mxc_v4l2_vpu_dec.out --help \n\
 	");
 		ret_err = 1;
 		goto FUNC_END;
