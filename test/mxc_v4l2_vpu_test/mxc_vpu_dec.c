@@ -89,7 +89,6 @@ static __u32  formats_yuv[] =
 {
     V4L2_PIX_FMT_NV12,
     V4L2_PIX_FMT_YUV420M,
-    V4L2_PIX_FMT_UYVY,
     VPU_PIX_FMT_TILED_8,
     VPU_PIX_FMT_TILED_10
 };
@@ -872,9 +871,8 @@ OPTIONS:\n\
     OFMT            Specify decode format number. Format comparsion table:\n\
                         V4L2_PIX_FMT_NV12      0\n\
                         V4L2_PIX_FMT_YUV420    1\n\
-                        V4L2_PIX_FMT_UYVY      2\n\
-                        VPU_PIX_FMT_TILED_8    3\n\
-                        VPU_PIX_FMT_TILED_10   4\n\n\
+                        VPU_PIX_FMT_TILED_8    2\n\
+                        VPU_PIX_FMT_TILED_10   3\n\n\
     ofile path      Specify the output file path.\n\n\
     loop times      Specify loop decode times to the same file. If the times not set, the loop continues.\n\n\
     frames count    Specify the count of decode frames. Default total decode.\n\n\
@@ -1102,7 +1100,6 @@ STREAMOUT_START:
 						unsigned char *dstbuf, *yuvbuf;
 						unsigned int uStride;
 						unsigned int uVertAlign = 256 - 1; //alignment is same with v4l2 driver
-						unsigned char *ybuf, *uvbuf;
 						zoe_bool_t b10format = 0;
 						unsigned int bField = stV4lBuf.reserved;
 						uStride = (( ulWidth  + uVertAlign ) & ~uVertAlign );
@@ -1123,30 +1120,45 @@ STREAMOUT_START:
 						nBaseAddr[1] = (unsigned char *)(stAppV4lBuf[stV4lBuf.index].addr[1] + stV4lBuf.m.planes[1].data_offset);
 						nBaseAddr[2] = nBaseAddr[0] + ulWidth * ulHeight/2;
 						nBaseAddr[3] = nBaseAddr[1] + ulWidth * ulHeight/4;
-						if (b10format) {
-							ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, 0);
-							LoadFrameNV12_10b (yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, 0);
-						} else {
-							ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, bField);
-							LoadFrameNV12(yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, bField);
-						}
-						ybuf = dstbuf;
-						uvbuf = dstbuf + ulWidth * ulHeight;
-						for (i = 0; i < stV4lBuf.length; i++) {
-							if (0 == i)
+
+						/*because hardware currently only support NY12_TILED format*/
+						/*so need to complete the subsequent conversion*/
+						switch (pComponent->ports[STREAM_DIR_OUT].fmt)
+ 						{
+						case V4L2_PIX_FMT_NV12:
+							if (b10format)
 							{
-								bytesused = ulWidth * ulHeight;
-#ifndef ISION_8BIT
-								if (b10format)
-									bytesused = bytesused * 2;
-#endif
-								fwrite((void*)ybuf, 1, bytesused, fpOutput);
+								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, 0);
 							}
 							else
 							{
-								bytesused = (ulWidth * ulHeight) / 2;
-								fwrite((void*)uvbuf, 1, bytesused, fpOutput);
+								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, bField);
 							}
+							bytesused = ulWidth * ulHeight * 3 / 2;
+							fwrite((void*)yuvbuf, 1, bytesused, fpOutput);
+							break;
+						case V4L2_PIX_FMT_YUV420M:
+							if (b10format)
+							{
+								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, 0);
+								LoadFrameNV12_10b (yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, 0);
+							}
+							else
+							{
+								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, bField);
+								LoadFrameNV12(yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, bField);
+							}
+							bytesused = ulWidth * ulHeight * 3 / 2;
+							fwrite((void*)dstbuf, 1, bytesused, fpOutput);
+							break;
+						case VPU_PIX_FMT_TILED_8:
+						case VPU_PIX_FMT_TILED_10:
+							fwrite((void*)nBaseAddr[0], 1,stV4lBuf.m.planes[0].bytesused, fpOutput);
+							fwrite((void*)nBaseAddr[1], 1,stV4lBuf.m.planes[1].bytesused, fpOutput);
+							break;
+						default:
+							printf("warning: %s() please specify output format, or the format you specified is not standard. \n", __FUNCTION__);
+							break;
 						}
 						free(dstbuf);
 						free(yuvbuf);
@@ -1607,6 +1619,7 @@ int main(int argc,
     int                         r;
     struct pollfd               p_fds;
 	int                         wait_pollpri_times;
+	int                         int_tmp;
 	signal(SIGINT, SigIntHanlder);
 	signal(SIGSTOP, SigStopHanlder);
 	signal(SIGCONT, SigContHanlder);
@@ -1646,6 +1659,10 @@ HAS_2ND_CMD:
 			component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr = malloc(sizeof(char)*(strlen(argv[nArgNow])+1));
 			memset(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr, 0x00, sizeof(char)*(strlen(argv[nArgNow])+1));
 			memcpy(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr, argv[nArgNow], strlen(argv[nArgNow]));
+			if (!HAS_ARG_NUM(argc, nArgNow, 1))
+            {
+				break;
+            }
 			nArgNow++;
 		}
 		else if (!strcasecmp(argv[nArgNow],"OFILE"))
@@ -1662,11 +1679,18 @@ HAS_2ND_CMD:
 				memset(component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr, 0x00, sizeof(char)*(strlen(argv[nArgNow])+1));
 				memcpy(component[nCmdIdx].ports[STREAM_DIR_OUT].pszNameOrAddr, argv[nArgNow], strlen(argv[nArgNow]));
 			}
+			if (!HAS_ARG_NUM(argc, nArgNow, 1))
+            {
+				break;
+            }
 			nArgNow++;
-
 		}
 		else if (!strcasecmp(argv[nArgNow],"NULL"))
 		{
+			if (!HAS_ARG_NUM(argc, nArgNow, 1))
+            {
+				break;
+            }
 			nArgNow++;
 			component[nCmdIdx].ports[STREAM_DIR_OUT].eMediaType = MEDIA_NULL_OUT;
 		}
@@ -1688,7 +1712,24 @@ HAS_2ND_CMD:
             }
 			nArgNow++;
 			if(isNumber(argv[nArgNow]))
-				component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = atoi(argv[nArgNow++]);
+			{
+				int_tmp = atoi(argv[nArgNow]);
+				if (int_tmp >=  0 && int_tmp <= (ZPU_NUM_FORMATS_YUV - 1))
+				{
+					component[nCmdIdx].ports[STREAM_DIR_OUT].fmt = formats_yuv[int_tmp];
+				}
+				else
+				{
+					printf("error: %s() the specified output format is not support yet. \n", __FUNCTION__);
+					ret_err = 1;
+					goto FUNC_END;
+				}
+				if (!HAS_ARG_NUM(argc, nArgNow, 1))
+				{
+					break;
+				}
+				nArgNow++;
+			}
         }
 		else if(!strcasecmp(argv[nArgNow],"BS"))
 		{
@@ -1788,13 +1829,21 @@ HAS_2ND_CMD:
 		}
 		else if (!strcasecmp(argv[nArgNow],"+"))
 		{
-            nArgNow++;
+            if (!HAS_ARG_NUM(argc, nArgNow, 1))
+            {
+				break;
+            }
+			nArgNow++;
             nHas2ndCmd = 1;
             break;
         }
 		else
 		{
-            nArgNow++;
+            if (!HAS_ARG_NUM(argc, nArgNow, 1))
+            {
+				break;
+            }
+			nArgNow++;
         }    
 	}
 	if(component[nCmdIdx].ports[STREAM_DIR_IN].pszNameOrAddr == NULL
@@ -2101,6 +2150,7 @@ Or reference the usage manual.\n\
     else
     {
 		printf("%s() VIDIOC_G_FMT w(%d) h(%d)\n", __FUNCTION__, format.fmt.pix_mp.width, format.fmt.pix_mp.height);
+		printf("%s() VIDIOC_G_FMT: sizeimage_0(%d) bytesperline_0(%d) sizeimage_1(%d) bytesperline_1(%d) \n", __FUNCTION__, format.fmt.pix_mp.plane_fmt[0].sizeimage, format.fmt.pix_mp.plane_fmt[0].bytesperline, format.fmt.pix_mp.plane_fmt[1].sizeimage, format.fmt.pix_mp.plane_fmt[1].bytesperline);
     }
     pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nWidth = format.fmt.pix_mp.width;
     pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nHeight = format.fmt.pix_mp.height;
@@ -2112,31 +2162,17 @@ Or reference the usage manual.\n\
     pComponent->ulHeight = format.fmt.pix_mp.height;
 
     // set v4l2 capture format (YUV output)
-    if ((pComponent->ports[STREAM_DIR_OUT].fmt < ZPU_NUM_FORMATS_YUV) &&
-        (format.fmt.pix_mp.pixelformat != formats_yuv[pComponent->ports[STREAM_DIR_OUT].fmt])
-        )
-    {
-        format.fmt.pix_mp.pixelformat = formats_yuv[pComponent->ports[STREAM_DIR_OUT].fmt];
-
-        lErr = ioctl(pComponent->hDev, VIDIOC_S_FMT, &format);
+	if (format.fmt.pix_mp.pixelformat != pComponent->ports[STREAM_DIR_OUT].fmt)
+	{
+		format.fmt.pix_mp.pixelformat = pComponent->ports[STREAM_DIR_OUT].fmt;
+		lErr = ioctl(pComponent->hDev, VIDIOC_S_FMT, &format);
 	    if (lErr)
 	    {
 	        printf("%s() VIDIOC_S_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
 	        ret_err = 18;
 	        goto FUNCTION_STOP;
 	    }
-    }
-    else
-    {
-        for (i = 0; i < ZPU_NUM_FORMATS_YUV; i++)
-        {
-            if (format.fmt.pix_mp.pixelformat == formats_yuv[i])
-            {
-                pComponent->ports[STREAM_DIR_OUT].fmt = i;
-                break;
-            }
-        }
-    }
+	 }
 
     // get cropping information
     pComponent->crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
