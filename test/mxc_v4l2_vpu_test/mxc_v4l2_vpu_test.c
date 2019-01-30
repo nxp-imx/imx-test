@@ -26,7 +26,7 @@
 #define VERSION_MINOR		0
 
 #define VPU_ENCODER_DRIVER	"vpu encoder"
-#define MAX_NODE_COUNT		16
+#define MAX_NODE_COUNT		32
 #define DEFAULT_FMT		V4L2_PIX_FMT_NV12
 #define DEFAULT_WIDTH		1920
 #define DEFAULT_HEIGHT		1080
