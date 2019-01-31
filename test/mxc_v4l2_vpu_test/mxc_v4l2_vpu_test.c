@@ -682,8 +682,10 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 	encoder->output.width = src->width;
 	encoder->output.height = src->height;
 	encoder->output.bytesperline = src->width;
-	if (src->type == TEST_TYPE_CAMERA)
+	if (src->type == TEST_TYPE_CAMERA) {
 		encoder->output.memory = V4L2_MEMORY_USERPTR;
+		encoder->node.frame_skip = true;
+	}
 
 	return RET_OK;
 }
@@ -890,8 +892,6 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->capture.memory = V4L2_MEMORY_MMAP;
 	encoder->output.pixelformat = V4L2_PIX_FMT_NV12;
 	encoder->capture.pixelformat = encoder->node.pixelformat;
-
-	encoder->node.frame_skip = true;
 
 	return &encoder->node;
 }
