@@ -121,7 +121,9 @@ static bool quitflag;
 
 static bool g_cap_hfilp;
 static bool g_cap_vfilp;
+static bool g_performance_test = false;
 static int32_t g_cap_alpha;
+
 /*
  *
  */
@@ -314,6 +316,8 @@ static int parse_cmdline(int argc, char *argv[])
 			g_cap_vfilp = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-alpha") == 0) {
 			g_cap_alpha = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-p") == 0) {
+			g_performance_test = true;
 		} else if (strcmp(argv[i], "-h") == 0) {
 			print_usage(argv[0]);
 			return -1;
@@ -408,6 +412,17 @@ static void calculate_frames_of_infile(FILE *f, struct mxc_m2m_device *m2m_dev)
 
 	m2m_dev->frames = frames;
 	v4l2_info("Input file size is = %lu, frames is = %d\n", filesize, frames);
+}
+
+static int get_fps(struct timeval *start, struct timeval *end, int frame)
+{
+	int fps;
+	int time;
+
+	time = (int)((end->tv_sec - start->tv_sec) * 1000000 + (end->tv_usec - start->tv_usec));
+	fps = (frame * 1000000) / time;
+
+	return fps;
 }
 
 static int mxc_m2m_open(struct mxc_m2m_device *m2m_dev)
@@ -1096,9 +1111,14 @@ static void mxc_m2m_free_buffer(struct mxc_m2m_device *m2m_dev)
 
 static int start_convert(struct mxc_m2m_device *m2m_dev)
 {
-	int count = 0;
+	int count = 0, fps;
 	int ret;
+	struct timeval start, end;
 
+	memset(&start, 0, sizeof(start));
+	memset(&end, 0, sizeof(end));
+
+	gettimeofday(&start, NULL);
 	do {
 		ret = mxc_m2m_dequeue_out_buffer(m2m_dev);
 		if (ret < 0)
@@ -1107,20 +1127,31 @@ static int start_convert(struct mxc_m2m_device *m2m_dev)
 		if (ret < 0)
 			return -1;
 
-		ret = save_to_file(m2m_dev);
-		if (ret < 0)
-			return ret;
+		if (!g_performance_test) {
+			ret = save_to_file(m2m_dev);
+			if (ret < 0)
+				return ret;
+		}
 
 		if (++count < m2m_dev->frames) {
-			fill_in_buffer(m2m_dev->in_cur_buf_id, m2m_dev);
+			if (!g_performance_test)
+				fill_in_buffer(m2m_dev->in_cur_buf_id, m2m_dev);
 			mxc_m2m_queue_out_buffer(m2m_dev->out_cur_buf_id, m2m_dev);
 			mxc_m2m_queue_in_buffer(m2m_dev->in_cur_buf_id, m2m_dev);
 		}
 
 	} while (count < m2m_dev->frames && !quitflag);
 
+	gettimeofday(&end, NULL);
+
+	if (g_performance_test) {
+		fps = get_fps(&start, &end, m2m_dev->frames);
+		printf(">> fps=%d(fps) <<\n", fps);
+	}
+
 	return 0;
 }
+
 
 int main(int argc, char *argv[])
 {
