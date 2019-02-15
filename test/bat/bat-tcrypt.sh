@@ -16,6 +16,8 @@ fail_unexpected=0
 while read -r line; do
     if [[ $line == *" Failed to load transform "* ]]; then
         fail_tolerated=1
+    elif [[ $line == *" failed to allocate transform "* ]]; then
+        fail_tolerated=1
     elif [[ $line == *" Failed to load tfm "* ]]; then
         fail_tolerated=1
     elif [[ $line == *"alg: No test for "* ]]; then
