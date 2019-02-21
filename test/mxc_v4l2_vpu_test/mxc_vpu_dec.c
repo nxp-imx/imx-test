@@ -1084,7 +1084,7 @@ STREAMOUT_START:
 			{
 				if(!frame_done)
 					frame_done = 1;
-				continue;
+				break;
 			}
 			else
 			{
@@ -1522,17 +1522,20 @@ FUNC_END:
 	pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
 
 	printf("stream in: qbuf_times= %d\n",qbuf_times);
-	v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
-	lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
-	if (lErr)
+	if (!g_unCtrlCReceived && !frame_done)
 	{
-		printf("warning: %s() VIDIOC_DECODER_CMD has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
-		g_unCtrlCReceived = 1;
-		ret_err = 34;
-	}
-    else
-	{
-		printf("%s() sent cmd: V4L2_DEC_CMD_STOP\n", __FUNCTION__);
+		v4l2cmd.cmd = V4L2_DEC_CMD_STOP;
+		lErr = ioctl(pComponent->hDev, VIDIOC_DECODER_CMD, &v4l2cmd);
+		if (lErr)
+		{
+			printf("warning: %s() VIDIOC_DECODER_CMD has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
+			g_unCtrlCReceived = 1;
+			ret_err = 34;
+		}
+	    else
+		{
+			printf("%s() sent cmd: V4L2_DEC_CMD_STOP\n", __FUNCTION__);
+		}
 	}
 	pComponent->ports[STREAM_DIR_IN].done_flag = 1;
 	while(!pComponent->ports[STREAM_DIR_OUT].done_flag && !g_unCtrlCReceived)
@@ -1617,7 +1620,7 @@ int main(int argc,
     struct v4l2_event           evt;
 
     int                         r;
-    struct pollfd               p_fds;
+	struct pollfd               p_fds;
 	int                         wait_pollpri_times;
 	int                         int_tmp;
 	signal(SIGINT, SigIntHanlder);
@@ -2069,7 +2072,7 @@ Or reference the usage manual.\n\
 
 	// wait for 10 msec
 	usleep(10000);
-   
+
     // wait for resoltion change
     p_fds.fd = pComponent->hDev;
     p_fds.events = POLLPRI;
@@ -2077,7 +2080,7 @@ Or reference the usage manual.\n\
 	wait_pollpri_times = 0;
 	while (!g_unCtrlCReceived)
     {
-        r = poll(&p_fds, 1, 2000);
+		r = poll(&p_fds, 1, 2000);
 		printf("%s() r %d\n", __FUNCTION__, r);
         if (-1 == r) 
         {
@@ -2086,30 +2089,30 @@ Or reference the usage manual.\n\
 			ret_err = 14;
 			goto FUNCTION_STOP;
         }
-        if (0 == r) 
+        else if (0 == r) 
         {
             fprintf(stderr, "%s() select timeout\n", __FUNCTION__);
-			if(++wait_pollpri_times >= 3)
+			wait_pollpri_times++;
+	    }
+        else
+        {
+            if (p_fds.revents & POLLPRI)
 			{
-				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
-				g_unCtrlCReceived = 1;
-				ret_err = 15;
-				goto FUNCTION_STOP;
+				break;
 			}
 			else
 			{
-				continue;
+				sleep(1);
+				wait_pollpri_times++;
 			}
         }
-        if (r > 0)
-        {
-            break;
-        }
-    }
-
-    if (g_unCtrlCReceived)
-    {
-        goto FUNCTION_STOP;
+		if (wait_pollpri_times >= 3)
+		{
+			printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
+			g_unCtrlCReceived = 1;
+			ret_err = 15;
+			goto FUNCTION_STOP;
+		}
     }
 
 #ifdef DQEVENT
@@ -2137,7 +2140,6 @@ Or reference the usage manual.\n\
         }
     }
 #endif
-
     // get format on v4l2 capture (YUV output)
     memset(&format, 0, sizeof(struct v4l2_format));
     format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -2304,7 +2306,6 @@ Or reference the usage manual.\n\
 		ret_err = 25;
 		goto FUNCTION_STOP;
 	}
-
 	// wait for 10 msec
 	usleep(10000);
 
