@@ -41,7 +41,7 @@ echo "Sleep $BUSFREQ_SLEEP_TIME seconds waiting for busfreq" >&2
 $batdir/bat_netpause.sh $BUSFREQ_SLEEP_TIME
 echo "Sleep waiting for busfreq over" >&2
 
-busfreq=$(dmesg | grep "Bus freq set to" || true)
+busfreq=$(dmesg | grep "\(Bus\|ddrc\) freq set to" || true)
 busfreq_lines=$(echo "$busfreq" | wc -l)
 
 echo $save_printk > /proc/sys/kernel/printk
