@@ -443,22 +443,22 @@ if [[ -z `which chroot 2>/dev/null` ]]; then
     export PATH="$PATH:/usr/sbin"
 fi
 
-machine=$(cat /sys/devices/soc0/machine)
-soc_id=$(cat /sys/devices/soc0/soc_id)
+machine=$(cat /sys/devices/soc0/machine||true)
+soc_id=$(cat /sys/devices/soc0/soc_id||true)
 test_script=$(basename $0)
 
-if [[ "${todo[$machine]}" =~ "$test_script" ]]; then
+if [[ -n $machine && "${todo[$machine]}" =~ "$test_script" ]]; then
     echo "Skipping $test_script for ${machine}, not yet implemented"
     exit $BAT_EXITCODE_TODO
-elif [[ "${todo[$soc_id]}" =~ "$test_script" ]]; then
+elif [[ -n $soc_id && "${todo[$soc_id]}" =~ "$test_script" ]]; then
     echo "Skipping $test_script for ${soc_id}, not yet implemented"
     exit $BAT_EXITCODE_TODO
 fi
 
-if [[ "${skip[$machine]}" =~ "$test_script" ]]; then
+if [[ -n $machine && "${skip[$machine]}" =~ "$test_script" ]]; then
     echo "Skipping $test_script for ${machine}"
     exit $BAT_EXITCODE_SKIP
-elif [[ "${skip[$soc_id]}" =~ "$test_script" ]]; then
+elif [[ -n $soc_id && "${skip[$soc_id]}" =~ "$test_script" ]]; then
     echo "Skipping $test_script for ${soc_id}"
     exit $BAT_EXITCODE_SKIP
 fi
