@@ -43,8 +43,7 @@ BAT_UNBOUND_IMX_USB=
 bat_unbind_imx_usb()
 {
     local item
-    for item in /sys/bus/platform/drivers/imx_usb/*\.usb; do
-        item=$(basename $item)
+    for item in $(ls /sys/bus/platform/drivers/imx_usb/|grep \.usb$); do
         echo "$item" > /sys/bus/platform/drivers/imx_usb/unbind
         BAT_UNBOUND_IMX_USB+=" $item"
     done
