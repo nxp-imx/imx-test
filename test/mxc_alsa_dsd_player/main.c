@@ -434,7 +434,7 @@ int main(int argc, char *argv[])
 	}
 
 	for (i = 0, n = sizeof(parsers)/sizeof(parsers[0]); i < n; i++) {
-		if (strcmp(name + len - 4, parsers[i].ext) != 0)
+		if (strncmp(name + len - 4, parsers[i].ext, 4) != 0)
 			continue;
 		parser = parsers[i];
 		break;
