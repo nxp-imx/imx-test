@@ -41,6 +41,7 @@ extern "C"{
 #define TFAIL		-1
 #define TPASS 		0
 #define PATH_SIZE	1024
+#define DEV_PHYS_SIZE	128
 
 static const char *INPUT_DIR_BASE = "/sys/devices/virtual/input/";
 static const char *event_name = "event";
@@ -78,22 +79,23 @@ int main(int argc, char **argv)
 {
 	FILE *fd_mode, *fd_lux, *fd_int_ht_lux, *fd_int_lt_lux;
 	FILE *fd_phys;
+	int flen, j, busid;
 	int fd_event;
 	int lux, int_ht_lux, int_lt_lux;
 	int ret, dev_found = 0;
 	char buf[6];
 	char event_index = 0;
-	char fd_mode_dev[] = "/sys/class/i2c-dev/i2c-2/device/2-0044/mode";
-	char fd_lux_dev[] = "/sys/class/i2c-dev/i2c-2/device/2-0044/lux";
-	char fd_int_ht_lux_dev[] = "/sys/class/i2c-dev/i2c-2/device/2-0044/int_ht_lux";
-	char fd_int_lt_lux_dev[] = "/sys/class/i2c-dev/i2c-2/device/2-0044/int_lt_lux";
+	char fd_mode_dev[PATH_SIZE];
+	char fd_lux_dev[PATH_SIZE];
+	char fd_int_ht_lux_dev[PATH_SIZE];
+	char fd_int_lt_lux_dev[PATH_SIZE];
 	char fd_event_dev[] = "/dev/input/event?";
 	struct pollfd fds;
 	struct dirent *dent;
 	DIR *inputdir = NULL;
 	char *path;
 	char temp_path[50] = {0};
-	char phys[6];
+	char phys[DEV_PHYS_SIZE];
 	struct input_event event;
 
 	print_name(argv);
@@ -119,15 +121,26 @@ int main(int argc, char **argv)
 		if ((fd_phys = fopen(path, "r")) == NULL)
 			continue;
 
-		ret = fread(phys, 1, 6, fd_phys);
+		ret = fread(phys, 1, DEV_PHYS_SIZE, fd_phys);
 		if (ret <= 0) {
 			fclose(fd_phys);
 			continue;
+		} else {
+			flen = 0;
+			while (flen < DEV_PHYS_SIZE) {
+				if (phys[flen] == 0 || phys[flen] == 10)
+					break;
+				flen++;
+			}
+			if (flen > DEV_PHYS_SIZE) {
+				printf("read phys file wrong\n");
+				return TFAIL;
+			}
 		}
 
 		fclose(fd_phys);
 
-		ret = strncmp("0044", &phys[2], 4);
+		ret = strncmp("0044", &phys[flen - 4], 4);
 		if (ret == 0) {
 			if (get_event_num(temp_path, &event_index)) {
 				printf("cann't find the event index\n");
@@ -147,11 +160,25 @@ int main(int argc, char **argv)
 		return TFAIL;
 	}
 
-	/* phys[0] is i2c num */
-	fd_mode_dev[23] = fd_mode_dev[32] = phys[0];
-	fd_lux_dev[23] = fd_lux_dev[32] = phys[0];
-	fd_int_ht_lux_dev[23] = fd_int_ht_lux_dev[32] = phys[0];
-	fd_int_lt_lux_dev[23] = fd_int_lt_lux_dev[32] = phys[0];
+	/* before the '-' is i2c num */
+	j = 0;
+	busid = 0;
+	while (phys[j] != '-') {
+		busid = busid * 10 + phys[j] - '0';
+		j++;
+	}
+	sprintf (fd_mode_dev,
+		 "/sys/class/i2c-dev/i2c-%d/device/%d-0044/mode",
+		 busid, busid);
+	sprintf (fd_lux_dev,
+		 "/sys/class/i2c-dev/i2c-%d/device/%d-0044/lux",
+		 busid, busid);
+	sprintf (fd_int_ht_lux_dev,
+		 "/sys/class/i2c-dev/i2c-%d/device/%d-0044/int_ht_lux",
+		 busid, busid);
+	sprintf (fd_int_lt_lux_dev,
+		 "/sys/class/i2c-dev/i2c-%d/device/%d-0044/int_lt_lux",
+		 busid, busid);
 
 	/* dent->d_name[5] is event num */
 	fd_event_dev[16] = event_index;
