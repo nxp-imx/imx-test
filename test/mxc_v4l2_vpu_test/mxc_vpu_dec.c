@@ -1198,7 +1198,6 @@ FUNC_END:
 	{
 		printf("warning: %s() VIDIOC_STREAMOFF has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
-		ret_err = 44;
 	}
     else
 	{
@@ -1550,7 +1549,6 @@ FUNC_END:
 	{
 		printf("warning: %s() VIDIOC_STREAMOFF has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
-		ret_err = 35;
 	}
     else
 	{
@@ -2078,42 +2076,49 @@ Or reference the usage manual.\n\
     p_fds.events = POLLPRI;
 
 	wait_pollpri_times = 0;
-	while (!g_unCtrlCReceived)
-    {
-		r = poll(&p_fds, 1, 2000);
-		printf("%s() r %d\n", __FUNCTION__, r);
-        if (-1 == r) 
-        {
-            fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
-			g_unCtrlCReceived = 1;
-			ret_err = 14;
-			goto FUNCTION_STOP;
-        }
-        else if (0 == r) 
-        {
-            fprintf(stderr, "%s() select timeout\n", __FUNCTION__);
-			wait_pollpri_times++;
-	    }
-        else
-        {
-            if (p_fds.revents & POLLPRI)
-			{
-				break;
-			}
-			else
-			{
-				sleep(1);
+	if (!g_unCtrlCReceived)
+	{
+		while (!g_unCtrlCReceived)
+    	{
+			r = poll(&p_fds, 1, 2000);
+			printf("%s() r %d\n", __FUNCTION__, r);
+    	    if (-1 == r) 
+    	    {
+    	        fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+				g_unCtrlCReceived = 1;
+				ret_err = 14;
+				goto FUNCTION_STOP;
+    	    }
+    	    else if (0 == r) 
+    	    {
+    	        fprintf(stderr, "%s() select timeout\n", __FUNCTION__);
 				wait_pollpri_times++;
+		    }
+    	    else
+    	    {
+    	        if (p_fds.revents & POLLPRI)
+				{
+					break;
+				}
+				else
+				{
+					sleep(1);
+					wait_pollpri_times++;
+				}
+    	    }
+			if (wait_pollpri_times >= 3)
+			{
+				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
+				g_unCtrlCReceived = 1;
+				ret_err = 15;
+				goto FUNCTION_STOP;
 			}
-        }
-		if (wait_pollpri_times >= 3)
-		{
-			printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
-			g_unCtrlCReceived = 1;
-			ret_err = 15;
-			goto FUNCTION_STOP;
-		}
-    }
+    	}
+	}
+	else
+	{
+		goto FUNCTION_STOP;
+	}
 
 #ifdef DQEVENT
     memset(&evt, 0, sizeof(struct v4l2_event));
