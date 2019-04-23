@@ -1332,6 +1332,7 @@ static int dqueue_buffer(int buf_id, struct video_channel *video_ch)
 	struct v4l2_buffer buf;
 	struct v4l2_plane *planes;
 	int fd = video_ch->v4l_fd;
+	static int dot_count = 0;
 	int ret;
 
 	planes = malloc(g_num_planes * sizeof(*planes));
@@ -1356,8 +1357,12 @@ static int dqueue_buffer(int buf_id, struct video_channel *video_ch)
 	video_ch->cur_buf_id = buf.index;
 
 	setbuf(stdout, NULL);
-	printf(" %c", (video_ch->frame_num % 16 == 0 ||
-			  video_ch->frame_num == g_num_frames) ? '\n' : '.' );
+	printf(" %c",
+	       (dot_count % 16 == 0 || video_ch->frame_num == g_num_frames) ?
+	       '\n' : '.' );
+
+	if (++dot_count >= 16)
+		dot_count = 0;
 	free(planes);
 	return 0;
 
