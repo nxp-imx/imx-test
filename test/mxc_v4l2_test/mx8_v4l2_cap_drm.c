@@ -1087,8 +1087,16 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 		adjust_width_height_for_one_sensor(&video_ch[ch_id]);
 
 	if (g_cap_ow && g_cap_oh) {
-		video_ch[ch_id].out_width  = g_cap_ow;
-		video_ch[ch_id].out_height = g_cap_oh;
+
+		if (g_cam_num > 1) {
+			if (g_cap_ow < video_ch[ch_id].out_width)
+				video_ch[ch_id].out_width  = g_cap_ow;
+			if (g_cap_oh < video_ch[ch_id].out_height)
+				video_ch[ch_id].out_height = g_cap_oh;
+		} else {
+			video_ch[ch_id].out_width  = g_cap_ow;
+			video_ch[ch_id].out_height = g_cap_oh;
+		}
 	}
 
 	memset(&fmt, 0, sizeof(fmt));
