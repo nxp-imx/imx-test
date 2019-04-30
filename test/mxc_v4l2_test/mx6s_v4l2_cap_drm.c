@@ -452,7 +452,7 @@ static void print_pixelformat(char *prefix, int val)
 					(val >> 24) & 0xff);
 }
 
-void vl42_device_cap_list(void)
+void v4l2_device_cap_list(void)
 {
 	struct v4l2_capability cap;
 	struct v4l2_fmtdesc fmtdesc;
@@ -868,7 +868,7 @@ int process_cmdline(int argc, char **argv)
 			g_mem_type = V4L2_MEMORY_USERPTR;
 #endif
 		} else if (strcmp(argv[i], "-l") == 0) {
-			vl42_device_cap_list();
+			v4l2_device_cap_list();
 			return -1;
 		} else {
 			print_help();
