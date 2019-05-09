@@ -2106,7 +2106,7 @@ Or reference the usage manual.\n\
 					wait_pollpri_times++;
 				}
     	    }
-			if (wait_pollpri_times >= 3)
+			if (wait_pollpri_times >= 10)
 			{
 				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
 				g_unCtrlCReceived = 1;
@@ -2115,7 +2115,8 @@ Or reference the usage manual.\n\
 			}
     	}
 	}
-	else
+
+	if (g_unCtrlCReceived)
 	{
 		goto FUNCTION_STOP;
 	}
