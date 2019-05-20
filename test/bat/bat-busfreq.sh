@@ -35,6 +35,10 @@ if [[ -f /sys/class/graphics/fb0/blank ]]; then
     echo 1 > /sys/class/graphics/fb0/blank
 fi
 
+old_cpufreq_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)
+echo "Setting governor to powersave"
+cpufreq-set -g powersave
+
 BUSFREQ_SLEEP_TIME=10
 
 echo "Sleep $BUSFREQ_SLEEP_TIME seconds waiting for busfreq" >&2
@@ -43,6 +47,8 @@ echo "Sleep waiting for busfreq over" >&2
 
 busfreq=$(dmesg | grep "\(Bus freq\|ddrc freq\|Busfreq OPTEE\) set to" || true)
 busfreq_lines=$(echo "$busfreq" | wc -l)
+
+cpufreq-set -g $old_cpufreq_gov
 
 echo $save_printk > /proc/sys/kernel/printk
 if [[ -f /sys/class/graphics/fb0/blank ]]; then
