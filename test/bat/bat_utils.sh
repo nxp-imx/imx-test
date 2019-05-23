@@ -77,7 +77,7 @@ bat_reexec_ramroot() {
         mkdir -p $RAMROOT
         mount -t tmpfs none $RAMROOT
         mkdir -p $RAMROOT/bin $RAMROOT/lib
-        for fs in proc sys dev; do
+        for fs in proc sys dev sys/kernel/debug; do
             mkdir -p "$RAMROOT/$fs"
             mount -o bind "/$fs" "$RAMROOT/$fs"
         done
