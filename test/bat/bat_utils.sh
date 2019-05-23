@@ -299,6 +299,27 @@ bat_lowbus_cleanup()
     fi
 }
 
+# Wait for busfreq to enter low mode by polling a relevant clk rate
+bat_wait_busfreq_low()
+{
+    local clk_name clk_rate tgt_rate=24000000
+
+    clk_name=$(bat_find_clk ahb ahb_root_clk ahb_div ahb_src)
+
+    for (( iter = 0; iter < 10; ++iter )); do
+        bat_read_clk_rate clk_rate $clk_name
+        if [[ $clk_rate -le $tgt_rate ]]; then
+            echo "wait done: clk $clk_name rate $clk_rate less than $tgt_rate"
+            return 0
+        else
+            echo "waiting... clk $clk_name rate $clk_rate less than $tgt_rate"
+        fi
+        sleep 1
+    done
+    echo "timed out waiting to enter low busfreq"
+    return 1
+}
+
 pr_debug()
 {
     echo "$@" >&2
@@ -515,6 +536,45 @@ bat_read_temp() {
 bat_get_clk_rate()
 {
     cat /sys/kernel/debug/clk/$1/clk_rate
+}
+
+bat_read_clk_rate()
+{
+    read $1 < /sys/kernel/debug/clk/$2/clk_rate
+}
+
+bat_has_clk()
+{
+    [[ -d /sys/kernel/debug/clk/$1 ]]
+}
+
+# Return the first clk in the list which is available
+#
+# Clock with similar function have different names between chips or
+# kernels so find the right one by checking all in a list.
+bat_find_clk()
+{
+    local clk
+    for clk; do
+        if bat_has_clk $clk; then
+            echo -n "$clk"
+            return 0
+        fi
+    done
+    echo "None of the following clks found: $@" >&2
+    return 1
+}
+
+bat_assert_clk_rate()
+{
+    local clk_name=$1 good_rate=$2 real_rate
+    bat_read_clk_rate real_rate $clk_name
+    if [[ $real_rate != $good_rate ]]; then
+        echo "fail clk $clk_name rate is $real_rate not $good_rate"
+        return 1
+    else
+        echo "pass clk $clk_name rate is $good_rate"
+    fi
 }
 
 if [[ -z `which ip 2>/dev/null` ]]; then
