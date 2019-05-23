@@ -89,6 +89,8 @@ bat_reexec_ramroot() {
         {
             which bash
             which busybox
+            which cpufreq-info
+            which cpufreq-set
             which dmesg
             which ip
             which ps
