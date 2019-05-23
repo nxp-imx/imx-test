@@ -393,6 +393,11 @@ bat_kconfig_enabled()
     [[ -n `zcat /proc/config.gz | grep "^$1=\(y\|m\)$"` ]]
 }
 
+bat_has_busfreq()
+{
+    [[ -d /proc/device-tree/soc/busfreq || -d /proc/device-tree/busfreq ]]
+}
+
 # According to the temp driver, it may require up to ~17us to complete
 # a measurement. The driver waits for about 50 us on most boards and
 # 20 ms on imx 7D. For this reason, reading temperature can sometimes

@@ -5,11 +5,6 @@ set -e
 batdir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 . $batdir/bat_utils.sh
 
-bat_has_busfreq()
-{
-    [[ -d /proc/device-tree/soc/busfreq || -d /proc/device-tree/busfreq ]]
-}
-
 if ! bat_has_busfreq; then
     echo "Missing busfreq node in device-tree, seems not implemented"
     exit "$BAT_EXITCODE_SKIP"
