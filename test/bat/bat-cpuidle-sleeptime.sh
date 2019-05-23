@@ -16,12 +16,8 @@ if bat_running_with_nfsroot; then
     bat_reexec_ramroot "$@"
 fi
 
-# Enter low busfreq:
-save_printk=$(cat /proc/sys/kernel/printk)
-echo 8 > /proc/sys/kernel/printk
-if [[ -f /sys/class/graphics/fb0/blank ]]; then
-    echo 1 > /sys/class/graphics/fb0/blank
-fi
+# Prepare to enter low busfreq
+bat_lowbus_prepare
 bat_net_down
 
 TEST_CPU_INDEX=0
@@ -62,10 +58,7 @@ delta_time=$((end_time - start_time))
 
 # Revert low busfreq
 bat_net_restore
-if [[ -f /sys/class/graphics/fb0/blank ]]; then
-    echo 1 > /sys/class/graphics/fb0/blank
-fi
-echo $save_printk > /proc/sys/kernel/printk
+bat_lowbus_cleanup
 
 if [[ $delta_time > 15 ]]; then
     echo "Sleeping 10 seconds took $delta_time sec instead"
