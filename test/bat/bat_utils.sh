@@ -139,7 +139,7 @@ bat_reexec_ramroot() {
         fi
 
         set +e
-        chroot "$RAMROOT" /bin/bash $xflag "/bin/`basename $0`" $@
+        chroot "$RAMROOT" /bin/bash $xflag "/bin/`basename $0`" $@ &> /dev/console
         chroot_exec_status=$?
         pr_debug "cleaning up ramroot"
         umount -R "$RAMROOT"

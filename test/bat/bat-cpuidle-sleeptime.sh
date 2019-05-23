@@ -13,7 +13,7 @@ if ! [ -d /sys/devices/system/cpu/cpu0/cpuidle/state0 ]; then
 fi
 
 if bat_running_with_nfsroot; then
-    bat_reexec_ramroot "$@" &> /dev/console
+    bat_reexec_ramroot "$@"
 fi
 
 # Enter low busfreq:
