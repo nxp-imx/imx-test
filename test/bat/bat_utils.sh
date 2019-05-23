@@ -256,6 +256,49 @@ bat_net_restore()
     fi
 }
 
+# Prepare for low busfreq other then network down
+bat_lowbus_prepare()
+{
+    # blank fb (state not saved)
+    if [[ -f /sys/class/graphics/fb0/blank ]]; then
+        echo 1 > /sys/class/graphics/fb0/blank
+    fi
+
+    # turn on debug prints in dmesg
+    BAT_SAVED_PRINTK=$(cat /proc/sys/kernel/printk)
+    echo 8 > /proc/sys/kernel/printk
+
+    # set cpufreq governor to powersave
+    if [[ -d /sys/devices/system/cpu/cpu0/cpufreq ]]; then
+        BAT_SAVED_CPUFREQ_GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)
+        cpufreq-set -g powersave
+    fi
+
+    bat_unbind_device_glob "/sys/bus/sdio/drivers/brcmfmac/mmc*"
+}
+
+# Undo bat_lowbus_prepare and clean saved config
+#
+# No effect if called multiple times or without bat_lowbus_prepare
+bat_lowbus_cleanup()
+{
+    bat_unbind_restore_all
+
+    if [[ -n $BAT_SAVED_CPUFREQ_GOV ]]; then
+        cpufreq-set -g $BAT_SAVED_CPUFREQ_GOV
+        unset BAT_SAVED_CPUFREQ_GOV
+    fi
+
+    if [[ -n $BAT_SAVED_PRINTK= ]]; then
+        echo $BAT_SAVED_PRINTK > /proc/sys/kernel/printk
+        BAT_SAVED_PRINTK=
+    fi
+
+    if [[ -f /sys/class/graphics/fb0/blank ]]; then
+        echo 0 > /sys/class/graphics/fb0/blank
+    fi
+}
+
 pr_debug()
 {
     echo "$@" >&2

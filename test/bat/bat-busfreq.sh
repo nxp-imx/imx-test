@@ -10,29 +10,10 @@ if ! bat_has_busfreq; then
     exit "$BAT_EXITCODE_SKIP"
 fi
 
-if rmmod mx6s_capture; then
-    mod_mx6s_capture=1
-fi
-
-if rmmod mxc_vadc; then
-    mod_mxc_vadc=1
-fi
-
-save_printk=$(cat /proc/sys/kernel/printk)
-
-#clear dmesg, we don't care about old messages
+# clear dmesg, we don't care about old messages
 dmesg -C
-#turn on debug prints in dmesg
-echo 8 > /proc/sys/kernel/printk
 
-# blank fb
-if [[ -f /sys/class/graphics/fb0/blank ]]; then
-    echo 1 > /sys/class/graphics/fb0/blank
-fi
-
-old_cpufreq_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)
-echo "Setting governor to powersave"
-cpufreq-set -g powersave
+bat_lowbus_prepare
 
 BUSFREQ_SLEEP_TIME=10
 
@@ -43,20 +24,7 @@ echo "Sleep waiting for busfreq over" >&2
 busfreq=$(dmesg | grep "\(Bus freq\|ddrc freq\|Busfreq OPTEE\) set to" || true)
 busfreq_lines=$(echo "$busfreq" | wc -l)
 
-cpufreq-set -g $old_cpufreq_gov
-
-echo $save_printk > /proc/sys/kernel/printk
-if [[ -f /sys/class/graphics/fb0/blank ]]; then
-    echo $save_fb_blank > /sys/class/graphics/fb0/blank
-fi
-
-if ! [ -z "$mod_mxc_vadc" ]; then
-    modprobe mxc_vadc
-fi
-
-if ! [ -z "$mod_mx6s_capture" ]; then
-    modprobe mx6s_capture
-fi
+bat_lowbus_cleanup
 
 echo -e "Busfreq messages:\n$busfreq"
 
