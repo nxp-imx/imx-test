@@ -3,6 +3,11 @@
 set -e
 . $(dirname $(readlink -f "${BASH_SOURCE[0]}"))/bat_utils.sh
 
+if ! bat_kconfig_enabled CONFIG_NVMEM_IMX_OCOTP; then
+    echo "Missing CONFIG_NVMEM_IMX_OCOTP" &>2
+    exit $BAT_EXITCODE_SKIP
+fi
+
 IMX_NVMEM_FILE=/sys/bus/nvmem/devices/imx-ocotp0/nvmem
 
 # Check existence:
