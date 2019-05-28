@@ -182,49 +182,62 @@ bat_net_dev_restore_ipaddr()
     done
 }
 
+# Set network down and save config
 bat_net_down()
 {
-    bat_eth0_status=$(ip link show up | grep eth0 | wc -l)
-    bat_eth1_status=$(ip link show up | grep eth1 | wc -l)
+    bat_eth0_status=$(ip link show up | grep eth0 || true)
+    bat_eth1_status=$(ip link show up | grep eth1 || true)
     bat_eth0_saved_route=$(ip route show | grep '^default' | grep eth0 || true)
     bat_eth1_saved_route=$(ip route show | grep '^default' | grep eth1 || true)
     bat_eth0_saved_ipaddr=$(bat_net_dev_list_ipaddr eth0)
     bat_eth1_saved_ipaddr=$(bat_net_dev_list_ipaddr eth1)
 
-    if [ $bat_eth0_status -gt 0 ]; then
+    if [[ -n $bat_eth0_status ]]; then
         ip link set eth0 down
     fi
-    if [ $bat_eth1_status -gt 0 ]; then
+    if [[ -n $bat_eth1_status ]]; then
         ip link set eth1 down
     fi
 
     bat_unbind_imx_usb
 }
 
+# Restore after bat_net_down and clean config
+# No effect if called multiple times or without bat_net_down
 bat_net_restore()
 {
     bat_rebind_imx_usb
 
-    if [ $bat_eth0_status -gt 0 ]; then
+    if [[ -n $bat_eth0_status ]]; then
         bat_net_dev_wait_registered eth0
         ip link set eth0 up
+        unset bat_eth0_status
     fi
-    bat_net_dev_restore_ipaddr eth0 "$bat_eth0_saved_ipaddr"
+    if [[ -n $bat_eth0_saved_ipaddr ]]; then
+        bat_net_dev_restore_ipaddr eth0 "$bat_eth0_saved_ipaddr"
+        unset bat_eth0_saved_ipaddr
+    fi
     if [[ -n $bat_eth0_saved_route ]]; then
         if ! ip route show | grep '^default' | grep eth0; then
             ip route add $bat_eth0_saved_route
         fi
+        unset bat_eth0_saved_route
     fi
 
-    if [ $bat_eth1_status -gt 0 ]; then
+    if [[ -n $bat_eth1_status ]]; then
         bat_net_dev_wait_registered eth1
         ip link set eth1 up
+        unset bat_eth1_status
     fi
-    bat_net_dev_restore_ipaddr eth1 "$bat_eth1_saved_ipaddr"
+    if [[ -n $bat_eth1_saved_ipaddr ]]; then
+        bat_net_dev_restore_ipaddr eth1 "$bat_eth1_saved_ipaddr"
+        unset bat_eth1_saved_ipaddr
+    fi
     if [[ -n $bat_eth1_saved_route ]]; then
         if ! ip route show | grep '^default' | grep eth1; then
             ip route add $bat_eth1_saved_route
         fi
+        unset bat_eth1_saved_route
     fi
 }
 
