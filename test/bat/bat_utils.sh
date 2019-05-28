@@ -38,23 +38,38 @@ bat_skip_with_nfsroot() {
     fi
 }
 
-BAT_UNBOUND_IMX_USB=
-
-bat_unbind_imx_usb()
+# Temporarily unbind one or more devices until bat_unbind_restore_all
+bat_unbind_device()
 {
-    local item
-    for item in $(ls /sys/bus/platform/drivers/imx_usb/|grep \.usb$); do
-        echo "$item" > /sys/bus/platform/drivers/imx_usb/unbind
-        BAT_UNBOUND_IMX_USB+=" $item"
+    local item dev drv
+    for item; do
+        pr_debug "unbind $item"
+
+        dev=$(basename "$item")
+        drv=$(readlink -f "$item/driver")
+        echo $dev > $drv/unbind
+
+        # Prepend so that rebinding is done in order
+        BAT_UNBIND_RESTORE=("$drv/$dev" "${BAT_UNBIND_RESTORE[@]}")
     done
 }
 
-bat_rebind_imx_usb()
+bat_unbind_device_glob()
 {
-    for item in $BAT_UNBOUND_IMX_USB; do
-        echo "$item" > /sys/bus/platform/drivers/imx_usb/bind
+    bat_unbind_device $(ls -d $@ 2>/dev/null)
+}
+
+bat_unbind_restore_all()
+{
+    local item dev drv
+    for item in "${BAT_UNBIND_RESTORE[@]}"; do
+        pr_debug "rebind $item"
+
+        dev=$(basename "$item")
+        drv=$(dirname "$item")
+        echo $dev > $drv/bind
     done
-    BAT_UNBOUND_IMX_USB=
+    unset BAT_UNBIND_RESTORE
 }
 
 # reexecute the current script ($0) inside a temporary tmpfs root
@@ -199,14 +214,14 @@ bat_net_down()
         ip link set eth1 down
     fi
 
-    bat_unbind_imx_usb
+    bat_unbind_device_glob "/sys/bus/platform/drivers/imx_usb/*.usb"
 }
 
 # Restore after bat_net_down and clean config
 # No effect if called multiple times or without bat_net_down
 bat_net_restore()
 {
-    bat_rebind_imx_usb
+    bat_unbind_restore_all
 
     if [[ -n $bat_eth0_status ]]; then
         bat_net_dev_wait_registered eth0
