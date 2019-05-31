@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <errno.h>
@@ -22,8 +23,8 @@
 #include <string.h>
 #include <malloc.h>
 #include <sys/time.h>
+#include <alsa/asoundlib.h>
 #include <linux/mxc_asrc.h>
-#include <pthread.h>
 
 #define DMA_BUF_SIZE 4096
 
@@ -43,9 +44,12 @@ struct audio_info_s {
 	int output_dma_size;
 	unsigned short frame_bits;
 	unsigned short blockalign;
-	enum asrc_word_width input_word_width;
-	enum asrc_word_width output_word_width;
+	snd_pcm_format_t input_format;
+	snd_pcm_format_t output_format;
 	int input_dma_buf_size;
+	int iec958;
+	int inclk;
+	int outclk;
 };
 struct audio_buf {
 	char *start;
@@ -56,10 +60,16 @@ struct audio_buf {
 
 #define WAVE_HEAD_SIZE 44 + 14 + 16
 static enum asrc_pair_index pair_index;
+uint64_t supported_in_format;
+uint64_t supported_out_format;
+
 static char header[WAVE_HEAD_SIZE];
 
 static int *input_buffer;
 static int *input_null;
+
+char *infile;
+char *outfile;
 
 static enum asrc_inclk inclk;
 static enum asrc_outclk outclk;
@@ -138,14 +148,20 @@ static const char * const out_clocks_name[] = {
 "OUTCLK_HDMI_TX_SAI0_TX_BCLK",	/* 30 */
 };
 
-void help_info(int ac, char *av[])
+void help_info(int ac, const char *av[])
 {
 	int i;
 
 	printf("\n\n**************************************************\n");
 	printf("* Test aplication for ASRC\n");
 	printf("* Options : \n\n");
-	printf("-to <output sample rate> <origin.wav> <converted.wav>\n");
+	printf("-o <output sample rate>");
+	printf("-x <origin.wav>");
+	printf("-z <converted.wav>\n");
+	printf("-e enable iec958");
+	printf("-p <input clock>");
+	printf("-q <output clock>");
+
 	printf("<input clock source> <output clock source>\n");
 	printf("input clock source types are:\n\n");
 
@@ -168,11 +184,65 @@ void help_info(int ac, char *av[])
 	printf("**************************************************\n\n");
 }
 
-int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
+int parse_arguments(int argc, const char *argv[], struct audio_info_s *info)
+{
+	/* Usage checking  */
+	if( argc < 3 )
+	{
+		help_info(argc, argv);
+		exit(1);
+	}
+
+	int c, option_index;
+	static const char short_options[] = "ho:x:z:ep:q:";
+	static const struct option long_options[] = {
+		{"help", 0, 0, 'h'},
+		{"outFreq", 1, 0, 'o'},
+		{"inputFile", 1, 0, 'x'},
+		{"outputFile", 1, 0, 'z'},
+		{"iec958", 0, 0, 'e'},
+		{"inclk", 1, 0, 'p'},
+		{"outclk", 1, 0, 'q'},
+		{0, 0, 0, 0}
+	};
+
+	while ((c = getopt_long(argc, (char * const*)argv, short_options, long_options, &option_index)) != -1) {
+		switch (c) {
+		case 'o':
+			info->output_sample_rate = strtol(optarg,NULL,0);
+			break;
+		case 'x':
+			infile = optarg;
+			break;
+		case 'z':
+			outfile = optarg;
+			break;
+		case 'e':
+			info->iec958 = 1;
+			break;
+		case 'p':
+			info->inclk = strtol(optarg, NULL, 0);
+			break;
+		case 'q':
+			info->outclk = strtol(optarg, NULL, 0);
+			break;
+		case 'h':
+			help_info(argc, argv);
+			exit(1);
+		default:
+			printf("Unknown Command  -%c \n", c);
+			exit(1);
+		}
+	}
+
+	return 0;
+}
+
+
+int request_asrc_channel(int fd_asrc, struct audio_info_s *info)
 {
 	int err = 0;
 	struct asrc_req req;
-	struct asrc_config config;
 
 	req.chn_num = info->channel;
 	if ((err = ioctl(fd_asrc, ASRC_REQ_PAIR, &req)) < 0) {
@@ -185,17 +255,30 @@ int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
 		printf("Pair B requested\n");
 	else if (req.index == 2)
 		printf("Pair C requested\n");
+	else if (req.index == 3)
+		printf("Pair D requested\n");
 
-	config.pair = req.index;
-	config.channel_num = req.chn_num;
+	supported_in_format = req.supported_in_format;
+	supported_out_format = req.supported_out_format;
+	pair_index = req.index;
+
+	return 0;
+}
+
+int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
+{
+	int err = 0;
+	struct asrc_config config;
+
+	config.pair = pair_index;
+	config.channel_num = info->channel;
 	config.dma_buffer_size = info->input_dma_buf_size;
 	config.input_sample_rate = info->sample_rate;
 	config.output_sample_rate = info->output_sample_rate;
-	config.input_word_width = info->input_word_width;
-	config.output_word_width = info->output_word_width;
+	config.input_format = info->input_format;
+	config.output_format = info->output_format;
 	config.inclk = inclk;
 	config.outclk = outclk;
-	pair_index = req.index;
 	if ((err = ioctl(fd_asrc, ASRC_CONFIG_PAIR, &config)) < 0)
 		return err;
 
@@ -204,7 +287,8 @@ int configure_asrc_channel(int fd_asrc, struct audio_info_s *info)
 
 int asrc_get_output_buffer_size(int input_buffer_size,
 				int input_sample_rate, int output_sample_rate,
-				int input_word_width, int output_word_width)
+				snd_pcm_format_t input_format,
+				snd_pcm_format_t output_format)
 {
 	int i = 0;
 	int outbuffer_size = 0;
@@ -227,35 +311,8 @@ int asrc_get_output_buffer_size(int input_buffer_size,
 	}
 	outbuffer_size = (outbuffer_size >> 3) << 3;
 
-	switch (input_word_width) {
-	case ASRC_WIDTH_24_BIT:
-		in_word_size = 4;
-		break;
-	case ASRC_WIDTH_16_BIT:
-		in_word_size = 2;
-		break;
-	case ASRC_WIDTH_8_BIT:
-		in_word_size = 1;
-		break;
-	default:
-		in_word_size = 4;
-		break;
-	}
-
-	switch (output_word_width) {
-	case ASRC_WIDTH_24_BIT:
-		out_word_size = 4;
-		break;
-	case ASRC_WIDTH_16_BIT:
-		out_word_size = 2;
-		break;
-	case ASRC_WIDTH_8_BIT:
-		out_word_size = 1;
-		break;
-	default:
-		out_word_size = 4;
-		break;
-	}
+	in_word_size = snd_pcm_format_physical_width(input_format) / 8;
+	out_word_size = snd_pcm_format_physical_width(output_format) / 8;
 
 	outbuffer_size = outbuffer_size * out_word_size / in_word_size;
 
@@ -276,8 +333,8 @@ int play_file(FILE * fd_dst, int fd_asrc, struct audio_info_s *info)
 	    asrc_get_output_buffer_size(info->input_dma_buf_size,
 					info->sample_rate,
 					info->output_sample_rate,
-					info->input_word_width,
-					info->output_word_width);
+					info->input_format,
+					info->output_format);
 	tail = info->channel * 4 * 16;
 
 	output_p = (char *)malloc(output_dma_size + tail);
@@ -392,24 +449,46 @@ void bitshift(FILE * src, struct audio_info_s *info)
 		printf("allocate input null error\n");
 
 	if (info->frame_bits == 8) {
-		char * buf = (char *) input_buffer;
-		unsigned char c;
-		signed char d;
 		/*change data format*/
-		do {
-			fread(&c, 1, 1, src);
-			d = (char)((int)c - 128);
-			buf[i++] = d;
-		} while (--nleft);
-		/*change data length*/
-		info->output_data_len = info->output_data_len << 1;
-		update_datachunk_length(info, format_size);
+		if (supported_in_format & (1ULL << SND_PCM_FORMAT_S8)) {
+			char * buf = (char *) input_buffer;
+			unsigned char c;
+			signed char d;
 
-		info->frame_bits = 16;
-		info->blockalign = info->channel * 2;
-		info->input_word_width = ASRC_WIDTH_8_BIT;
-		info->output_word_width = ASRC_WIDTH_16_BIT;
+			do {
+				fread(&c, 1, 1, src);
+				d = (char)((int)c - 128);
+				buf[i++] = d;
+			} while (--nleft);
 
+			/*change data length*/
+			info->output_data_len = info->output_data_len << 1;
+			update_datachunk_length(info, format_size);
+
+			info->frame_bits = 16;
+			info->blockalign = info->channel * 2;
+			info->input_format = SND_PCM_FORMAT_S8;
+			info->output_format = SND_PCM_FORMAT_S16_LE;
+		} else {
+			short * buf = (short *) input_buffer;
+			unsigned char c;
+			signed short d;
+
+			do {
+				fread(&c, 1, 1, src);
+				d = (short)((int)c - 128);
+				buf[i++] = d << 8;
+			} while (--nleft);
+
+			/*change data length*/
+			info->output_data_len = info->output_data_len << 1;
+			update_datachunk_length(info, format_size);
+
+			info->frame_bits = 16;
+			info->blockalign = info->channel * 2;
+			info->input_format = SND_PCM_FORMAT_S16_LE;
+			info->output_format = SND_PCM_FORMAT_S16_LE;
+		}
 	} else if (info->frame_bits == 16) {
 		short * buf = (short *) input_buffer;
 		/*change data format*/
@@ -420,8 +499,21 @@ void bitshift(FILE * src, struct audio_info_s *info)
 
 		info->frame_bits = 16;
 		info->blockalign = info->channel * 2;
-		info->input_word_width = ASRC_WIDTH_16_BIT;
-		info->output_word_width = ASRC_WIDTH_16_BIT;
+		info->input_format = SND_PCM_FORMAT_S16_LE;
+		info->output_format = SND_PCM_FORMAT_S16_LE;
+
+	} else if (info->frame_bits == 20 && (slotwidth == 24)) {
+		/*change data format*/
+		do {
+			fread(&data, 3, 1, src);
+			zero = (data << 4 ) & 0xFFFFFF;
+			input_buffer[i++] = zero;
+		} while (--nleft);
+
+		info->frame_bits = 24;
+		info->blockalign = info->channel * 4;
+		info->input_format = SND_PCM_FORMAT_S24_LE;
+		info->output_format = SND_PCM_FORMAT_S24_LE;
 
 	} else if (info->frame_bits == 24 && (slotwidth == 24)) {
 		do {
@@ -436,8 +528,8 @@ void bitshift(FILE * src, struct audio_info_s *info)
 
 		info->frame_bits = 24;
 		info->blockalign = info->channel * 4;
-		info->input_word_width = ASRC_WIDTH_24_BIT;
-		info->output_word_width = ASRC_WIDTH_24_BIT;
+		info->input_format = SND_PCM_FORMAT_S24_LE;
+		info->output_format = SND_PCM_FORMAT_S24_LE;
 
 	} else if (info->frame_bits == 24 && (slotwidth == 32)) {
 		/*change data format*/
@@ -448,21 +540,47 @@ void bitshift(FILE * src, struct audio_info_s *info)
 
 		info->frame_bits = 24;
 		info->blockalign = info->channel * 4;
-		info->input_word_width = ASRC_WIDTH_24_BIT;
-		info->output_word_width = ASRC_WIDTH_24_BIT;
+		info->input_format = SND_PCM_FORMAT_S24_LE;
+		info->output_format = SND_PCM_FORMAT_S24_LE;
 	} else if (info->frame_bits == 32) {
 		/*change data format*/
-		do {
-			fread(&data, 4, 1, src);
-			/*change data bit from 32bit to 24bit*/
-			zero = (data >> 8) & 0x00FFFFFF;
-			input_buffer[i++] = zero;
-		} while (--nleft);
+		if ((supported_in_format & (1ULL << SND_PCM_FORMAT_S32_LE)) &&
+			(supported_out_format & (1ULL << SND_PCM_FORMAT_IEC958_SUBFRAME_LE)) &&
+			info->iec958) {
+			do {
+				fread(&data, 4, 1, src);
+				input_buffer[i++] = data;
+			} while (--nleft);
 
-		info->frame_bits = 24;
-		info->blockalign = info->channel * 4;
-		info->input_word_width = ASRC_WIDTH_24_BIT;
-		info->output_word_width = ASRC_WIDTH_24_BIT;
+			info->frame_bits = 32;
+			info->blockalign = info->channel * 4;
+			info->input_format = SND_PCM_FORMAT_S32_LE;
+			info->output_format = SND_PCM_FORMAT_IEC958_SUBFRAME_LE;
+		} else if ((supported_in_format & (1ULL << SND_PCM_FORMAT_S32_LE)) &&
+			(supported_out_format & (1ULL << SND_PCM_FORMAT_S32_LE))) {
+			do {
+				fread(&data, 4, 1, src);
+				input_buffer[i++] = data;
+			} while (--nleft);
+
+			info->frame_bits = 32;
+			info->blockalign = info->channel * 4;
+			info->input_format = SND_PCM_FORMAT_S32_LE;
+			info->output_format = SND_PCM_FORMAT_S32_LE;
+
+		} else {
+			do {
+				fread(&data, 4, 1, src);
+				/*change data bit from 32bit to 24bit*/
+				zero = (data >> 8) & 0x00FFFFFF;
+				input_buffer[i++] = zero;
+			} while (--nleft);
+
+			info->frame_bits = 24;
+			info->blockalign = info->channel * 4;
+			info->input_format = SND_PCM_FORMAT_S24_LE;
+			info->output_format = SND_PCM_FORMAT_S24_LE;
+		}
 	}
 
 	/*change block align*/
@@ -545,8 +663,8 @@ int header_parser(FILE * src, struct audio_info_s *info)
 	    asrc_get_output_buffer_size(info->input_data_len,
 					info->sample_rate,
 					info->output_sample_rate,
-					ASRC_WIDTH_16_BIT,
-					ASRC_WIDTH_16_BIT);
+					SND_PCM_FORMAT_S16_LE,
+					SND_PCM_FORMAT_S16_LE);
 
 	*(int *)&header[24 + format_size] = info->output_data_len;
 
@@ -593,217 +711,200 @@ void header_write(FILE * dst)
 	}
 }
 
-int main(int ac, char *av[])
+int main(int ac, const char *av[])
 {
 	FILE *fd_dst = NULL;
 	FILE *fd_src = NULL;
 	struct audio_info_s audio_info;
 	int i = 0, err = 0;
 
-	inclk = INCLK_NONE;
-	outclk = OUTCLK_ASRCK1_CLK;
 	convert_flag = 0;
 	pair_index = ASRC_INVALID_PAIR;
-	printf("\n---- Running < %s > test ----\n\n", av[0]);
-
-	if (ac < 5) {
-		help_info(ac, av);
-		return 1;
-	}
 
 	memset(&audio_info, 0, sizeof(struct audio_info_s));
+
+	audio_info.inclk = 0;
+	audio_info.outclk = 10;
+	if (parse_arguments(ac, av, &audio_info) != 0 )
+		return -1;
+
+	printf("\n---- Running < %s > test ----\n\n", av[0]);
+
 	fd_asrc = open("/dev/mxc_asrc", O_RDWR);
 	if (fd_asrc < 0)
 		printf("Unable to open device\n");
 
-	for (i = 1; i < ac; i++) {
-		if (strcmp(av[i], "-to") == 0)
-			audio_info.output_sample_rate = atoi(av[++i]);
+	switch (audio_info.inclk) {
+	case 0:
+	    inclk = INCLK_NONE;
+	    printf("inclk : INCLK_NONE\n");
+	    break;
+	case 1:
+	    inclk = INCLK_ESAI_RX;
+	    printf("inclk : INCLK_ESAI_RX\n");
+	    break;
+	case 2:
+	    inclk = INCLK_SSI1_RX;
+	    printf("inclk : INCLK_SSI1_RX\n");
+	    break;
+	case 3:
+	    inclk = INCLK_SSI2_RX;
+	    printf("inclk : INCLK_SSI2_RX\n");
+	    break;
+	case 4:
+	    inclk = INCLK_SPDIF_RX;
+	    printf("inclk : INCLK_SPDIF_RX\n");
+	    break;
+	case 5:
+	    inclk = INCLK_MLB_CLK;
+	    printf("inclk : INCLK_MLB_CLK\n");
+	    break;
+	case 6:
+	    inclk = INCLK_ESAI_TX;
+	    printf("inclk : INCLK_ESAI_TX\n");
+	    break;
+	case 7:
+	    inclk = INCLK_SSI1_TX;
+	    printf("inclk : INCLK_SSI1_TX\n");
+	    break;
+	case 8:
+	    inclk = INCLK_SSI2_TX;
+	    printf("inclk : INCLK_SSI2_TX\n");
+	    break;
+	case 9:
+	    inclk = INCLK_SPDIF_TX;
+	    printf("inclk : INCLK_SPDIF_TX\n");
+	    break;
+	case 10:
+	    inclk = INCLK_ASRCK1_CLK;
+	    printf("inclk : INCLK_ASRCK1_CLK\n");
+	    break;
+	case 11:
+	case 12:
+	case 13:
+	case 14:
+	case 15:
+	case 16:
+	case 17:
+	case 18:
+	case 19:
+	case 20:
+	case 21:
+	case 22:
+	case 23:
+	case 24:
+	case 25:
+	    inclk = i + 5;
+	    printf("inclk : %s\n", in_clocks_name[i]);
+	    break;
+	case 26:
+	case 27:
+	case 28:
+	case 29:
+	case 30:
+	    inclk = i + 6;
+	    printf("inclk : %s\n", in_clocks_name[i]);
+	    break;
+	default:
+	    printf("Incorrect clock source\n");
+	    return 1;
 	}
 
-	for (i = 1; i < ac; i++) {
-		if (strcmp(av[i], "-wid") == 0) {
-			if (atoi(av[++i]) != 24)
-				printf("Only 24bit output is support!\n");
-			audio_info.output_word_width = ASRC_WIDTH_24_BIT;
-		}
+	switch (audio_info.outclk) {
+	case 0:
+	    outclk = OUTCLK_NONE;
+	    printf("outclk : OUTCLK_NONE\n");
+	    break;
+	case 1:
+	    outclk = OUTCLK_ESAI_TX;
+	    printf("outclk : OUTCLK_ESAI_TX\n");
+	    break;
+	case 2:
+	    outclk = OUTCLK_SSI1_TX;
+	    printf("outclk : OUTCLK_SSI1_TX\n");
+	    break;
+	case 3:
+	    outclk = OUTCLK_SSI2_TX;
+	    printf("outclk : OUTCLK_SSI2_TX\n");
+	    break;
+	case 4:
+	    outclk = OUTCLK_SPDIF_TX;
+	    printf("outclk : OUTCLK_SPDIF_TX\n");
+	    break;
+	case 5:
+	    outclk = OUTCLK_MLB_CLK;
+	    printf("outclk : OUTCLK_MLB_CLK\n");
+	    break;
+	case 6:
+	    outclk = OUTCLK_ESAI_RX;
+	    printf("outclk : OUTCLK_ESAI_RX\n");
+	    break;
+	case 7:
+	    outclk = OUTCLK_SSI1_RX;
+	    printf("outclk : OUTCLK_SSI1_RX\n");
+	    break;
+	case 8:
+	    outclk = OUTCLK_SSI2_RX;
+	    printf("outclk : OUTCLK_SSI2_RX\n");
+	    break;
+	case 9:
+	    outclk = OUTCLK_SPDIF_RX;
+	    printf("outclk : OUTCLK_SPDIF_RX\n");
+	    break;
+	case 10:
+	    outclk = OUTCLK_ASRCK1_CLK;
+	    printf("outclk : OUTCLK_ASRCK1_CLK\n");
+	    break;
+	case 11:
+	case 12:
+	case 13:
+	case 14:
+	case 15:
+	case 16:
+	case 17:
+	case 18:
+	case 19:
+	case 20:
+	case 21:
+	case 22:
+	case 23:
+	case 24:
+	case 25:
+	    outclk = i + 5;
+	    printf("outclk : %s\n", out_clocks_name[i]);
+	    break;
+	case 26:
+	case 27:
+	case 28:
+	case 29:
+	case 30:
+	    outclk = i + 6;
+	    printf("outclk : %s\n", out_clocks_name[i]);
+	    break;
+	default:
+	    printf("Incorrect clock source\n");
+	    return 1;
 	}
 
-	if (ac > 5)
-	{
-		i = atoi(av[5]);
-		switch (i)
-		{
-			case 0:
-			    inclk = INCLK_NONE;
-			    printf("inclk : INCLK_NONE\n");
-			    break;
-			case 1:
-			    inclk = INCLK_ESAI_RX;
-			    printf("inclk : INCLK_ESAI_RX\n");
-			    break;
-			case 2:
-			    inclk = INCLK_SSI1_RX;
-			    printf("inclk : INCLK_SSI1_RX\n");
-			    break;
-			case 3:
-			    inclk = INCLK_SSI2_RX;
-			    printf("inclk : INCLK_SSI2_RX\n");
-			    break;
-			case 4:
-			    inclk = INCLK_SPDIF_RX;
-			    printf("inclk : INCLK_SPDIF_RX\n");
-			    break;
-			case 5:
-			    inclk = INCLK_MLB_CLK;
-			    printf("inclk : INCLK_MLB_CLK\n");
-			    break;
-			case 6:
-			    inclk = INCLK_ESAI_TX;
-			    printf("inclk : INCLK_ESAI_TX\n");
-			    break;
-			case 7:
-			    inclk = INCLK_SSI1_TX;
-			    printf("inclk : INCLK_SSI1_TX\n");
-			    break;
-			case 8:
-			    inclk = INCLK_SSI2_TX;
-			    printf("inclk : INCLK_SSI2_TX\n");
-			    break;
-			case 9:
-			    inclk = INCLK_SPDIF_TX;
-			    printf("inclk : INCLK_SPDIF_TX\n");
-			    break;
-			case 10:
-			    inclk = INCLK_ASRCK1_CLK;
-			    printf("inclk : INCLK_ASRCK1_CLK\n");
-			    break;
-			case 11:
-			case 12:
-			case 13:
-			case 14:
-			case 15:
-			case 16:
-			case 17:
-			case 18:
-			case 19:
-			case 20:
-			case 21:
-			case 22:
-			case 23:
-			case 24:
-			case 25:
-			    inclk = i + 5;
-			    printf("inclk : %s\n", in_clocks_name[i]);
-			    break;
-			case 26:
-			case 27:
-			case 28:
-			case 29:
-			case 30:
-			    inclk = i + 6;
-			    printf("inclk : %s\n", in_clocks_name[i]);
-			    break;
-			default:
-			    printf("Incorrect clock source\n");
-			    return 1;
-		}
-
-		i = atoi(av[6]);
-		switch (i)
-		{
-			case 0:
-			    outclk = OUTCLK_NONE;
-			    printf("outclk : OUTCLK_NONE\n");
-			    break;
-			case 1:
-			    outclk = OUTCLK_ESAI_TX;
-			    printf("outclk : OUTCLK_ESAI_TX\n");
-			    break;
-			case 2:
-			    outclk = OUTCLK_SSI1_TX;
-			    printf("outclk : OUTCLK_SSI1_TX\n");
-			    break;
-			case 3:
-			    outclk = OUTCLK_SSI2_TX;
-			    printf("outclk : OUTCLK_SSI2_TX\n");
-			    break;
-			case 4:
-			    outclk = OUTCLK_SPDIF_TX;
-			    printf("outclk : OUTCLK_SPDIF_TX\n");
-			    break;
-			case 5:
-			    outclk = OUTCLK_MLB_CLK;
-			    printf("outclk : OUTCLK_MLB_CLK\n");
-			    break;
-			case 6:
-			    outclk = OUTCLK_ESAI_RX;
-			    printf("outclk : OUTCLK_ESAI_RX\n");
-			    break;
-			case 7:
-			    outclk = OUTCLK_SSI1_RX;
-			    printf("outclk : OUTCLK_SSI1_RX\n");
-			    break;
-			case 8:
-			    outclk = OUTCLK_SSI2_RX;
-			    printf("outclk : OUTCLK_SSI2_RX\n");
-			    break;
-			case 9:
-			    outclk = OUTCLK_SPDIF_RX;
-			    printf("outclk : OUTCLK_SPDIF_RX\n");
-			    break;
-			case 10:
-			    outclk = OUTCLK_ASRCK1_CLK;
-			    printf("outclk : OUTCLK_ASRCK1_CLK\n");
-			    break;
-			case 11:
-			case 12:
-			case 13:
-			case 14:
-			case 15:
-			case 16:
-			case 17:
-			case 18:
-			case 19:
-			case 20:
-			case 21:
-			case 22:
-			case 23:
-			case 24:
-			case 25:
-			    outclk = i + 5;
-			    printf("outclk : %s\n", out_clocks_name[i]);
-			    break;
-			case 26:
-			case 27:
-			case 28:
-			case 29:
-			case 30:
-			    outclk = i + 6;
-			    printf("outclk : %s\n", out_clocks_name[i]);
-			    break;
-			default:
-			    printf("Incorrect clock source\n");
-			    return 1;
-		}
-	}
-
-	if ((fd_dst = fopen(av[5 - 1], "wb+")) <= 0) {
+	if ((fd_dst = fopen(outfile, "wb+")) <= 0) {
 		goto err_dst_not_found;
 	}
 
-	if ((fd_src = fopen(av[5 - 2], "r")) <= 0) {
+	if ((fd_src = fopen(infile, "r")) <= 0) {
 		goto err_src_not_found;
 	}
 
 	if ((header_parser(fd_src, &audio_info)) <= 0) {
-		goto end_err;
+		goto end_head_parse;
 	}
+
+	err = request_asrc_channel(fd_asrc, &audio_info);
+	if (err < 0)
+		goto end_err;
 
 	bitshift(fd_src, &audio_info);
 
 	err = configure_asrc_channel(fd_asrc, &audio_info);
-
 	if (err < 0)
 		goto end_err;
 
@@ -811,7 +912,6 @@ int main(int ac, char *av[])
 
 	/* Config HW */
 	err += play_file(fd_dst, fd_asrc, &audio_info);
-
 	if (err < 0)
 		goto end_err;
 
@@ -827,11 +927,14 @@ int main(int ac, char *av[])
 	printf("All tests passed with success\n");
 	return 0;
 
-      end_err:
+end_err:
+	free(input_null);
+	free(input_buffer);
+end_head_parse:
 	fclose(fd_src);
-      err_src_not_found:
+err_src_not_found:
 	fclose(fd_dst);
-      err_dst_not_found:
+err_dst_not_found:
 	ioctl(fd_asrc, ASRC_RELEASE_PAIR, &pair_index);
 	close(fd_asrc);
 	return err;
