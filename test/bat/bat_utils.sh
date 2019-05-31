@@ -118,6 +118,7 @@ bat_reexec_ramroot() {
             which taskset
             which sed
             which awk
+            echo "$batdir/../memtool"
             echo "$batdir/bat_utils.sh"
             echo "$0"
         } | {
@@ -335,9 +336,22 @@ kernel_is_version()
     fi
 }
 
+# Find memtool
+bat_which_memtool()
+{
+    if [[ -z $BAT_MEMTOOL_EXE ]]; then
+        if [[ -x $(which memtool 2>/dev/null) ]]; then
+            BAT_MEMTOOL_EXE=$(which memtool)
+        else
+            BAT_MEMTOOL_EXE="${batdir}/../memtool"
+        fi
+    fi
+    echo -n "$BAT_MEMTOOL_EXE"
+}
+
 # Run memtool
 bat_memtool() {
-    "${batdir}/../memtool" "$@"
+    "$(bat_which_memtool)" "$@"
 }
 
 # Run memtool and return register value. Includes 0x but nothing else
