@@ -845,6 +845,189 @@ int isNumber(char *str)
 	return ret;	
 }
 
+void release_buffer(stream_media_t *port)
+{
+	int i, j;
+
+	if (V4L2_MEMORY_MMAP == port->memory)
+	{
+		if (port->stAppV4lBuf)
+		{
+			for (i = 0; i < port->buf_count; i++)
+			{
+				for (j = 0; j < 2; j++)
+				{
+					if (port->stAppV4lBuf[i].addr[j])
+						munmap(port->stAppV4lBuf[i].addr[j], port->stAppV4lBuf[i].size[j]);
+				}
+			}
+			free((void *)port->stAppV4lBuf);
+			port->stAppV4lBuf = NULL;
+		}
+	}
+}
+
+int get_fmt(component_t *pComponent, stream_media_t *port, struct v4l2_format *format)
+{
+	int lErr;
+
+	lErr = ioctl(pComponent->hDev, VIDIOC_G_FMT, format);
+	if (lErr)
+	{
+		printf("%s() VIDIOC_G_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		return -1;
+	}
+	else
+	{
+		printf("%s() VIDIOC_G_FMT w(%d) h(%d)\n", __FUNCTION__, format->fmt.pix_mp.width, format->fmt.pix_mp.height);
+		printf("%s() VIDIOC_G_FMT: sizeimage_0(%d) bytesperline_0(%d) sizeimage_1(%d) bytesperline_1(%d) \n", __FUNCTION__, format->fmt.pix_mp.plane_fmt[0].sizeimage, format->fmt.pix_mp.plane_fmt[0].bytesperline, format->fmt.pix_mp.plane_fmt[1].sizeimage, format->fmt.pix_mp.plane_fmt[1].bytesperline);
+	}
+	port->openFormat.yuv.nWidth = format->fmt.pix_mp.width;
+	port->openFormat.yuv.nHeight = format->fmt.pix_mp.height;
+	port->openFormat.yuv.nBitCount = 12;
+	port->openFormat.yuv.nDataType = ZV_YUV_DATA_TYPE_NV12;
+	port->openFormat.yuv.nFrameRate = 30;
+	port->frame_size = (format->fmt.pix_mp.height * format->fmt.pix_mp.height * 3) / 2;
+	pComponent->ulWidth = format->fmt.pix_mp.width;
+	pComponent->ulHeight = format->fmt.pix_mp.height;
+
+	return 0;
+}
+
+int set_fmt(component_t *pComponent, struct v4l2_format *format)
+{
+	int lErr;
+
+	lErr = ioctl(pComponent->hDev, VIDIOC_S_FMT, format);
+	if (lErr)
+	{
+		printf("%s() VIDIOC_S_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
+int get_crop(component_t *pComponent)
+{
+	int lErr;
+
+	lErr = ioctl(pComponent->hDev, VIDIOC_G_CROP, &pComponent->crop);
+	if (lErr)
+	{
+		printf("%s() VIDIOC_G_CROP ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		return -1;
+	}
+	printf("%s() VIDIOC_G_CROP left(%d) top(%d) w(%d) h(%d)\n", __FUNCTION__, pComponent->crop.c.left, pComponent->crop.c.top, pComponent->crop.c.width, pComponent->crop.c.height);
+
+	return 0;
+}
+
+int get_mini_cap_buffer(component_t *pComponent)
+{
+	struct v4l2_control		ctl;
+	int 					lErr;
+
+	memset(&ctl, 0, sizeof(struct v4l2_control));
+	ctl.id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE;
+	lErr = ioctl(pComponent->hDev, VIDIOC_G_CTRL, &ctl);
+	if (lErr)
+	{
+		printf("%s() VIDIOC_G_CTRL ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		return -1;
+	}
+	printf("%s() VIDIOC_G_CTRL ioctl val=%d\n", __FUNCTION__, ctl.value);
+	if(pComponent->ports[STREAM_DIR_OUT].buf_count < ctl.value)
+		pComponent->ports[STREAM_DIR_OUT].buf_count = ctl.value;
+
+	return 0;
+}
+
+int req_buffer(component_t *pComponent, stream_media_t *port, struct v4l2_requestbuffers  *req_bufs)
+{
+	int lErr;
+
+	lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs);
+	if (lErr)
+	{
+		printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		return -1;
+	}
+	printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE %d\n", __FUNCTION__, req_bufs->count);
+
+	port->memory = req_bufs->memory;
+	port->buf_count = req_bufs->count;
+	printf("%s() STREAM_DIR_OUT: req_bufs.count = %d\n", __FUNCTION__, port->buf_count);
+	port->stAppV4lBuf = malloc(port->buf_count * sizeof(struct zvapp_v4l_buf_info));
+	if (!port->stAppV4lBuf)
+		return -1;
+
+	return 0;
+}
+
+int query_buffer(component_t *pComponent, stream_media_t *port, enum v4l2_buf_type type, struct v4l2_plane *stV4lPlanes)
+{
+	struct zvapp_v4l_buf_info	*stAppV4lBuf;
+	struct v4l2_buffer			stV4lBuf;
+	int							i, j;
+	int							lErr;
+
+
+	stAppV4lBuf = port->stAppV4lBuf;
+	memset(stAppV4lBuf, 0, port->buf_count * sizeof(struct zvapp_v4l_buf_info));
+
+	if (V4L2_MEMORY_MMAP == port->memory)
+	{
+		for (i = 0; i < port->buf_count; i++)
+		{
+			stAppV4lBuf[i].stV4lBuf.index = i;
+			stAppV4lBuf[i].stV4lBuf.type = type;
+			stAppV4lBuf[i].stV4lBuf.bytesused = 0;
+			stAppV4lBuf[i].stV4lBuf.memory = port->memory;
+			stAppV4lBuf[i].stV4lBuf.m.planes = stAppV4lBuf[i].stV4lPlanes;
+			if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
+				|| type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
+				stAppV4lBuf[i].stV4lBuf.length = 2;
+			else
+				stAppV4lBuf[i].stV4lBuf.length = 1;
+			stV4lBuf.type = type;
+			stV4lBuf.memory = V4L2_MEMORY_MMAP;
+			stV4lBuf.index = i;
+			stV4lBuf.m.planes = stV4lPlanes;
+			if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
+				|| type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
+				stV4lBuf.length = 2;
+			else
+				stV4lBuf.length = 1;
+
+			lErr = ioctl(pComponent->hDev, VIDIOC_QUERYBUF, &stV4lBuf);
+			if (!lErr)
+			{
+				for (j = 0; j < stV4lBuf.length; j++)
+				{
+					stAppV4lBuf[i].size[j] = stV4lBuf.m.planes[j].length;
+					stAppV4lBuf[i].addr[j] = mmap(0, stV4lBuf.m.planes[j].length, PROT_READ | PROT_WRITE, MAP_SHARED, pComponent->hDev, stV4lBuf.m.planes[j].m.mem_offset);
+					if (stAppV4lBuf[i].addr[j] <= 0)
+					{
+						printf("%s() V4L mmap failed index=%d \n", __FUNCTION__, i);
+						return -1;
+					}
+					stAppV4lBuf[i].stV4lBuf.m.planes[j].m.mem_offset = stV4lBuf.m.planes[j].m.mem_offset;
+					stAppV4lBuf[i].stV4lBuf.m.planes[j].bytesused = 0;
+					stAppV4lBuf[i].stV4lBuf.m.planes[j].length = stV4lBuf.m.planes[j].length;
+					stAppV4lBuf[i].stV4lBuf.m.planes[j].data_offset = 0;
+				}
+			}
+			else
+			{
+				printf("%s() VIDIOC_QUERYBUF failed index=%d \n", __FUNCTION__, i);
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
 void showUsage(void)
 {
 	printf("\n\
@@ -853,26 +1036,26 @@ OPTIONS:\n\
     --help          Show usage manual.\n\n\
     PATH            Specify the input file path.\n\n\
     IFMT            Specify input file encode format number. Format comparsion table:\n\
-                        VPU_VIDEO_UNDEFINED    0\n\
-                        VPU_VIDEO_AVC          1\n\
-                        VPU_VIDEO_VC1          2\n\
-                        VPU_VIDEO_MPEG2        3\n\
-                        VPU_VIDEO_AVS          4\n\
-                        VPU_VIDEO_ASP          5\n\
-                        VPU_VIDEO_JPEG         6\n\
-                        VPU_VIDEO_RV8          7\n\
-                        VPU_VIDEO_RV9          8\n\
-                        VPU_VIDEO_VP6          9\n\
-                        VPU_VIDEO_SPK          10\n\
-                        VPU_VIDEO_VP8          11\n\
-                        VPU_VIDEO_AVC_MVC      12\n\
-                        VPU_VIDEO_HEVC         13\n\
-                        VPU_PIX_FMT_DIVX       14\n\n\
+                        VPU_VIDEO_UNDEFINED           0\n\
+                        VPU_VIDEO_AVC                 1\n\
+                        VPU_VIDEO_VC1                 2\n\
+                        VPU_VIDEO_MPEG2               3\n\
+                        VPU_VIDEO_AVS                 4\n\
+                        VPU_VIDEO_ASP(MPEG4/H263)     5\n\
+                        VPU_VIDEO_JPEG(MJPEG)         6\n\
+                        VPU_VIDEO_RV8                 7\n\
+                        VPU_VIDEO_RV9                 8\n\
+                        VPU_VIDEO_VP6                 9\n\
+                        VPU_VIDEO_SPK                 10\n\
+                        VPU_VIDEO_VP8                 11\n\
+                        VPU_VIDEO_AVC_MVC             12\n\
+                        VPU_VIDEO_HEVC                13\n\
+                        VPU_PIX_FMT_DIVX              14\n\n\
     OFMT            Specify decode format number. Format comparsion table:\n\
-                        V4L2_PIX_FMT_NV12      0\n\
-                        V4L2_PIX_FMT_YUV420    1\n\
-                        VPU_PIX_FMT_TILED_8    2\n\
-                        VPU_PIX_FMT_TILED_10   3\n\n\
+                        V4L2_PIX_FMT_NV12             0\n\
+                        V4L2_PIX_FMT_YUV420           1\n\
+                        VPU_PIX_FMT_TILED_8           2\n\
+                        VPU_PIX_FMT_TILED_10          3\n\n\
     ofile path      Specify the output file path.\n\n\
     loop times      Specify loop decode times to the same file. If the times not set, the loop continues.\n\n\
     frames count    Specify the count of decode frames. Default total decode.\n\n\
@@ -893,15 +1076,12 @@ void test_streamout(component_t *pComponent)
 	int							lErr = 0;
 	FILE						*fpOutput = 0;
 
-	struct zvapp_v4l_buf_info	*stAppV4lBuf = pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf;
+	struct zvapp_v4l_buf_info	*stAppV4lBuf;
 	struct v4l2_buffer			stV4lBuf;
     struct v4l2_plane           stV4lPlanes[3];
-	int							nV4lBufCnt;
 
 	unsigned int				ulWidth;
 	unsigned int				ulHeight;
-
-	int							frame_nb;
 
     fd_set                      fds;
     struct timeval              tv;
@@ -909,15 +1089,77 @@ void test_streamout(component_t *pComponent)
     struct v4l2_event           evt;
 
     unsigned int                i;
+	unsigned int                j;
     zoe_bool_t                  seek_flag;
 	unsigned int                outFrameNum = 0;
 	unsigned int                stream_type;
 	float                       used_time = 0.01;
+	struct v4l2_format          format;
+	struct v4l2_requestbuffers  req_bufs;
 
+STREAMOUT_INFO:
 
+	memset(&format, 0, sizeof(struct v4l2_format));
+	format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	lErr = get_fmt(pComponent, &pComponent->ports[STREAM_DIR_OUT], &format);
+	if (lErr < 0)
+	{
+		ret_err = 40;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+
+	format.fmt.pix_mp.pixelformat = pComponent->ports[STREAM_DIR_OUT].fmt;
+	lErr = set_fmt(pComponent, &format);
+	if (lErr < 0)
+	{
+		ret_err = 41;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
 	ulWidth = pComponent->ulWidth;
 	ulHeight = pComponent->ulHeight;
-	frame_nb = pComponent->ports[STREAM_DIR_OUT].buf_count;
+
+
+	pComponent->crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	lErr = get_crop(pComponent);
+	if (lErr < 0)
+	{
+		ret_err = 42;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+
+	lErr = get_mini_cap_buffer(pComponent);
+	if (lErr < 0)
+	{
+		ret_err = 43;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+
+	memset(&req_bufs, 0, sizeof(struct v4l2_requestbuffers));
+	req_bufs.count = pComponent->ports[STREAM_DIR_OUT].buf_count;
+	req_bufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	req_bufs.memory = V4L2_MEMORY_MMAP;
+	lErr = req_buffer(pComponent, &pComponent->ports[STREAM_DIR_OUT], &req_bufs);
+	if (lErr < 0)
+	{
+		ret_err = 44;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+
+	lErr = query_buffer(pComponent, &pComponent->ports[STREAM_DIR_OUT], V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, stV4lPlanes);
+	if (lErr < 0)
+	{
+		ret_err = 45;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+	stAppV4lBuf = pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf;
+
+	pComponent->ports[STREAM_DIR_OUT].opened = 1;
 
 STREAMOUT_START:
 	printf("%s() [\n", __FUNCTION__);
@@ -937,8 +1179,8 @@ STREAMOUT_START:
 		{
 			printf("%s() error: Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].pszNameOrAddr);
 			g_unCtrlCReceived = 1;
-			ret_err = 41;
-			return;
+			ret_err = 46;
+			goto FUNC_EXIT;
 		}
 	}
 	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
@@ -949,8 +1191,8 @@ STREAMOUT_START:
 	{
 		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].eMediaType);
 		g_unCtrlCReceived = 1;
-		ret_err = 42;
-		return;
+		ret_err = 47;
+		goto FUNC_EXIT;
 	}
 
     // stream on v4l2 capture	
@@ -964,7 +1206,7 @@ STREAMOUT_START:
     {
 		printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
-		ret_err = 43;
+		ret_err = 48;
 		goto FUNC_END;
     }
 
@@ -977,22 +1219,22 @@ STREAMOUT_START:
 		** QBUF, send all the buffers to driver
 		***********************************************/
 		if(seek_flag==1){
-			for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+			for (i = 0; i < pComponent->ports[STREAM_DIR_OUT].buf_count; i++)
 			{
-				stAppV4lBuf[nV4lBufCnt].sent = 0;
+				stAppV4lBuf[i].sent = 0;
 			}
 			seek_flag = 0;
 		}
-		for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		for (i = 0; i < pComponent->ports[STREAM_DIR_OUT].buf_count; i++)
 		{
-			if (!stAppV4lBuf[nV4lBufCnt].sent)
+			if (!stAppV4lBuf[i].sent)
 			{
-				for (i = 0; i < stAppV4lBuf[nV4lBufCnt].stV4lBuf.length; i++)
+				for (j = 0; j < stAppV4lBuf[i].stV4lBuf.length; j++)
 				{
-					stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].bytesused = 0;
-					stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
+					stAppV4lBuf[i].stV4lBuf.m.planes[j].bytesused = 0;
+					stAppV4lBuf[i].stV4lBuf.m.planes[j].data_offset = 0;
 				}
-				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stAppV4lBuf[nV4lBufCnt].stV4lBuf);
+				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stAppV4lBuf[i].stV4lBuf);
 				if (lErr)
 				{
 					printf("%s() QBUF ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
@@ -1004,7 +1246,7 @@ STREAMOUT_START:
 				}
 				else
 				{
-					stAppV4lBuf[nV4lBufCnt].sent = 1;
+					stAppV4lBuf[i].sent = 1;
 				}
 			}
 		}
@@ -1058,12 +1300,18 @@ STREAMOUT_START:
 			}
 			else
 			{
-				if(evt.type == V4L2_EVENT_EOS) {
+				if(evt.type == V4L2_EVENT_EOS)
+				{
 					printf("V4L2_EVENT_EOS is called\n");
 					break;
 				}
+				else if(evt.type == V4L2_EVENT_SOURCE_CHANGE)
+				{
+					pComponent->res_change_flag = 1;
+					break;
+				}
 				else
-					printf("%s() VIDIOC_DQEVENT type=%d\n", __FUNCTION__, V4L2_EVENT_EOS);
+					printf("%s() VIDIOC_DQEVENT type=%d\n", __FUNCTION__, evt.type);
 				continue;
 			}
 		}
@@ -1204,6 +1452,13 @@ FUNC_END:
 		printf("%s() sent cmd: VIDIOC_STREAMOFF\n", __FUNCTION__);
 	}
 
+	if(pComponent->res_change_flag)
+	{
+		release_buffer(&pComponent->ports[STREAM_DIR_OUT]);
+		pComponent->res_change_flag = 0;
+		goto STREAMOUT_INFO;
+	}
+
 	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
 	printf("Total: frames = %d, fps = %.2f, used_time = %.2f \n", outFrameNum, outFrameNum / used_time, used_time);
@@ -1236,6 +1491,12 @@ FUNC_END:
 			}
 		}
 	}
+
+FUNC_EXIT:
+
+	release_buffer(&pComponent->ports[STREAM_DIR_OUT]);
+	stAppV4lBuf = NULL;
+	pComponent->ports[STREAM_DIR_OUT].opened = ZOE_FALSE;
 }
 
 void test_streamin(component_t *pComponent)
@@ -1243,31 +1504,72 @@ void test_streamin(component_t *pComponent)
 	int							lErr = 0;
 	FILE						*fpInput = 0;
 
-	struct zvapp_v4l_buf_info	*stAppV4lBuf = pComponent->ports[STREAM_DIR_IN].stAppV4lBuf;
+	struct zvapp_v4l_buf_info	*stAppV4lBuf;
 	struct v4l2_buffer			stV4lBuf;
-    struct v4l2_plane           stV4lPlanes[3];
+	struct v4l2_plane           stV4lPlanes[3];
 	struct v4l2_buffer			*pstV4lBuf = NULL;
-	int							nV4lBufCnt;
 	struct v4l2_decoder_cmd     v4l2cmd;
 
-	unsigned int				ulIOBlockSize;
+	fd_set                      fds;
+	struct timeval              tv;
+	int                         r;
 
-	int							frame_size;
-	int							frame_nb;
-
-    fd_set                      fds;
-    struct timeval              tv;
-    int                         r;
-
-    unsigned int                i;
-    unsigned int                total;
+	unsigned int                i;
+	unsigned int                total;
 	long                        file_size;
 	int                         stream_type;
 	int                         seek_flag;
 	int                         qbuf_times;
+	struct v4l2_requestbuffers  req_bufs;
+	struct v4l2_format          format;
 	
-	frame_nb = pComponent->ports[STREAM_DIR_IN].buf_count;
-    ulIOBlockSize = frame_size = pComponent->ports[STREAM_DIR_IN].frame_size;
+	unsigned int				ulIOBlockSize;
+
+	// set v4l2 output format (compressed data input)
+	memset(&format, 0, sizeof(struct v4l2_format));
+	format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	if (pComponent->ports[STREAM_DIR_IN].fmt < ZPU_NUM_FORMATS_COMPRESSED)
+	{
+		format.fmt.pix_mp.pixelformat = formats_compressed[pComponent->ports[STREAM_DIR_IN].fmt];
+	}
+	else
+	{
+		format.fmt.pix_mp.pixelformat = VPU_PIX_FMT_LOGO;
+	}
+	format.fmt.pix_mp.num_planes = 1;
+	format.fmt.pix_mp.plane_fmt[0].sizeimage = pComponent->ports[STREAM_DIR_IN].frame_size;
+	lErr = set_fmt(pComponent, &format);
+	if (lErr < 0)
+	{
+		ret_err = 30;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+
+	ulIOBlockSize = pComponent->ports[STREAM_DIR_IN].frame_size;
+
+	memset(&req_bufs, 0, sizeof(struct v4l2_requestbuffers));
+	req_bufs.count = pComponent->ports[STREAM_DIR_IN].buf_count;
+	req_bufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	req_bufs.memory = V4L2_MEMORY_MMAP;
+	lErr = req_buffer(pComponent, &pComponent->ports[STREAM_DIR_IN], &req_bufs);
+	if (lErr < 0)
+	{
+		ret_err = 31;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+
+	lErr = query_buffer(pComponent, &pComponent->ports[STREAM_DIR_IN], V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, stV4lPlanes);
+	if (lErr < 0)
+	{
+		ret_err = 32;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+	stAppV4lBuf = pComponent->ports[STREAM_DIR_IN].stAppV4lBuf;
+
+	pComponent->ports[STREAM_DIR_IN].opened = 1;
 	
 STREAMIN_START:	
 	printf("%s() [\n", __FUNCTION__);
@@ -1284,25 +1586,25 @@ STREAMIN_START:
 		fpInput = fopen(pComponent->ports[STREAM_DIR_IN].pszNameOrAddr, "r");
 		if (fpInput == NULL)
 		{
-            printf("%s() error: Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
+			printf("%s() error: Unable to open file %s.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
 			g_unCtrlCReceived = 1;
-			ret_err = 31;
-			return;
+			ret_err = 33;
+			goto FUNC_EXIT;
 		}
-        else
-        {
-			printf("Testing stream: %s\n",pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
-			fseek(fpInput, 0, SEEK_END);
-			file_size = ftell(fpInput);
-		    fseek(fpInput, 0, SEEK_SET);
-        }
+			else
+			{
+				printf("Testing stream: %s\n",pComponent->ports[STREAM_DIR_IN].pszNameOrAddr);
+				fseek(fpInput, 0, SEEK_END);
+				file_size = ftell(fpInput);
+				fseek(fpInput, 0, SEEK_SET);
+			}
 	}
 	else
 	{
 		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].eMediaType);
 		g_unCtrlCReceived = 1;
-		ret_err = 32;
-		return;
+		ret_err = 34;
+		goto FUNC_EXIT;
 	}
 
 	//  stream on v4l2 output
@@ -1316,7 +1618,7 @@ STREAMIN_START:
     {
     	printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
-		ret_err = 33;
+		ret_err = 35;
     	goto FUNC_END;
     }
 
@@ -1337,9 +1639,9 @@ STREAMIN_START:
 		
 		if(seek_flag)
 		{
-			for(nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+			for(i = 0; i < pComponent->ports[STREAM_DIR_IN].buf_count; i++)
 			{
-				stAppV4lBuf[nV4lBufCnt].sent = 0;
+				stAppV4lBuf[i].sent = 0;
 			}
 			seek_flag = 0;
 		}
@@ -1349,9 +1651,9 @@ STREAMIN_START:
 		/***********************************************
 		** DQBUF, get buffer from driver
 		***********************************************/
-		for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		for (i = 0; i < pComponent->ports[STREAM_DIR_IN].buf_count; i++)
 		{
-			if (!stAppV4lBuf[nV4lBufCnt].sent)
+			if (!stAppV4lBuf[i].sent)
 			{
                 buf_avail = 1;
                 break;
@@ -1403,11 +1705,11 @@ STREAMIN_START:
 		***********************************************/
 		pstV4lBuf = NULL;
 
-		for (nV4lBufCnt = 0; nV4lBufCnt < frame_nb; nV4lBufCnt++)
+		for (i = 0; i < pComponent->ports[STREAM_DIR_IN].buf_count; i++)
 		{
-			if (!stAppV4lBuf[nV4lBufCnt].sent)
+			if (!stAppV4lBuf[i].sent)
 			{
-				pstV4lBuf = &stAppV4lBuf[nV4lBufCnt].stV4lBuf;
+				pstV4lBuf = &stAppV4lBuf[i].stV4lBuf;
 				break;
 			}
 		}
@@ -1450,14 +1752,7 @@ RETRY:
 					(pComponent->ports[STREAM_DIR_IN].portType == COMPONENT_PORT_YUV_IN)
 					)
 				{
-                    if (pComponent->ports[STREAM_DIR_IN].auto_rewind)
-                    {
-					    fseek(fpInput, 0, SEEK_SET);
-                    }
-					else
-					{
-						pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
-					}
+					pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 1;
 				}
 			}
 
@@ -1529,7 +1824,7 @@ FUNC_END:
 		{
 			printf("warning: %s() VIDIOC_DECODER_CMD has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
 			g_unCtrlCReceived = 1;
-			ret_err = 34;
+			ret_err = 36;
 		}
 	    else
 		{
@@ -1563,6 +1858,12 @@ FUNC_END:
 			goto STREAMIN_START;
 		}
 	}
+
+FUNC_EXIT:
+
+	release_buffer(&pComponent->ports[STREAM_DIR_IN]);
+	stAppV4lBuf = NULL;
+	pComponent->ports[STREAM_DIR_IN].opened = ZOE_FALSE;
 }
 
 static int set_ctrl(int fd, int id, int value)
@@ -1605,15 +1906,9 @@ int main(int argc,
 	int			                nHas2ndCmd;
 	component_t	                component[MAX_SUPPORTED_COMPONENTS];
     component_t                 *pComponent;
-	unsigned int			    i, j, k;
+	unsigned int			    i, j;
     uint32_t                    type = COMPONENT_TYPE_DECODER;  //COMPOENT_TYPE
 
-	struct v4l2_buffer			stV4lBuf;
-    struct v4l2_plane           stV4lPlanes[3];
-	unsigned int			    nV4lBufCnt;
-    struct v4l2_format          format;
-    struct v4l2_requestbuffers  req_bufs;
-    struct v4l2_control         ctl;
     struct v4l2_event_subscription  sub;
     struct v4l2_event           evt;
 
@@ -1921,7 +2216,6 @@ Or reference the usage manual.\n\
 
     // subsribe v4l2 events
     memset(&sub, 0, sizeof(struct v4l2_event_subscription));
-#if 1
     sub.type = V4L2_EVENT_SOURCE_CHANGE;
     lErr = ioctl(pComponent->hDev, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	if (lErr)
@@ -1930,9 +2224,9 @@ Or reference the usage manual.\n\
 		ret_err = 6;
 		goto FUNC_END;
 	}
-#endif
-    sub.type = V4L2_EVENT_EOS;
-    lErr = ioctl(pComponent->hDev, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	memset(&sub, 0, sizeof(struct v4l2_event_subscription));
+	sub.type = V4L2_EVENT_EOS;
+	lErr = ioctl(pComponent->hDev, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	if (lErr)
 	{
 		printf("%s() VIDIOC_SUBSCRIBE_EVENT(V4L2_EVENT_EOS) ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
@@ -1942,116 +2236,6 @@ Or reference the usage manual.\n\
 
 	set_ctrl(pComponent->hDev, V4L2_CID_USER_RAW_BASE, 1);
 
-    // set v4l2 output format (compressed data input)
-    memset(&format, 0, sizeof(struct v4l2_format));
-    format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    if (pComponent->ports[STREAM_DIR_IN].fmt < ZPU_NUM_FORMATS_COMPRESSED)
-    {
-        format.fmt.pix_mp.pixelformat = formats_compressed[pComponent->ports[STREAM_DIR_IN].fmt];
-    }
-    else
-    {
-        format.fmt.pix_mp.pixelformat = VPU_PIX_FMT_LOGO;
-    }
-    format.fmt.pix_mp.num_planes = 1;
-    format.fmt.pix_mp.plane_fmt[0].sizeimage = pComponent->ports[STREAM_DIR_IN].frame_size;
-
-    lErr = ioctl(pComponent->hDev, VIDIOC_S_FMT, &format);
-	if (lErr)
-	{
-		printf("%s() VIDIOC_S_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 8;
-		goto FUNCTION_STOP;
-	}
-
-    pComponent->ports[STREAM_DIR_IN].auto_rewind = ((VPU_PIX_FMT_LOGO == format.fmt.pix_mp.pixelformat) ? ZOE_TRUE : ZOE_FALSE);
-    printf("auto_rewind %d, pixelformat %d\n", pComponent->ports[STREAM_DIR_IN].auto_rewind, format.fmt.pix_mp.pixelformat);
-
-    // setup memory for v4l2 output (compressed data input)
-    // request number of buffer and memory type
-    memset(&req_bufs, 0, sizeof(struct v4l2_requestbuffers));
-    req_bufs.count = pComponent->ports[STREAM_DIR_IN].buf_count;
-    req_bufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    req_bufs.memory = V4L2_MEMORY_MMAP;
-
-    lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs); 
-	if (lErr)
-	{
-		printf("%s() VIDIOC_REQBUFS ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 9;
-		goto FUNCTION_STOP;
-	}
-
-    // save memory type and actual buffer number
-    pComponent->ports[STREAM_DIR_IN].memory = req_bufs.memory;
-    pComponent->ports[STREAM_DIR_IN].buf_count = req_bufs.count;
-	printf("%s() STREAM_DIR_IN: req_bufs.count = %d\n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].buf_count);
-    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf = malloc(pComponent->ports[STREAM_DIR_IN].buf_count * sizeof(struct zvapp_v4l_buf_info));
-	if (!pComponent->ports[STREAM_DIR_IN].stAppV4lBuf)
-	{
-		printf("%s() Unable to allocate memory for V4L app structure \n", __FUNCTION__);
-		ret_err = 10;
-		goto FUNCTION_STOP;
-	}
-
-	memset(pComponent->ports[STREAM_DIR_IN].stAppV4lBuf, 0, pComponent->ports[STREAM_DIR_IN].buf_count * sizeof(struct zvapp_v4l_buf_info));
-
-    if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_IN].memory)
-    {
-        // acquire buffer memory from the driver
-		for (nV4lBufCnt = 0; nV4lBufCnt < pComponent->ports[STREAM_DIR_IN].buf_count; nV4lBufCnt++)
-		{
-		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.index = nV4lBufCnt;
-		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.bytesused = 0;
-		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.memory = pComponent->ports[STREAM_DIR_IN].memory;
-            pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes = pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lPlanes;
-		    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.length = 1;
-
-			stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-			stV4lBuf.memory = V4L2_MEMORY_MMAP;
-			stV4lBuf.index = nV4lBufCnt;
-            stV4lBuf.m.planes = stV4lPlanes;
-	        stV4lBuf.length = 1;
-			lErr = ioctl(pComponent->hDev, VIDIOC_QUERYBUF, &stV4lBuf);
-			if (!lErr)
-			{
-				//printf("%s() QUERYBUF(%d) buf_nb(%d)", __FUNCTION__, nV4lBufCnt, stV4lBuf.length);
-                for (i = 0; i < stV4lBuf.length; i++)
-                {
-				    //printf("(%x:%d) ", stV4lBuf.m.planes[i].m.mem_offset, stV4lBuf.m.planes[i].length);
-
-				    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].size[i] = stV4lBuf.m.planes[i].length;
-				    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].addr[i] = mmap(0, stV4lBuf.m.planes[i].length, PROT_READ | PROT_WRITE, MAP_SHARED, pComponent->hDev, stV4lBuf.m.planes[i].m.mem_offset);
-				    if (!pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].addr[i])
-				    {
-					    printf("%s() V4L mmap failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-					    ret_err = 11;
-					    goto FUNCTION_STOP;
-				    }
-
-		            pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].m.mem_offset = stV4lBuf.m.planes[i].m.mem_offset;
-                    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].bytesused = 0;
-                    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].length = stV4lBuf.m.planes[i].length;
-                    pComponent->ports[STREAM_DIR_IN].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
-                }
-			}
-			else
-			{
-				printf("%s() VIDIOC_QUERYBUF failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-				ret_err = 12;
-				goto FUNCTION_STOP;
-			}
-		}
-    }
-
-    // this port is opened if the buffers are allocated
-    pComponent->ports[STREAM_DIR_IN].opened = 1;
-
-	//gettimeofday(&start,NULL);
-    // start the v4l2 output streaming thread
-    printf("%s() want to create input thread\n", __FUNCTION__);
-	
 	lErr = pthread_create(&pComponent->ports[STREAM_DIR_IN].threadId,
 			NULL,
 			(void *)test_streamin,
@@ -2064,8 +2248,8 @@ Or reference the usage manual.\n\
 	else
 	{
 		printf("%s() pthread create failed, threadId: %lu \n", __FUNCTION__, pComponent->ports[STREAM_DIR_IN].threadId);
-		ret_err = 13;
-		goto FUNCTION_STOP;
+		ret_err = 8;
+		goto FUNC_END;
 	}
 
 	// wait for 10 msec
@@ -2086,8 +2270,8 @@ Or reference the usage manual.\n\
     	    {
     	        fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
 				g_unCtrlCReceived = 1;
-				ret_err = 14;
-				goto FUNCTION_STOP;
+				ret_err = 9;
+				goto FUNC_END;
     	    }
     	    else if (0 == r) 
     	    {
@@ -2110,15 +2294,15 @@ Or reference the usage manual.\n\
 			{
 				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
 				g_unCtrlCReceived = 1;
-				ret_err = 15;
-				goto FUNCTION_STOP;
+				ret_err = 10;
+				goto FUNC_END;
 			}
     	}
 	}
 
 	if (g_unCtrlCReceived)
 	{
-		goto FUNCTION_STOP;
+		goto FUNC_END;
 	}
 
 #ifdef DQEVENT
@@ -2127,8 +2311,8 @@ Or reference the usage manual.\n\
 	if (lErr)
 	{
 		printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 16;
-		goto FUNCTION_STOP;
+		ret_err = 11;
+		goto FUNC_END;
 	}
     else
     {
@@ -2146,157 +2330,7 @@ Or reference the usage manual.\n\
         }
     }
 #endif
-    // get format on v4l2 capture (YUV output)
-    memset(&format, 0, sizeof(struct v4l2_format));
-    format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    lErr = ioctl(pComponent->hDev, VIDIOC_G_FMT, &format);
-	if (lErr)
-	{
-		printf("%s() VIDIOC_G_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 17;
-		goto FUNCTION_STOP;
-	}
-    else
-    {
-		printf("%s() VIDIOC_G_FMT w(%d) h(%d)\n", __FUNCTION__, format.fmt.pix_mp.width, format.fmt.pix_mp.height);
-		printf("%s() VIDIOC_G_FMT: sizeimage_0(%d) bytesperline_0(%d) sizeimage_1(%d) bytesperline_1(%d) \n", __FUNCTION__, format.fmt.pix_mp.plane_fmt[0].sizeimage, format.fmt.pix_mp.plane_fmt[0].bytesperline, format.fmt.pix_mp.plane_fmt[1].sizeimage, format.fmt.pix_mp.plane_fmt[1].bytesperline);
-    }
-    pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nWidth = format.fmt.pix_mp.width;
-    pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nHeight = format.fmt.pix_mp.height;
-    pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nBitCount = 12;
-    pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nDataType = ZV_YUV_DATA_TYPE_NV12;
-    pComponent->ports[STREAM_DIR_OUT].openFormat.yuv.nFrameRate = 30;
-    pComponent->ports[STREAM_DIR_OUT].frame_size = (format.fmt.pix_mp.height * format.fmt.pix_mp.height * 3) / 2;
-    pComponent->ulWidth = format.fmt.pix_mp.width;
-    pComponent->ulHeight = format.fmt.pix_mp.height;
 
-    // set v4l2 capture format (YUV output)
-	if (format.fmt.pix_mp.pixelformat != pComponent->ports[STREAM_DIR_OUT].fmt)
-	{
-		format.fmt.pix_mp.pixelformat = pComponent->ports[STREAM_DIR_OUT].fmt;
-		lErr = ioctl(pComponent->hDev, VIDIOC_S_FMT, &format);
-	    if (lErr)
-	    {
-	        printf("%s() VIDIOC_S_FMT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-	        ret_err = 18;
-	        goto FUNCTION_STOP;
-	    }
-	 }
-
-    // get cropping information
-    pComponent->crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	lErr = ioctl(pComponent->hDev, VIDIOC_G_CROP, &pComponent->crop);
-	if (lErr)
-	{
-		printf("%s() VIDIOC_G_CROP ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 19;
-		goto FUNCTION_STOP;
-	}
-    else
-    {
-		printf("%s() VIDIOC_G_CROP left(%d) top(%d) w(%d) h(%d)\n", __FUNCTION__, pComponent->crop.c.left, pComponent->crop.c.top, pComponent->crop.c.width, pComponent->crop.c.height);
-    }
-
-    // get minimum number of buffers required for v4l2 capture (YUV output)
-    memset(&ctl, 0, sizeof(struct v4l2_control));
-    ctl.id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE;
-    lErr = ioctl(pComponent->hDev, VIDIOC_G_CTRL, &ctl);
-	if (lErr)
-	{
-		printf("%s() VIDIOC_G_CTRL ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 20;
-		goto FUNCTION_STOP;
-	}
-
-	printf("%s() VIDIOC_G_CTRL ioctl val=%d\n", __FUNCTION__, ctl.value);
-	if(pComponent->ports[STREAM_DIR_OUT].buf_count < (unsigned int)ctl.value + 3)
-		pComponent->ports[STREAM_DIR_OUT].buf_count = (unsigned int)ctl.value + 3;
-
-    // setup memory for v4l2 capture (YUV output)
-    // request number of buffer and memory type
-    memset(&req_bufs, 0, sizeof(struct v4l2_requestbuffers));
-    req_bufs.count = pComponent->ports[STREAM_DIR_OUT].buf_count;
-    req_bufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    req_bufs.memory = V4L2_MEMORY_MMAP;
-
-    lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs);
-	if (lErr)
-	{
-		printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		ret_err = 21;
-		goto FUNCTION_STOP;
-	}
-    else
-    {
-		printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE %d\n", __FUNCTION__, req_bufs.count);
-    }
-
-    // save memory type and actual buffer number
-    pComponent->ports[STREAM_DIR_OUT].memory = req_bufs.memory;
-    pComponent->ports[STREAM_DIR_OUT].buf_count = req_bufs.count;
-	printf("%s() STREAM_DIR_OUT: req_bufs.count = %d\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].buf_count);
-    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf = malloc(pComponent->ports[STREAM_DIR_OUT].buf_count * sizeof(struct zvapp_v4l_buf_info));
-	if (!pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf)
-	{
-		printf("%s() Unable to allocate memory for V4L app structure \n", __FUNCTION__);
-		ret_err = 22;
-		goto FUNCTION_STOP;
-	}
-
-	memset(pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf, 0, pComponent->ports[STREAM_DIR_OUT].buf_count * sizeof(struct zvapp_v4l_buf_info));
-
-    if (V4L2_MEMORY_MMAP == pComponent->ports[STREAM_DIR_OUT].memory)
-    {
-        // acquire buffer memory from the driver
-		for (nV4lBufCnt = 0; nV4lBufCnt < pComponent->ports[STREAM_DIR_OUT].buf_count; nV4lBufCnt++)
-		{
-		    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.index = nV4lBufCnt;
-		    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.bytesused = 0;
-		    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.memory = pComponent->ports[STREAM_DIR_OUT].memory;
-            pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes = pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lPlanes;
-		    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.length = 2;
-
-			stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-			stV4lBuf.memory = V4L2_MEMORY_MMAP;
-			stV4lBuf.index = nV4lBufCnt;
-            stV4lBuf.m.planes = stV4lPlanes;
-		    stV4lBuf.length = 2;
-			lErr = ioctl(pComponent->hDev, VIDIOC_QUERYBUF, &stV4lBuf);
-			if (!lErr)
-			{
-				//printf("%s() QUERYBUF(%d) buf_nb(%d)", __FUNCTION__, nV4lBufCnt, stV4lBuf.length);
-                for (i = 0; i < stV4lBuf.length; i++)
-                {
-				    //printf("(%x:%d) ", stV4lBuf.m.planes[i].m.mem_offset, stV4lBuf.m.planes[i].length);
-
-				    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].size[i] = stV4lBuf.m.planes[i].length;
-				    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].addr[i] = mmap(0, stV4lBuf.m.planes[i].length, PROT_READ | PROT_WRITE, MAP_SHARED, pComponent->hDev, stV4lBuf.m.planes[i].m.mem_offset);
-				    if (pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].addr[i] <= 0)
-				    {
-					    printf("%s() V4L mmap failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-					    ret_err = 23;
-					    goto FUNCTION_STOP;
-				    }
-		            pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].m.mem_offset = stV4lBuf.m.planes[i].m.mem_offset;
-                    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].bytesused = 0;
-                    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].length = stV4lBuf.m.planes[i].length;
-                    pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf[nV4lBufCnt].stV4lBuf.m.planes[i].data_offset = 0;
-                }
-			}
-			else
-			{
-				printf("%s() VIDIOC_QUERYBUF failed index=%d \n", __FUNCTION__, nV4lBufCnt);
-				ret_err = 24;
-				goto FUNCTION_STOP;
-			}
-		}
-    }
-
-    // this port is opened if the buffers are allocated
-    pComponent->ports[STREAM_DIR_OUT].opened = 1;
-
-    // start the v4l2 capture streaming thread
 	lErr = pthread_create(&pComponent->ports[STREAM_DIR_OUT].threadId,
 			NULL,
 			(void *)test_streamout,
@@ -2309,8 +2343,8 @@ Or reference the usage manual.\n\
 	else
 	{
 		printf("%s() pthread create failed, threadId: %lu \n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].threadId);
-		ret_err = 25;
-		goto FUNCTION_STOP;
+		ret_err = 12;
+		goto FUNC_END;
 	}
 	// wait for 10 msec
 	usleep(10000);
@@ -2333,22 +2367,6 @@ CHECK_USER_INPUT:
 		goto CHECK_USER_INPUT;
 	}
 
-FUNCTION_STOP:
-    // unsubscribe v4l2 events
-    memset(&sub, 0, sizeof(struct v4l2_event_subscription));
-	for (i = 0; i < MAX_SUPPORTED_COMPONENTS; i++)
-	{
-		if (component[i].hDev > 0)
-		{
-            sub.type = V4L2_EVENT_ALL;
-            lErr = ioctl(component[i].hDev, VIDIOC_UNSUBSCRIBE_EVENT, &sub);
-	        if (lErr)
-	        {
-		        printf("%s() VIDIOC_UNSUBSCRIBE_EVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-	        }
-        }
-    }
-
 FUNC_END:
 	// wait for 100 msec
 	usleep(100000);
@@ -2364,7 +2382,7 @@ FUNC_END:
 				if(lErr)
 				{
 					printf("warning: %s() pthread_join failed: errno(%d)  \n", __FUNCTION__, lErr);
-					ret_err = 26;
+					ret_err = 13;
 				}
 
 				component[i].ports[j].ulThreadCreated = 0;
@@ -2372,41 +2390,23 @@ FUNC_END:
 		}
 	}
 
+	// unsubscribe v4l2 events
+	memset(&sub, 0, sizeof(struct v4l2_event_subscription));
 	for (i = 0; i < MAX_SUPPORTED_COMPONENTS; i++)
 	{
-		for (j = 0; j < MAX_STREAM_DIR; j++)
+		if (component[i].hDev > 0)
 		{
-			if (V4L2_MEMORY_MMAP == component[i].ports[j].memory)
-            {
-	            if (component[i].ports[j].stAppV4lBuf)
-	            {
-		            for (nV4lBufCnt = 0; nV4lBufCnt < component[i].ports[j].buf_count; nV4lBufCnt++)
-		            {
-                        for (k = 0; k < 2; k++)
-                        {
-			                if (component[i].ports[j].stAppV4lBuf[nV4lBufCnt].addr[i])
-			                {
-				                munmap(component[i].ports[j].stAppV4lBuf[nV4lBufCnt].addr[k], component[i].ports[j].stAppV4lBuf[nV4lBufCnt].size[k]);
-			                }
-                        }
-		            }
-		            free((void *)component[i].ports[j].stAppV4lBuf);
-	            }
-            }
-		}
-	}
+            sub.type = V4L2_EVENT_ALL;
+            lErr = ioctl(component[i].hDev, VIDIOC_UNSUBSCRIBE_EVENT, &sub);
+	        if (lErr)
+	        {
+		        printf("%s() VIDIOC_UNSUBSCRIBE_EVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+	        }
+        }
+    }
 
 	for (i = 0; i < MAX_SUPPORTED_COMPONENTS; i++)
 	{
-		for (j = 0; j < MAX_STREAM_DIR; j++)
-		{
-			// close ports
-			if (component[i].ports[j].opened)
-			{
-				component[i].ports[j].opened = ZOE_FALSE;
-			}
-		}
-
 		if(component[i].ports[STREAM_DIR_IN].pszNameOrAddr)
 		{
 			free(component[i].ports[STREAM_DIR_IN].pszNameOrAddr);

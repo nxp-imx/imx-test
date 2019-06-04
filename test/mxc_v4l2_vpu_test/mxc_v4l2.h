@@ -146,7 +146,6 @@ typedef struct _stream_media_t
 	unsigned int		        unSentStopCmd;
 
 	uint32_t			        fmt;
-	zoe_bool_t                  auto_rewind;
 
 	unsigned int                outFrameCount;
 	unsigned int                inFrameCount;
@@ -179,6 +178,7 @@ typedef struct _component_t
 	unsigned int			ulHeight;
 
 	struct v4l2_crop        crop;
+	int 					res_change_flag;
 
 } component_t;
 
