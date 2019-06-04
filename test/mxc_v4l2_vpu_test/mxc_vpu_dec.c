@@ -947,20 +947,15 @@ int req_buffer(component_t *pComponent, stream_media_t *port, struct v4l2_reques
 {
 	int lErr;
 
-	lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, &req_bufs);
+	lErr = ioctl(pComponent->hDev, VIDIOC_REQBUFS, req_bufs);
 	if (lErr)
 	{
-		printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+		printf("%s() VIDIOC_REQBUFS ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
 		return -1;
 	}
-	printf("%s() VIDIOC_REQBUFS V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE %d\n", __FUNCTION__, req_bufs->count);
 
 	port->memory = req_bufs->memory;
 	port->buf_count = req_bufs->count;
-	printf("%s() STREAM_DIR_OUT: req_bufs.count = %d\n", __FUNCTION__, port->buf_count);
-	port->stAppV4lBuf = malloc(port->buf_count * sizeof(struct zvapp_v4l_buf_info));
-	if (!port->stAppV4lBuf)
-		return -1;
 
 	return 0;
 }
@@ -1150,6 +1145,16 @@ STREAMOUT_INFO:
 		goto FUNC_EXIT;
 	}
 
+	pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf = malloc(pComponent->ports[STREAM_DIR_OUT].buf_count * sizeof(struct zvapp_v4l_buf_info));
+	if (!pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf)
+	{
+		printf("warning: %s() alloc stream buffer failed.\n", __FUNCTION__);
+		ret_err = 44;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+	stAppV4lBuf = pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf;
+
 	lErr = query_buffer(pComponent, &pComponent->ports[STREAM_DIR_OUT], V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, stV4lPlanes);
 	if (lErr < 0)
 	{
@@ -1157,7 +1162,6 @@ STREAMOUT_INFO:
 		g_unCtrlCReceived = 1;
 		goto FUNC_EXIT;
 	}
-	stAppV4lBuf = pComponent->ports[STREAM_DIR_OUT].stAppV4lBuf;
 
 	pComponent->ports[STREAM_DIR_OUT].opened = 1;
 
@@ -1560,6 +1564,16 @@ void test_streamin(component_t *pComponent)
 		goto FUNC_EXIT;
 	}
 
+	pComponent->ports[STREAM_DIR_IN].stAppV4lBuf = malloc(pComponent->ports[STREAM_DIR_IN].buf_count * sizeof(struct zvapp_v4l_buf_info));
+	if (!pComponent->ports[STREAM_DIR_IN].stAppV4lBuf)
+	{
+		printf("warning: %s() alloc stream buffer failed.\n", __FUNCTION__);
+		ret_err = 31;
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
+	stAppV4lBuf = pComponent->ports[STREAM_DIR_IN].stAppV4lBuf;
+
 	lErr = query_buffer(pComponent, &pComponent->ports[STREAM_DIR_IN], V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, stV4lPlanes);
 	if (lErr < 0)
 	{
@@ -1567,7 +1581,6 @@ void test_streamin(component_t *pComponent)
 		g_unCtrlCReceived = 1;
 		goto FUNC_EXIT;
 	}
-	stAppV4lBuf = pComponent->ports[STREAM_DIR_IN].stAppV4lBuf;
 
 	pComponent->ports[STREAM_DIR_IN].opened = 1;
 	
