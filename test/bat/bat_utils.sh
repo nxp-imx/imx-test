@@ -508,7 +508,9 @@ bat_kconfig_enabled()
 
 bat_has_busfreq()
 {
-    [[ -d /proc/device-tree/soc/busfreq || -d /proc/device-tree/busfreq ]]
+    [[ -d /proc/device-tree/soc/busfreq ||
+       -d /proc/device-tree/busfreq ||
+       -d /proc/device-tree/interconnect ]]
 }
 
 # According to the temp driver, it may require up to ~17us to complete
