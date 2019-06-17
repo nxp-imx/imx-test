@@ -3,6 +3,15 @@ STRIP		?= $(CROSS_COMPILE)strip
 BASE_CFLAGS	= -Wall -Wstrict-prototypes -Wno-trigraphs -O2 \
 		  -fno-strict-aliasing -fno-common -g
 
+
+# Recent versions of yocto SDK place uapi headers in $(SDKTARGETSYSROOT)/usr/include/imx
+ifdef SDKTARGETSYSROOT
+    ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/imx/linux/*.h))
+	BASE_CFLAGS += -I$(SDKTARGETSYSROOT)/usr/include/imx
+    endif
+endif
+
+
 TARGETS :=
 
 all: targets
