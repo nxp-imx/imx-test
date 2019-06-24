@@ -30,7 +30,7 @@
 
 int main(int argc, char *argv[])
 {
-	int fd, i, j;
+	int fd;
 	FILE *testjpg;
 	struct encoder_args ea;
 	bool is_mp = 0; /* 1 for multi-planar*/

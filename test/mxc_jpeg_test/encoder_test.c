@@ -30,7 +30,7 @@
 
 int main(int argc, char *argv[])
 {
-	int fd, i, j;
+	int fd;
 	FILE *testraw;
 	long filesize;
 	struct encoder_args ea;
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 				fprintf(stderr,
 					"%d x %d NV12 expected size %d, ",
 					ea.width, ea.height, expected_size);
-				fprintf(stderr, "actual filesize is %d\n",
+				fprintf(stderr, "actual filesize is %ld\n",
 					filesize);
 				exit(1);
 			}

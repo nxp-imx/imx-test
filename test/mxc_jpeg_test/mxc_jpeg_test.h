@@ -48,7 +48,7 @@ static struct pix_fmt_data fmt_data[] = {
 	{
 		.name	= "yuv444",
 		.descr	= "packed YUV",
-		.fourcc	= V4L2_PIX_FMT_YUV32
+		.fourcc	= V4L2_PIX_FMT_YUV24
 	},
 	{
 		.name	= "gray",
@@ -72,7 +72,7 @@ void print_usage(char *str)
 	printf("[-n <iterations>] ");
 	printf("[-x]\n");
 	printf("Supported pixel formats:\n");
-	for (int i = 0; i < sizeof(fmt_data) / sizeof(*fmt_data); i++)
+	for (i = 0; i < sizeof(fmt_data) / sizeof(*fmt_data); i++)
 		printf("\t%8s: %s\n",
 		       fmt_data[i].name,
 		       fmt_data[i].descr);
@@ -86,7 +86,7 @@ int get_fourcc(char *fmt)
 {
 	int i;
 
-	for (int i = 0; i < sizeof(fmt_data) / sizeof(*fmt_data); i++)
+	for (i = 0; i < sizeof(fmt_data) / sizeof(*fmt_data); i++)
 		if (strcmp(fmt_data[i].name, fmt) == 0)
 			return fmt_data[i].fourcc;
 
@@ -273,6 +273,8 @@ void v4l2_reqbufs(int vdev_fd, bool is_mp)
 
 void v4l2_querybuf_cap(int vdev_fd, bool is_mp, struct v4l2_buffer *buf)
 {
+	int plane;
+
 	/* the capture buffer is filled by the driver */
 	memset(buf, 0, sizeof(*buf));
 	buf->type = is_mp ?
@@ -293,7 +295,7 @@ void v4l2_querybuf_cap(int vdev_fd, bool is_mp, struct v4l2_buffer *buf)
 	if (!is_mp)
 		return;
 	printf("\tActual number of planes=%d\n", buf->length);
-	for (int plane = 0; plane < buf->length; plane++) {
+	for (plane = 0; plane < buf->length; plane++) {
 		printf("\tPlane %d bytesused=%d, length=%d, data_offset=%d\n",
 		       plane,
 		       buf->m.planes[plane].bytesused,
@@ -305,6 +307,8 @@ void v4l2_querybuf_cap(int vdev_fd, bool is_mp, struct v4l2_buffer *buf)
 void v4l2_querybuf_out(int vdev_fd, bool is_mp, struct v4l2_buffer *bufferout,
 		       __u32 bytesused)
 {
+	int plane;
+
 	memset(bufferout, 0, sizeof(*bufferout));
 	bufferout->type = is_mp ?
 	    V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE : V4L2_BUF_TYPE_VIDEO_OUTPUT;
@@ -327,7 +331,7 @@ void v4l2_querybuf_out(int vdev_fd, bool is_mp, struct v4l2_buffer *bufferout,
 	if (!is_mp)
 		return;
 	printf("\tActual number of planes=%d\n", bufferout->length);
-	for (int plane = 0; plane < bufferout->length; plane++) {
+	for (plane = 0; plane < bufferout->length; plane++) {
 		printf("\tPlane %d bytesused=%d, length=%d, data_offset=%d\n",
 		       plane,
 		       bufferout->m.planes[plane].bytesused,
