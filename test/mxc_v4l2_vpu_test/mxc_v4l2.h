@@ -50,6 +50,9 @@ typedef unsigned int zoe_bool_t;
 #ifndef SIZEOF_ARRAY
 #define SIZEOF_ARRAY(ar)    (sizeof(ar) / sizeof((ar)[0]))
 #endif
+
+#define V4L2_EVENT_DECODE_ERROR		(V4L2_EVENT_PRIVATE_START + 1)
+
 typedef uint32_t    ZOE_OBJECT_HANDLE, *PZOE_OBJECT_HANDLE; //handle of an object
 
 typedef enum _COMPONENT_TYPE
