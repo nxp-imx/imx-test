@@ -1314,6 +1314,11 @@ STREAMOUT_START:
 					pComponent->res_change_flag = 1;
 					break;
 				}
+				else if(evt.type == V4L2_EVENT_DECODE_ERROR)
+				{
+					g_unCtrlCReceived = 1;
+					goto FUNC_END;
+				}
 				else
 					printf("%s() VIDIOC_DQEVENT type=%d\n", __FUNCTION__, evt.type);
 				continue;
@@ -2246,6 +2251,16 @@ Or reference the usage manual.\n\
 		ret_err = 7;
 		goto FUNC_END;
 	}
+	memset(&sub, 0, sizeof(struct v4l2_event_subscription));
+	sub.type = V4L2_EVENT_DECODE_ERROR;
+	lErr = ioctl(pComponent->hDev, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	if (lErr)
+	{
+		printf("%s() VIDIOC_SUBSCRIBE_EVENT(V4L2_EVENT_DECODE_ERROR) ioctl failed %d %s\n",
+			__FUNCTION__, errno, strerror(errno));
+		ret_err = 7;
+		goto FUNC_END;
+	}
 
 	set_ctrl(pComponent->hDev, V4L2_CID_USER_RAW_BASE, 1);
 
@@ -2325,6 +2340,7 @@ Or reference the usage manual.\n\
 	{
 		printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
 		ret_err = 11;
+		g_unCtrlCReceived = 1;
 		goto FUNC_END;
 	}
     else
@@ -2336,6 +2352,11 @@ Or reference the usage manual.\n\
                 break;
             case V4L2_EVENT_EOS:
 		        printf("%s() VIDIOC_DQEVENT V4L2_EVENT_EOS pending(%d) seq(%d)\n", __FUNCTION__, evt.pending, evt.sequence);
+                break;
+            case V4L2_EVENT_DECODE_ERROR:
+		        printf("%s() VIDIOC_DQEVENT V4L2_EVENT_DECODE_ERROR pending(%d) seq(%d)\n", __FUNCTION__, evt.pending, evt.sequence);
+			g_unCtrlCReceived = 1;
+			goto FUNC_END;
                 break;
             default:
 		        printf("%s() VIDIOC_DQEVENT unknown event(%d)\n", __FUNCTION__, evt.type);
@@ -2357,6 +2378,7 @@ Or reference the usage manual.\n\
 	{
 		printf("%s() pthread create failed, threadId: %lu \n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].threadId);
 		ret_err = 12;
+		g_unCtrlCReceived = 1;
 		goto FUNC_END;
 	}
 	// wait for 10 msec
