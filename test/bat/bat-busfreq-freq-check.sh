@@ -24,11 +24,11 @@ bat_dump_busfreq_rates()
     local clk_name clk_rate
     for clk_name in \
             ahb ahb_root_clk ahb_div ahb_src \
-            axi main_axi_root_clk main_axi_src \
+            axi main_axi main_axi_root_clk main_axi_src \
             ipg ipg_root ipg_root_clk \
             noc noc_div \
             dram dram_root_clk \
-            dram_core_clk dram_pll_out dram_alt_root \
+            dram_core_clk dram_pll_out dram_alt_root dram_alt dram_apb \
             mmdc mmdc_ch0_axi mmdc_ch1_axi mmdc_p0_fast;
     do
         if bat_has_clk $clk_name; then
