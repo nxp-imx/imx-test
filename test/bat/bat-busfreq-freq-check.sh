@@ -70,54 +70,54 @@ bat_assert_busfreq_low()
     local soc_id=$(cat /sys/devices/soc0/soc_id||true)
     case $soc_id in
     i.MX8MQ)
-        bat_assert_clk_rate $ahb 22222223 || let fail++
-        bat_assert_clk_rate $ipg 11111112 || let fail++
+        bat_assert_clk_rate $ahb 22222223 || let ++fail
+        bat_assert_clk_rate $ipg 11111112 || let ++fail
         noc=$(bat_find_clk noc noc_div)
-        bat_assert_clk_rate $noc 100000000 || let fail++
+        bat_assert_clk_rate $noc 100000000 || let ++fail
         axi=$(bat_find_clk main_axi main_axi_div)
-        bat_assert_clk_rate $axi 25000000 || let fail++
+        bat_assert_clk_rate $axi 25000000 || let ++fail
         ;;
     i.MX8MM)
-        bat_assert_clk_rate $ahb 22222223 || let fail++
-        bat_assert_clk_rate $ipg 11111112 || let fail++
+        bat_assert_clk_rate $ahb 22222223 || let ++fail
+        bat_assert_clk_rate $ipg 11111112 || let ++fail
         noc=$(bat_find_clk noc noc_div)
-        bat_assert_clk_rate $noc 150000000 || let fail++
+        bat_assert_clk_rate $noc 150000000 || let ++fail
         axi=$(bat_find_clk main_axi main_axi_div)
-        bat_assert_clk_rate $axi 24000000 || let fail++
+        bat_assert_clk_rate $axi 24000000 || let ++fail
         ;;
     i.MX7D*)
-        bat_assert_clk_rate $ahb 24000000 || let fail++
-        bat_assert_clk_rate $ipg 12000000 || let fail++
-        bat_assert_clk_rate main_axi_root_clk 24000000 || let fail++
-        bat_assert_clk_rate dram_root_clk 24000000 || let fail++
+        bat_assert_clk_rate $ahb 24000000 || let ++fail
+        bat_assert_clk_rate $ipg 12000000 || let ++fail
+        bat_assert_clk_rate main_axi_root_clk 24000000 || let ++fail
+        bat_assert_clk_rate dram_root_clk 24000000 || let ++fail
         ;;
     i.MX6SLL)
-        bat_assert_clk_rate $ahb 24000000 || let fail++
-        bat_assert_clk_rate $ipg 12000000 || let fail++
-        bat_assert_clk_rate axi 24000000 || let fail++
-        bat_assert_clk_rate mmdc_p0_fast 24000000 || let fail++
+        bat_assert_clk_rate $ahb 24000000 || let ++fail
+        bat_assert_clk_rate $ipg 12000000 || let ++fail
+        bat_assert_clk_rate axi 24000000 || let ++fail
+        bat_assert_clk_rate mmdc_p0_fast 24000000 || let ++fail
         ;;
     i.MX6SL)
-        bat_assert_clk_rate $ahb 24000000 || let fail++
-        bat_assert_clk_rate $ipg 12000000 || let fail++
-        bat_assert_clk_rate mmdc 24000000 || let fail++
+        bat_assert_clk_rate $ahb 24000000 || let ++fail
+        bat_assert_clk_rate $ipg 12000000 || let ++fail
+        bat_assert_clk_rate mmdc 24000000 || let ++fail
         ;;
     i.MX6SX)
-        bat_assert_clk_rate $ahb 24000000 || let fail++
-        bat_assert_clk_rate $ipg 12000000 || let fail++
-        bat_assert_clk_rate mmdc_p0_fast 24000000 || let fail++
+        bat_assert_clk_rate $ahb 24000000 || let ++fail
+        bat_assert_clk_rate $ipg 12000000 || let ++fail
+        bat_assert_clk_rate mmdc_p0_fast 24000000 || let ++fail
         ;;
     i.MX6UL*)
-        bat_assert_clk_rate $ahb 24000000 || let fail++
-        bat_assert_clk_rate $ipg 12000000 || let fail++
-        bat_assert_clk_rate axi 24000000 || let fail++
-        bat_assert_clk_rate mmdc_p0_fast 24000000 || let fail++
+        bat_assert_clk_rate $ahb 24000000 || let ++fail
+        bat_assert_clk_rate $ipg 12000000 || let ++fail
+        bat_assert_clk_rate axi 24000000 || let ++fail
+        bat_assert_clk_rate mmdc_p0_fast 24000000 || let ++fail
         ;;
     i.MX6Q*|i.MX6D*|i.MX6S*)
-        bat_assert_clk_rate $ahb 24000000 || let fail++
-        bat_assert_clk_rate $ipg 12000000 || let fail++
-        bat_assert_clk_rate axi 24000000 || let fail++
-        bat_assert_clk_rate mmdc_ch0_axi 24000000 || let fail++
+        bat_assert_clk_rate $ahb 24000000 || let ++fail
+        bat_assert_clk_rate $ipg 12000000 || let ++fail
+        bat_assert_clk_rate axi 24000000 || let ++fail
+        bat_assert_clk_rate mmdc_ch0_axi 24000000 || let ++fail
         ;;
     *)
         echo "No detailed busfreq freq check for $soc_id"
