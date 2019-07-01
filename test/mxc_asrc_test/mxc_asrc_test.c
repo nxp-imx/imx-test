@@ -155,12 +155,12 @@ void help_info(int ac, const char *av[])
 	printf("\n\n**************************************************\n");
 	printf("* Test aplication for ASRC\n");
 	printf("* Options : \n\n");
-	printf("-o <output sample rate>");
-	printf("-x <origin.wav>");
+	printf("-o <output sample rate>\n");
+	printf("-x <origin.wav>\n");
 	printf("-z <converted.wav>\n");
-	printf("-e enable iec958");
-	printf("-p <input clock>");
-	printf("-q <output clock>");
+	printf("-e : enable iec958\n");
+	printf("-p <input clock>\n");
+	printf("-q <output clock>\n");
 
 	printf("<input clock source> <output clock source>\n");
 	printf("input clock source types are:\n\n");
