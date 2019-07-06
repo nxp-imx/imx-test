@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2018 NXP. All rights reserved.
+ * Copyright 2018 NXP
  *
  * mxc_v4l2_vpu_test.c
  *
