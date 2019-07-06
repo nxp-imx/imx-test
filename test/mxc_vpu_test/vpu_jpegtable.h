@@ -1,8 +1,7 @@
 /*
+ * Copyright (c) 2008, Chips & Media.  All rights reserved.
  * Copyright 2008-2011 Freescale Semiconductor, Inc.
  * Copyright 2017 NXP
- *
- * Copyright (c) 2008, Chips & Media.  All rights reserved.
  */
 
 /* 

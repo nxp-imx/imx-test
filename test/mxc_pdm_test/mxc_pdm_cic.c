@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 NXP.
+ * Copyright 2017 NXP
  *
  * mxc_cic.c -- Cascade integrator comb filter
  *
