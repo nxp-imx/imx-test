@@ -1068,29 +1068,26 @@ EXAMPLES:\n\
 
 void test_streamout(component_t *pComponent)
 {
-	int							lErr = 0;
-	FILE						*fpOutput = 0;
-
-	struct zvapp_v4l_buf_info	*stAppV4lBuf;
+	int					lErr = 0;
+	FILE					*fpOutput = 0;
+	struct zvapp_v4l_buf_info		*stAppV4lBuf;
 	struct v4l2_buffer			stV4lBuf;
-    struct v4l2_plane           stV4lPlanes[3];
-
+	struct v4l2_plane           		stV4lPlanes[3];
 	unsigned int				ulWidth;
 	unsigned int				ulHeight;
-
-    fd_set                      fds;
-    struct timeval              tv;
-    int                         r;
-    struct v4l2_event           evt;
-
-    unsigned int                i;
-	unsigned int                j;
-    zoe_bool_t                  seek_flag;
-	unsigned int                outFrameNum = 0;
-	unsigned int                stream_type;
-	float                       used_time = 0.01;
-	struct v4l2_format          format;
-	struct v4l2_requestbuffers  req_bufs;
+	fd_set					rd_fds;
+	fd_set 					evt_fds;
+	struct timeval 				tv;
+	int 					r;
+	struct v4l2_event 			evt;
+	unsigned int 				i;
+	unsigned int                		j;
+	zoe_bool_t                  		seek_flag;
+	unsigned int                		outFrameNum = 0;
+	unsigned int                		stream_type;
+	float                       		used_time = 0.01;
+	struct v4l2_format          		format;
+	struct v4l2_requestbuffers  		req_bufs;
 
 STREAMOUT_INFO:
 
@@ -1258,52 +1255,39 @@ STREAMOUT_START:
 		/***********************************************
 		** DQBUF, get buffer from driver
 		***********************************************/
-		FD_ZERO(&fds);
-		FD_SET(pComponent->hDev, &fds);
+		FD_ZERO(&rd_fds);
+		FD_ZERO(&evt_fds);
+		FD_SET(pComponent->hDev, &rd_fds);
+		FD_SET(pComponent->hDev, &evt_fds);
 
 		// Timeout
-        tv.tv_sec = 1;
+		tv.tv_sec = 1;
 		tv.tv_usec = 0;
 
-		r = select(pComponent->hDev + 1, &fds, NULL, NULL, &tv);
+		r = select(pComponent->hDev + 1, &rd_fds, NULL, &evt_fds, &tv);
 
-		if (-1 == r) 
+		if (-1 == r)
 		{
 			fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
 			continue;
 		}
-		if (0 == r) 
+		else if (0 == r)
 		{
-		    printf("\nstream out: select readable dev timeout.\n");
-			//continue;
-			FD_ZERO(&fds);
-			FD_SET(pComponent->hDev, &fds);
+			printf("\nstream out: select readable dev timeout.\n");
+			continue;
+		}
+		else
+		{
+			if(FD_ISSET(pComponent->hDev, &evt_fds))
+			{
+				memset(&evt, 0, sizeof(struct v4l2_event));
+				lErr = ioctl(pComponent->hDev, VIDIOC_DQEVENT, &evt);
+				if (lErr)
+				{
+					 printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+					 break;
+				}
 
-			// Timeout
-			tv.tv_sec = 3;
-			tv.tv_usec = 0;
-
-			r = select(pComponent->hDev + 1, NULL, NULL, &fds, &tv);
-			if (-1 == r)
-			{
-				fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
-				break;
-			}
-			if (0 == r)
-			{
-				printf("stream out: select event dev timeout.\n");
-				continue;
-			}
-
-			memset(&evt, 0, sizeof(struct v4l2_event));
-			lErr = ioctl(pComponent->hDev, VIDIOC_DQEVENT, &evt);
-			if (lErr)
-			{
-				printf("%s() VIDIOC_DQEVENT ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-				break;
-			}
-			else
-			{
 				if(evt.type == V4L2_EVENT_EOS)
 				{
 					printf("V4L2_EVENT_EOS is called\n");
@@ -1320,9 +1304,13 @@ STREAMOUT_START:
 					goto FUNC_END;
 				}
 				else
+				{
 					printf("%s() VIDIOC_DQEVENT type=%d\n", __FUNCTION__, evt.type);
-				continue;
+				}
 			}
+
+			if(!FD_ISSET(pComponent->hDev, &rd_fds))
+				continue;
 		}
 
 		stV4lBuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -2291,24 +2279,22 @@ Or reference the usage manual.\n\
 	if (!g_unCtrlCReceived)
 	{
 		while (!g_unCtrlCReceived)
-    	{
+		{
 			r = poll(&p_fds, 1, 2000);
-			printf("%s() r %d\n", __FUNCTION__, r);
-    	    if (-1 == r) 
-    	    {
-    	        fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+			if (-1 == r)
+			{
+				fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
 				g_unCtrlCReceived = 1;
 				ret_err = 9;
 				goto FUNC_END;
-    	    }
-    	    else if (0 == r) 
-    	    {
-    	        fprintf(stderr, "%s() select timeout\n", __FUNCTION__);
+			}
+			else if (0 == r)
+			{
 				wait_pollpri_times++;
-		    }
-    	    else
-    	    {
-    	        if (p_fds.revents & POLLPRI)
+				}
+			else
+			{
+				if (p_fds.revents & POLLPRI)
 				{
 					break;
 				}
@@ -2317,15 +2303,15 @@ Or reference the usage manual.\n\
 					sleep(1);
 					wait_pollpri_times++;
 				}
-    	    }
-			if (wait_pollpri_times >= 10)
+			}
+			if (wait_pollpri_times >= 30)
 			{
 				printf("error: %s(), waiting for the POLLPRI event response timeout.\n", __FUNCTION__);
 				g_unCtrlCReceived = 1;
 				ret_err = 10;
 				goto FUNC_END;
 			}
-    	}
+		}
 	}
 
 	if (g_unCtrlCReceived)
