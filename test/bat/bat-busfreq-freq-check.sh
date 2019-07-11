@@ -84,6 +84,7 @@ bat_assert_busfreq_low()
         bat_assert_clk_rate $noc 150000000 || let ++fail
         axi=$(bat_find_clk main_axi main_axi_div)
         bat_assert_clk_rate $axi 24000000 || let ++fail
+        bat_assert_clk_rate dram_apb 20000000 || let ++fail
         ;;
     i.MX7D*)
         bat_assert_clk_rate $ahb 24000000 || let ++fail
