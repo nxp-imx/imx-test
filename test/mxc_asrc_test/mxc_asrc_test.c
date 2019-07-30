@@ -51,6 +51,7 @@ struct audio_info_s {
 	int pcm;
 	int inclk;
 	int outclk;
+	int audioformat;
 };
 struct audio_buf {
 	char *start;
@@ -422,6 +423,7 @@ int update_datachunk_length(struct audio_info_s *info, int format_size)
 int update_blockalign(struct audio_info_s *info)
 {
 	*(unsigned short *)&header[32] = info->blockalign;
+	*(unsigned short *)&header[20] = info->audioformat;
 	return 0;
 }
 
@@ -611,7 +613,7 @@ void bitshift(FILE * src, struct audio_info_s *info)
 		/*change data format*/
 		if ((supported_in_format & (1ULL << SND_PCM_FORMAT_S32_LE)) &&
 			(supported_out_format & (1ULL << SND_PCM_FORMAT_IEC958_SUBFRAME_LE)) &&
-			info->iec958) {
+			info->iec958 && info->audioformat == 1) {
 			do {
 				fread(&data, 4, 1, src);
 				input_buffer[i++] = data;
@@ -622,7 +624,8 @@ void bitshift(FILE * src, struct audio_info_s *info)
 			info->input_format = SND_PCM_FORMAT_S32_LE;
 			info->output_format = SND_PCM_FORMAT_IEC958_SUBFRAME_LE;
 		} else if ((supported_in_format & (1ULL << SND_PCM_FORMAT_S32_LE)) &&
-			(supported_out_format & (1ULL << SND_PCM_FORMAT_S32_LE))) {
+			(supported_out_format & (1ULL << SND_PCM_FORMAT_FLOAT_LE)) &&
+			info->audioformat == 1) {
 			do {
 				fread(&data, 4, 1, src);
 				input_buffer[i++] = data;
@@ -631,6 +634,20 @@ void bitshift(FILE * src, struct audio_info_s *info)
 			info->frame_bits = 32;
 			info->blockalign = info->channel * 4;
 			info->input_format = SND_PCM_FORMAT_S32_LE;
+			info->output_format = SND_PCM_FORMAT_FLOAT_LE;
+			info->audioformat = 3;
+		} else if ((supported_in_format & (1ULL << SND_PCM_FORMAT_FLOAT_LE)) &&
+			(supported_out_format & (1ULL << SND_PCM_FORMAT_S32_LE)) &&
+			info->audioformat == 3) {
+			do {
+				fread(&data, 4, 1, src);
+				input_buffer[i++] = data;
+			} while (--nleft);
+
+			info->frame_bits = 32;
+			info->audioformat = 1;
+			info->blockalign = info->channel * 4;
+			info->input_format = SND_PCM_FORMAT_FLOAT_LE;
 			info->output_format = SND_PCM_FORMAT_S32_LE;
 
 		} else {
@@ -708,6 +725,7 @@ int header_parser(FILE * src, struct audio_info_s *info)
 	fread(&header[12], 1, format_size + 8, src);
 
 	/* AudioFormat(2) */
+	info->audioformat = *(short *)&header[12 + 8];
 
 	/* NumChannel(2) */
 	info->channel = *(short *)&header[12 + 8 + 2];
@@ -790,6 +808,18 @@ void header_write(FILE * dst)
 		fwrite(&header[i], 1, 1, dst);
 		i++;
 	}
+}
+
+void header_default(struct audio_info_s *info)
+{
+	memcpy(&header[0], "RIFF", 4);
+	*(int *)&header[4] = 0;
+	memcpy(&header[8], "WAVE", 4);
+	memcpy(&header[12], "fmt ", 4);
+	*(int *)&header[16] = 16;
+	*(short *)&header[22] = info->channel;
+	*(int *)&header[24] = info->output_sample_rate;
+	memcpy(&header[36], "data", 4);
 }
 
 int main(int ac, const char *av[])
@@ -980,6 +1010,12 @@ int main(int ac, const char *av[])
 		audio_info.frame_bits = snd_pcm_format_width(audio_info.input_format);
 		audio_info.blockalign = audio_info.channel * snd_pcm_format_physical_width(audio_info.input_format) / 8;
 
+		if (audio_info.input_format == SND_PCM_FORMAT_FLOAT_LE)
+			audio_info.audioformat = 3;
+		else
+			audio_info.audioformat = 1;
+
+		header_default(&audio_info);
 	} else {
 		if ((header_parser(fd_src, &audio_info)) <= 0) {
 			goto end_head_parse;
@@ -996,16 +1032,14 @@ int main(int ac, const char *av[])
 	if (err < 0)
 		goto end_err;
 
-	if (!audio_info.pcm)
-		header_write(fd_dst);
+	header_write(fd_dst);
 
 	/* Config HW */
 	err += play_file(fd_dst, fd_asrc, &audio_info);
 	if (err < 0)
 		goto end_err;
 
-	if (!audio_info.pcm)
-		header_update(fd_dst, &audio_info);
+	header_update(fd_dst, &audio_info);
 
 	fclose(fd_src);
 	fclose(fd_dst);
