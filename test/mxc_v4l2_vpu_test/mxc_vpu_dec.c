@@ -184,10 +184,7 @@ int check_video_device(uint32_t devInstance,
     uint32_t                devType = -1;
 
 
-    printf("%s(): %d: %s", __FUNCTION__, devInstance, pszDeviceName);
-	hDev = open(pszDeviceName, 
-					O_RDWR
-					);
+	hDev = open(pszDeviceName, O_RDWR);
     if (hDev >= 0) 
 	{
 		// query capability
@@ -199,16 +196,6 @@ int check_video_device(uint32_t devInstance,
 		close(hDev);
         if (0 == lErr)
         {
-			printf("%s()-> drv(%s) card(%s) bus(%s) ver(0x%x) cap(0x%x) dev_cap(0x%x)\n",
-				   __FUNCTION__,
-                   cap.driver,
-                   cap.card,
-                   cap.bus_info,
-                   cap.version,
-                   cap.capabilities,
-                   cap.device_caps
-				   );
-
             if (0 == strcmp((const char*)cap.bus_info, "PCIe:"))
             {
                 busType = 0;
@@ -259,13 +246,11 @@ int check_video_device(uint32_t devInstance,
         }
         else
         {
-			printf("%s()-> %s ioctl VIDIOC_QUERYCAP failed(%d)\n", __FUNCTION__, pszDeviceName, lErr);
-			return -1;
+		return -1;
         }
 	}
 	else
     {
-		printf("%s()-> open(%s) failed hDev(%d) errno(%d)\n", __FUNCTION__, pszDeviceName, hDev, errno);
 		return -1;
     }
 	return -1;
@@ -379,18 +364,82 @@ void usage(int nExit)
     }
 }
 
+static void convert_inter_2_prog_4_nv12(unsigned char *buffer,
+					unsigned int width,
+					unsigned int height,
+					unsigned int luma_size,
+					unsigned int chroma_size)
+{
+	unsigned char *src;
+	unsigned char *dst;
+	unsigned char *yTopSrc;
+	unsigned char *yBotSrc;
+	unsigned char *uvTopSrc;
+	unsigned char *uvBotSrc;
+	unsigned char *yDst;
+	unsigned char *uvDst;
+	int i;
+
+	src = (unsigned char *)malloc(luma_size + chroma_size);
+	memset(src, 0, luma_size + chroma_size);
+	memcpy(src, buffer, luma_size + chroma_size);
+	memset(buffer, 0, luma_size);
+
+	 yTopSrc = src;
+	 yBotSrc = src + luma_size / 2;
+	 uvTopSrc = src + luma_size;
+	 uvBotSrc = uvTopSrc + chroma_size / 2;
+	 dst = buffer;
+	 yDst = dst;
+	 uvDst = dst + luma_size;
+
+	/*convert luma */
+	for (i = 0; i < height; i++)
+	{
+		if (i & 0x1)
+		{
+			memcpy(yDst, yBotSrc, width);
+			yBotSrc += width;
+		}
+		else
+		{
+			memcpy(yDst, yTopSrc, width);
+			yTopSrc += width;
+		}
+		yDst += width;
+	}
+
+	/*convert chroma */
+	for (i = 0; i < height / 2; i++)
+	{
+		if (i & 0x1)
+		{
+			memcpy(uvDst, uvBotSrc, width);
+			uvTopSrc += width;
+		}
+		else
+		{
+			memcpy(uvDst, uvBotSrc, width);
+			uvBotSrc += width;
+		}
+		uvDst += width;
+	}
+
+	free(src);
+}
+
 //#define PRECISION_8BIT // 10 bits if not defined
 // Read 8-bit FSL stored image
 // Format is based on ratser array of tiles, where a tile is 1KB = 8x128
-static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth, 
-                                        unsigned int nPicHeight, 
-                                        unsigned int uVOffsetLuma,
-                                        unsigned int uVOffsetChroma,
-                                        unsigned int nFsWidth,  
-                                        uint8_t **nBaseAddr,
-										uint8_t *pDstBuffer,
-                                        unsigned int     bInterlaced
-                                      )
+static unsigned int ReadYUVFrame_FSL_8b(unsigned int nPicWidth,
+					unsigned int nPicHeight,
+					unsigned int uVOffsetLuma,
+					unsigned int uVOffsetChroma,
+					unsigned int nFsWidth,
+					uint8_t **nBaseAddr,
+					uint8_t *pDstBuffer,
+					unsigned int bInterlaced
+				       )
 {
 	unsigned int i;
 	unsigned int h_tiles, v_tiles, v_offset, nLines, vtile, htile;
@@ -408,7 +457,6 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 
 	if (bInterlaced)
 	{
-		// Per field no effect??
 		nLinesLuma   >>= 1;
 		nLinesChroma >>= 1;
 	}
@@ -482,7 +530,7 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 		pBuffer += (nPicWidth * nPicHeight) >> 3;
 	}
 	else
-	{ 
+	{
 		pBuffer += (nPicWidth * nPicHeight) >> 2;
 	}
 
@@ -551,21 +599,24 @@ static unsigned int ReadYUVFrame_FSL_8b ( unsigned int nPicWidth,
 		}
 	}
 
+	if (bInterlaced)
+		convert_inter_2_prog_4_nv12(pDstBuffer, nPicWidth, nPicHeight, nPicWidth * nPicHeight, nPicWidth * nPicHeight / 2);
+
 	free(pTmpBuffer);
 	return(0);
 }
 
 // Read 10bit packed FSL stored image
 // Format is based on ratser array of tiles, where a tile is 1KB = 8x128
-static unsigned int ReadYUVFrame_FSL_10b ( unsigned int nPicWidth, 
-                                       unsigned int nPicHeight, 
-                                       unsigned int uVOffsetLuma,
-                                       unsigned int uVOffsetChroma,
-                                       unsigned int nFsWidth,  
-                                       unsigned char **nBaseAddr,
-                                       unsigned char *pDstBuffer,
-                                       unsigned int     bInterlaced
-                                     )
+static unsigned int ReadYUVFrame_FSL_10b(unsigned int nPicWidth,
+					 unsigned int nPicHeight,
+					 unsigned int uVOffsetLuma,
+					 unsigned int uVOffsetChroma,
+					 unsigned int nFsWidth,
+					 unsigned char **nBaseAddr,
+					 unsigned char *pDstBuffer,
+					 unsigned int bInterlaced
+					)
 {
 #define RB_WIDTH (4096*5/4/4)
 	unsigned int (*pRowBuffer)[RB_WIDTH];
@@ -722,74 +773,21 @@ static void LoadFrameNV12 (unsigned char *pFrameBuffer, unsigned char *pYuvBuffe
 	unsigned char *pUDst  = pYuvBuffer + nSizeLuma;
 	unsigned char *pVDst  = pYuvBuffer + nSizeLuma + nSizeUorV;
 
-	if ((!bInterlaced) || bMonochrome)
+	memcpy(pYDst, pYSrc, nSizeLuma);
+	if (bMonochrome)
 	{
-		memcpy (pYDst, pYSrc, nSizeLuma);
-		if (bMonochrome)
-		{
-			memset (pUDst, 128, nSizeUorV);
-			memset (pVDst, 128, nSizeUorV);
-		}
-		else
-		{
-			unsigned char *pLast = pVDst;
-			while (pUDst < pLast)
-			{
-				*pUDst++ = *pUVSrc++;
-				*pVDst++ = *pUVSrc++;
-			}
-		}
+		memset(pUDst, 128, nSizeUorV);
+		memset(pVDst, 128, nSizeUorV);
 	}
 	else
 	{
-		// FrameBuffer is organized as below for 4:2:0 interlaced 
-		// TopFild_Y, BotFld_Y, TopFild_U, BotFld_U, TopFild_V, BotFld_V
-		// unsigned char *pTopFld, *pBotFld, *pTopFldV, *pBotFldV, *pLast;
-		unsigned char *pTopFld, *pBotFld, *pLast;
-		unsigned int n;
-		// Luma
-		pTopFld = pYSrc;
-		pBotFld = pYSrc + (nSizeLuma >> 1);
-		for (n = 0; n < nFrameHeight; n++)
+		unsigned char *pLast = pVDst;
+
+		while (pUDst < pLast)
 		{
-			if (n & 0x1)
-			{
-				memcpy (pYDst, pBotFld, nFrameWidth);
-				pBotFld += nFrameWidth;
-			}
-			else
-			{
-				memcpy (pYDst, pTopFld, nFrameWidth);
-				pTopFld += nFrameWidth;
-			}
-			pYDst += nFrameWidth;
+			*pUDst++ = *pUVSrc++;
+			*pVDst++ = *pUVSrc++;
 		}
-		// Chroma
-		//4:2:0 interleaved
-		pTopFld = pUVSrc;
-		pBotFld = pUVSrc + nSizeUorV;
-
-		for (n = 0; n < (nFrameHeight>>1); n++)
-		{
-			pLast = pUDst + (nFrameWidth>>1);
-
-			if (n & 0x1)
-			{
-				while (pUDst < pLast)
-				{
-					*pUDst++ = *pBotFld++;
-					*pVDst++ = *pBotFld++;
-				}
-			}
-			else
-			{
-				while (pUDst < pLast)
-				{
-					*pUDst++ = *pTopFld++;
-					*pVDst++ = *pTopFld++;
-				}		    
-			}
-		} //end for loop
 	}
 }
 
@@ -1340,31 +1338,32 @@ STREAMOUT_START:
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
 					{
-						unsigned int bytesused;
 						unsigned char *nBaseAddr[4];
+						unsigned int horiAlign = V4L2_NXP_FRAME_HORIZONTAL_ALIGN - 1;
+						unsigned int stride = ((ulWidth + horiAlign) & ~horiAlign);
+						unsigned int b10format = (stV4lBuf.reserved == 1) ? 1 : 0;
+						unsigned int bInterLace = (stV4lBuf.field == 4) ? 1 : 0;
+						unsigned int byteused = ulWidth * ulHeight * 3 / 2;
+						unsigned int totalSizeImage = stV4lBuf.m.planes[0].length + stV4lBuf.m.planes[1].length;
 						unsigned char *dstbuf, *yuvbuf;
-						unsigned int uStride;
-						unsigned int uVertAlign = 256 - 1; //alignment is same with v4l2 driver
-						zoe_bool_t b10format = 0;
-						unsigned int bField = stV4lBuf.reserved;
-						uStride = (( ulWidth  + uVertAlign ) & ~uVertAlign );
-						dstbuf = (unsigned char *)malloc(ulWidth * ulHeight*2*3/2);
+
+						dstbuf = (unsigned char *)malloc(totalSizeImage);
 						if(!dstbuf)
 						{
-							printf("dstbuf alloc failed\n");
+							printf("error: dstbuf alloc failed\n");
 							goto FUNC_END;
 						}
-						yuvbuf = (unsigned char *)malloc(ulWidth * ulHeight*2*3/2);
+						yuvbuf = (unsigned char *)malloc(totalSizeImage);
 						if(!yuvbuf)
 						{
-							printf("yuvbuf alloc failed\n");
+							printf("error: yuvbuf alloc failed\n");
 							goto FUNC_END;
 						}
 
 						nBaseAddr[0] = (unsigned char *)(stAppV4lBuf[stV4lBuf.index].addr[0] + stV4lBuf.m.planes[0].data_offset);
 						nBaseAddr[1] = (unsigned char *)(stAppV4lBuf[stV4lBuf.index].addr[1] + stV4lBuf.m.planes[1].data_offset);
-						nBaseAddr[2] = nBaseAddr[0] + ulWidth * ulHeight/2;
-						nBaseAddr[3] = nBaseAddr[1] + ulWidth * ulHeight/4;
+						nBaseAddr[2] = nBaseAddr[0]  + stV4lBuf.m.planes[0].length / 2;
+						nBaseAddr[3] = nBaseAddr[1] + stV4lBuf.m.planes[1].length / 2;
 
 						/*because hardware currently only support NY12_TILED format*/
 						/*so need to complete the subsequent conversion*/
@@ -1373,33 +1372,31 @@ STREAMOUT_START:
 						case V4L2_PIX_FMT_NV12:
 							if (b10format)
 							{
-								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, 0);
+								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, 0);
 							}
 							else
 							{
-								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, bField);
+								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
 							}
-							bytesused = ulWidth * ulHeight * 3 / 2;
-							fwrite((void*)yuvbuf, 1, bytesused, fpOutput);
+							fwrite((void *)yuvbuf, 1, byteused, fpOutput);
 							break;
 						case V4L2_PIX_FMT_YUV420M:
 							if (b10format)
 							{
-								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, 0);
+								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, 0);
 								LoadFrameNV12_10b (yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, 0);
 							}
 							else
 							{
-								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, uStride, nBaseAddr, yuvbuf, bField);
-								LoadFrameNV12(yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, bField);
+								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
+								LoadFrameNV12(yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, bInterLace);
 							}
-							bytesused = ulWidth * ulHeight * 3 / 2;
-							fwrite((void*)dstbuf, 1, bytesused, fpOutput);
+							fwrite((void *)dstbuf, 1, byteused, fpOutput);
 							break;
 						case VPU_PIX_FMT_TILED_8:
 						case VPU_PIX_FMT_TILED_10:
-							fwrite((void*)nBaseAddr[0], 1,stV4lBuf.m.planes[0].bytesused, fpOutput);
-							fwrite((void*)nBaseAddr[1], 1,stV4lBuf.m.planes[1].bytesused, fpOutput);
+							fwrite((void *)nBaseAddr[0], 1, stV4lBuf.m.planes[0].bytesused, fpOutput);
+							fwrite((void *)nBaseAddr[1], 1, stV4lBuf.m.planes[1].bytesused, fpOutput);
 							break;
 						default:
 							printf("warning: %s() please specify output format, or the format you specified is not standard. \n", __FUNCTION__);

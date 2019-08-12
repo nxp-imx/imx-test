@@ -53,6 +53,9 @@ typedef unsigned int zoe_bool_t;
 
 #define V4L2_EVENT_DECODE_ERROR		(V4L2_EVENT_PRIVATE_START + 1)
 
+#define V4L2_NXP_FRAME_VERTICAL_ALIGN		512
+#define V4L2_NXP_FRAME_HORIZONTAL_ALIGN		512
+
 typedef uint32_t    ZOE_OBJECT_HANDLE, *PZOE_OBJECT_HANDLE; //handle of an object
 
 typedef enum _COMPONENT_TYPE
