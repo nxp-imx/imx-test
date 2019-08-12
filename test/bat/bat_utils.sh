@@ -303,9 +303,16 @@ bat_lowbus_cleanup()
 # Wait for busfreq to enter low mode by polling a relevant clk rate
 bat_wait_busfreq_low()
 {
-    local clk_name clk_rate tgt_rate=24000000
+    local clk_name clk_rate tgt_rate
 
-    clk_name=$(bat_find_clk ahb ahb_root_clk ahb_div ahb_src)
+    # VTE checks for "ahb" but "dram" is what really matters for busfreq
+    clk_name=$(bat_find_clk dram dram_core_clk)
+    if [[ -n $clk_name ]]; then
+        tgt_rate=25000000
+    else
+        clk_name=$(bat_find_clk ahb ahb_root_clk ahb_div ahb_src)
+        tgt_rate=24000000
+    fi
 
     for (( iter = 0; iter < 10; ++iter )); do
         bat_read_clk_rate clk_rate $clk_name
