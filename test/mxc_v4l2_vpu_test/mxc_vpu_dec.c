@@ -1347,6 +1347,13 @@ STREAMOUT_START:
 						unsigned int totalSizeImage = stV4lBuf.m.planes[0].length + stV4lBuf.m.planes[1].length;
 						unsigned char *dstbuf, *yuvbuf;
 
+						if (b10format)
+						{
+							printf("warning: unsupport 10bit stream.\n");
+							g_unCtrlCReceived = 1;
+							goto FUNC_END;
+						}
+
 						dstbuf = (unsigned char *)malloc(totalSizeImage);
 						if(!dstbuf)
 						{
