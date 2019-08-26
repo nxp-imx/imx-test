@@ -415,12 +415,12 @@ static void convert_inter_2_prog_4_nv12(unsigned char *buffer,
 		if (i & 0x1)
 		{
 			memcpy(uvDst, uvBotSrc, width);
-			uvTopSrc += width;
+			uvBotSrc += width;
 		}
 		else
 		{
-			memcpy(uvDst, uvBotSrc, width);
-			uvBotSrc += width;
+			memcpy(uvDst, uvTopSrc, width);
+			uvTopSrc += width;
 		}
 		uvDst += width;
 	}
