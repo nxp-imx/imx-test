@@ -5,6 +5,9 @@ source /unit_tests/test-utils.sh
 
 print_name
 
+printf "deprecated!please check /sys/kernel/debug/clk/clk_summary for detailed info\n"
+exit 0
+
 if ! mount|grep -sq '/sys/kernel/debug'; then
 	mount -t debugfs none /sys/kernel/debug
 fi

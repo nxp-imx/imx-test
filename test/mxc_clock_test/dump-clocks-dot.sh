@@ -5,6 +5,9 @@ source /unit_tests/test-utils.sh
 
 print_name
 
+printf "deprecated!please check /sys/kernel/debug/clk/clk_summary for detailed info\n"
+exit 0
+
 if [ $# -gt 0 ]; then
 	echo "Usage:"
 	echo "	1. run '$0 > d.txt' on Target Board"
