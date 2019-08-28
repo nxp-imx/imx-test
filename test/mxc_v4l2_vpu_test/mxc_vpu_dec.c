@@ -2255,6 +2255,7 @@ Or reference the usage manual.\n\
 	}
 
 	set_ctrl(pComponent->hDev, V4L2_CID_USER_RAW_BASE, 1);
+	set_ctrl(pComponent->hDev, V4L2_CID_USER_STREAM_INPUT_MODE, NON_FRAME_LVL);
 
 	lErr = pthread_create(&pComponent->ports[STREAM_DIR_IN].threadId,
 			NULL,

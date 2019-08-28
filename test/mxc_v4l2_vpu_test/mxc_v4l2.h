@@ -41,6 +41,7 @@ typedef unsigned int zoe_bool_t;
 #define VPU_PIX_FMT_DIVX        v4l2_fourcc('D', 'I', 'V', 'X')
 
 #define V4L2_CID_USER_RAW_BASE  (V4L2_CID_USER_BASE + 0x1100)
+#define V4L2_CID_USER_STREAM_INPUT_MODE                (V4L2_CID_USER_BASE + 0x1109)
 
 #define ZV_YUV_DATA_TYPE_NV12   1
 #define ZV_YUV_DATA_TYPE_NV21   2
@@ -187,5 +188,11 @@ typedef struct _component_t
 	int 					res_change_flag;
 
 } component_t;
+
+typedef enum {
+       INVALID_MODE = 0,
+       FRAME_LVL,
+       NON_FRAME_LVL,
+} STREAM_INPUT_MODE;
 
 #endif //__MXC_V4L2_H__
