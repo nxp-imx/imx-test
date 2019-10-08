@@ -485,6 +485,9 @@ signal_thread(void *arg)
 		sigwait(&sigset, &sig);
 		if (sig == SIGINT) {
 			warn_msg("Ctrl-C received\n");
+		}
+		else if (sig == SIGTERM) {
+			//info_msg("normal termination signal received\n");
 		} else {
 			warn_msg("Unknown signal. Still exiting\n");
 		}
@@ -504,7 +507,7 @@ main(int argc, char *argv[])
 {
 	int err, nargc, i, ret;
 	char *pargv[32] = {0}, *dbg_env;
-	pthread_t sigtid;
+	pthread_t sigtid = 0;
 #ifdef COMMON_INIT
 	vpu_versioninfo ver;
 #endif
@@ -543,6 +546,7 @@ main(int argc, char *argv[])
 #ifndef _FSL_VTS_
 	sigemptyset(&sigset);
 	sigaddset(&sigset, SIGINT);
+	sigaddset(&sigset, SIGTERM);
 	pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 	pthread_create(&sigtid, NULL, (void *)&signal_thread, NULL);
 #endif
@@ -654,6 +658,11 @@ main(int argc, char *argv[])
 				close_files(&input_arg[i].cmd);
 			}
 		}
+	}
+
+	if (sigtid != 0) {
+		pthread_kill(sigtid, SIGTERM);
+		pthread_join(sigtid, (void *)&ret_thr);
 	}
 
 #ifdef COMMON_INIT
