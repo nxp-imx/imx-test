@@ -1,10 +1,10 @@
 #!/bin/bash
 
-devices=( `aplay -l | grep amixaudiosai | \
+devices=( `aplay -l | grep imxaudmix | \
 awk '{
  sub(/card /, "");
  sub(/:/, ",");
- sub(/ amixaudiosai \[amix-audio-sai\], device /, "");
+ sub(/ imxaudmix \[imx-audmix\], device /, "");
  sub(/:/, "");
  sub(/HiFi-AMIX-FE \(\*\) \[\]/, "");
  print }'` )
