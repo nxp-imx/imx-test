@@ -309,6 +309,12 @@ bat_wait_busfreq_low()
     clk_name=$(bat_find_clk dram dram_core_clk)
     if [[ -n $clk_name ]]; then
         tgt_rate=25000000
+        # 8mq B0 is limited to 666 MT/s
+        soc_id=$(cat /sys/devices/soc0/soc_id||true)
+        soc_revision=$(cat /sys/devices/soc0/revision||true)
+        if [[ $soc_id == 'i.MX8MQ' && $soc_revision == '2.0' ]]; then
+            tgt_rate=167890000
+        fi
     else
         clk_name=$(bat_find_clk ahb ahb_root_clk ahb_div ahb_src)
         tgt_rate=24000000
