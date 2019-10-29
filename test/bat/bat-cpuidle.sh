@@ -51,7 +51,7 @@ for i in /sys/devices/system/cpu/cpu0/cpuidle/state*; do
     bi=$(basename $i)
     old=old_time_$bi
     new=new_time_$bi
-    delta=$[${!new}-${!old}]
+    delta=$((${!new}-${!old}))
     echo "busy time delta for state $(cat $i/name): $delta"
     if [ $delta -gt 0 ]; then
         echo "should not have gone idle!\n"
@@ -79,7 +79,7 @@ for i in /sys/devices/system/cpu/cpu0/cpuidle/state*; do
     bi=$(basename $i)
     old=old_time_$bi
     new=new_time_$bi
-    delta=$[${!new}-${!old}]
+    delta=$((${!new}-${!old}))
     echo "idle time delta for state $(cat $i/name): $delta"
     if [ $delta -gt 0 ]; then
 	not_idle=1

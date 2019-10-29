@@ -60,7 +60,7 @@ expected_irqs=$(tail -n2 $tmp_file | egrep -o '[0-9]*')
 
 rm $tmp_file
 
-if ! [ $[$end_irqs - $start_irqs] $check $expected_irqs ]; then
+if ! [ $(($end_irqs - $start_irqs)) $check $expected_irqs ]; then
     echo "irq missmatch: got $[$end_irqs - $start_irqs] , expected $expected_irqs"
     exit 1
 fi

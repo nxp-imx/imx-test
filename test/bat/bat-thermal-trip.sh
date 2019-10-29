@@ -66,7 +66,7 @@ while [ -f $THERMAL_ZONE_PATH/trip_point_${tp_id}_type ]; do
         tp_critical_temp_file=$tp_temp_file
         tp_critical_temp_init=$tp_temp
     fi
-    tp_id=$[$tp_id+1]
+    tp_id=$(($tp_id+1))
 done
 
 if [ "$tp_passive_temp_init" == "" -o "$tp_critical_temp_init" == "" ]; then
