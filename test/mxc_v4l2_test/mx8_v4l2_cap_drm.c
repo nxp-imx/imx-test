@@ -68,6 +68,8 @@ do {                                      \
 		v4l2_printf(DBG_LEVEL, "\x1B[33m"fmt"\e[0m", ##args)
 #define v4l2_err(fmt, args...)   \
 	    v4l2_printf(ERR_LEVEL, "\x1B[31m"fmt"\e[0m", ##args)
+#define v4l2_warn(fmt, args...)   \
+	    v4l2_printf(ERR_LEVEL, "\x1B[32m"fmt"\e[0m", ##args)
 
 /*
  * DRM modeset releated data structure definition
@@ -1066,7 +1068,7 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	memset(&chipident, 0, sizeof(chipident));
 	ret = ioctl(fd, VIDIOC_DBG_G_CHIP_IDENT, &chipident);
 	if (ret < 0)
-		v4l2_err("get chip ident fail\n");
+		v4l2_warn("get chip ident fail\n");
 	else
 		v4l2_dbg("Get chip ident: %s\n", chipident.match.name);
 
@@ -1078,10 +1080,8 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	parm.parm.capture.timeperframe.denominator = g_camera_framerate;
 	parm.parm.capture.capturemode = g_capture_mode;
 	ret = ioctl(fd, VIDIOC_S_PARM, &parm);
-	if (ret < 0) {
-		v4l2_err("channel[%d] VIDIOC_S_PARM failed\n", ch_id);
-		return ret;
-	}
+	if (ret < 0)
+		v4l2_warn("channel[%d] VIDIOC_S_PARM failed\n", ch_id);
 
 	if (g_cam_num == 1)
 		adjust_width_height_for_one_sensor(&video_ch[ch_id]);
@@ -1123,10 +1123,8 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	memset(&parm, 0, sizeof(parm));
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	ret = ioctl(fd, VIDIOC_G_PARM, &parm);
-	if (ret < 0) {
-		v4l2_err("channel[%d] VIDIOC_G_PARM failed\n", ch_id);
-		return ret;
-	}
+	if (ret < 0)
+		v4l2_warn("channel[%d] VIDIOC_G_PARM failed\n", ch_id);
 
 	memset(&ctrl, 0, sizeof(ctrl));
 	ctrl.id = V4L2_CID_HFLIP;
