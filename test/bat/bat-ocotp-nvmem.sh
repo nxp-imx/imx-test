@@ -8,13 +8,18 @@ if ! bat_kconfig_enabled CONFIG_NVMEM_IMX_OCOTP; then
     exit $BAT_EXITCODE_SKIP
 fi
 
-IMX_NVMEM_FILE=/sys/bus/nvmem/devices/imx-ocotp0/nvmem
-
-# Check existence:
-if [[ ! -f $IMX_NVMEM_FILE ]]; then
-    echo "Missing $IMX_NVMEM_FILE?"
+check_ocotp_nvmem_file() {
+    for f in /sys/bus/nvmem/devices/imx-{,scu-}ocotp0/nvmem; do
+        if [[ -f $f ]]; then
+            echo $f
+            return 0
+        fi
+    done
+    echo "Missing imx ocotp device in /sys/bus/nvmem/devices?"
     exit $BAT_EXITCODE_FAIL
-fi
+}
+
+IMX_NVMEM_FILE=$(check_ocotp_nvmem_file)
 
 echo "Dump first few fuses from imx-ocotp:"
 od -v -tx4 --endian=little "$IMX_NVMEM_FILE" --read-bytes=128
