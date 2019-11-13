@@ -1021,6 +1021,29 @@ int query_buffer(component_t *pComponent, stream_media_t *port, enum v4l2_buf_ty
 
 	return 0;
 }
+
+int dec_streamon(component_t *pComponent, enum v4l2_buf_type type)
+{
+	int ret = 0;
+
+	ret = ioctl(pComponent->hDev, VIDIOC_STREAMON, &type);
+	if(ret)
+		printf("warning: streamon failed, type: %d, ret: %d\n", type, ret);
+
+	return ret;
+}
+
+int dec_streamoff(component_t *pComponent, enum v4l2_buf_type type)
+{
+	int ret = 0;
+
+	ret = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &type);
+	if(ret)
+		printf("warning: streamoff failed, type: %d, ret: %d\n", type, ret);
+
+	return ret;
+}
+
 void showUsage(void)
 {
 	printf("\n\
@@ -1082,7 +1105,6 @@ void test_streamout(component_t *pComponent)
 	unsigned int                		j;
 	zoe_bool_t                  		seek_flag;
 	unsigned int                		outFrameNum = 0;
-	unsigned int                		stream_type;
 	float                       		used_time = 0.01;
 	struct v4l2_format          		format;
 	struct v4l2_requestbuffers  		req_bufs;
@@ -1164,6 +1186,7 @@ STREAMOUT_START:
 	printf("%s() [\n", __FUNCTION__);
 	seek_flag = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 0;
+	pComponent->ports[STREAM_DIR_OUT].streamoff = 0;
 	frame_done = 0;
 	outFrameNum = 0;
     
@@ -1194,16 +1217,13 @@ STREAMOUT_START:
 		goto FUNC_EXIT;
 	}
 
-    // stream on v4l2 capture	
-    stream_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &stream_type);
+	lErr = dec_streamon(pComponent, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	if (!lErr)
 	{
 		pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 0;
 	}
     else
     {
-		printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
 		ret_err = 48;
 		goto FUNC_END;
@@ -1440,21 +1460,13 @@ FUNC_END:
 	{
 		fclose(fpOutput);
 	}
-	
-	stream_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
-	if (lErr)
-	{
-		printf("warning: %s() VIDIOC_STREAMOFF has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
-		g_unCtrlCReceived = 1;
-	}
-    else
-	{
-		printf("%s() sent cmd: VIDIOC_STREAMOFF\n", __FUNCTION__);
-	}
 
 	if(pComponent->res_change_flag)
 	{
+		lErr = dec_streamoff(pComponent, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+		if (lErr)
+			g_unCtrlCReceived = 1;
+
 		release_buffer(&pComponent->ports[STREAM_DIR_OUT]);
 		pComponent->res_change_flag = 0;
 		goto STREAMOUT_INFO;
@@ -1462,6 +1474,18 @@ FUNC_END:
 
 	pComponent->ports[STREAM_DIR_OUT].unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_OUT].done_flag = 1;
+
+	/* output port shall not streamoff until input prot streamoff,
+	 * except resolution change case
+	 */
+	while (!pComponent->ports[STREAM_DIR_IN].streamoff && !g_unCtrlCReceived)
+		usleep(10);
+
+	lErr = dec_streamoff(pComponent, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+	if (lErr)
+		g_unCtrlCReceived = 1;
+	pComponent->ports[STREAM_DIR_OUT].streamoff = 1;
+
 	printf("Total: frames = %d, fps = %.2f, used_time = %.2f \n", outFrameNum, outFrameNum / used_time, used_time);
 
 	if(!g_unCtrlCReceived)
@@ -1518,7 +1542,6 @@ void test_streamin(component_t *pComponent)
 	unsigned int                i;
 	unsigned int                total;
 	long                        file_size;
-	int                         stream_type;
 	int                         seek_flag;
 	int                         qbuf_times;
 	struct v4l2_requestbuffers  req_bufs;
@@ -1584,6 +1607,7 @@ void test_streamin(component_t *pComponent)
 STREAMIN_START:	
 	printf("%s() [\n", __FUNCTION__);
 	pComponent->ports[STREAM_DIR_IN].done_flag = 0;
+	pComponent->ports[STREAM_DIR_IN].streamoff = 0;
 	seek_flag = 1;
 	qbuf_times = 0;
 	gettimeofday(&start,NULL);
@@ -1617,16 +1641,13 @@ STREAMIN_START:
 		goto FUNC_EXIT;
 	}
 
-	//  stream on v4l2 output
-    stream_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    lErr = ioctl(pComponent->hDev, VIDIOC_STREAMON, &stream_type);
-    if (!lErr)
-    {
+	lErr = dec_streamon(pComponent, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	if (!lErr)
+	{
 		pComponent->ports[STREAM_DIR_IN].unCtrlCReceived = 0;
-    }
+	}
     else
     {
-    	printf("%s() VIDIOC_STREAMON V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE failed errno(%d) %s\n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
 		ret_err = 35;
     	goto FUNC_END;
@@ -1842,23 +1863,15 @@ FUNC_END:
 		}
 	}
 	pComponent->ports[STREAM_DIR_IN].done_flag = 1;
+
+	/* input port shall not streamoff until output port complete decode */
 	while(!pComponent->ports[STREAM_DIR_OUT].done_flag && !g_unCtrlCReceived)
-	{
-		usleep(1000);
-	}
-	
-	//Cannot streamoff unitl current stream out thread is done.
-	stream_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	lErr = ioctl(pComponent->hDev, VIDIOC_STREAMOFF, &stream_type);
+		usleep(10);
+
+	lErr = dec_streamoff(pComponent, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	if (lErr)
-	{
-		printf("warning: %s() VIDIOC_STREAMOFF has error, errno(%d), %s \n", __FUNCTION__, errno, strerror(errno));
 		g_unCtrlCReceived = 1;
-	}
-    else
-	{
-		printf("%s() sent cmd: VIDIOC_STREAMOFF\n", __FUNCTION__);
-	}
+	pComponent->ports[STREAM_DIR_IN].streamoff = 1;
 
 	loopTimes--;	
 	if(!g_unCtrlCReceived)
