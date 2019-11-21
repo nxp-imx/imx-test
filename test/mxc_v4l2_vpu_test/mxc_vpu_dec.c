@@ -62,6 +62,7 @@ volatile int loopTimes = 1;
 volatile int preLoopTimes = 1;
 volatile int initLoopTimes = 1;
 int frame_done = 0; 
+pthread_mutex_t g_mutex;
 
 static __u32  formats_compressed[] = 
 {
@@ -1463,9 +1464,12 @@ FUNC_END:
 
 	if(pComponent->res_change_flag)
 	{
+		pthread_mutex_lock(&g_mutex);
 		lErr = dec_streamoff(pComponent, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 		if (lErr)
 			g_unCtrlCReceived = 1;
+		pComponent->ports[STREAM_DIR_OUT].streamoff = 1;
+		pthread_mutex_unlock(&g_mutex);
 
 		release_buffer(&pComponent->ports[STREAM_DIR_OUT]);
 		pComponent->res_change_flag = 0;
@@ -1481,10 +1485,13 @@ FUNC_END:
 	while (!pComponent->ports[STREAM_DIR_IN].streamoff && !g_unCtrlCReceived)
 		usleep(10);
 
+	pthread_mutex_lock(&g_mutex);
 	lErr = dec_streamoff(pComponent, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	if (lErr)
 		g_unCtrlCReceived = 1;
+
 	pComponent->ports[STREAM_DIR_OUT].streamoff = 1;
+	pthread_mutex_unlock(&g_mutex);
 
 	printf("Total: frames = %d, fps = %.2f, used_time = %.2f \n", outFrameNum, outFrameNum / used_time, used_time);
 
@@ -1868,10 +1875,12 @@ FUNC_END:
 	while(!pComponent->ports[STREAM_DIR_OUT].done_flag && !g_unCtrlCReceived)
 		usleep(10);
 
+	pthread_mutex_lock(&g_mutex);
 	lErr = dec_streamoff(pComponent, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	if (lErr)
 		g_unCtrlCReceived = 1;
 	pComponent->ports[STREAM_DIR_IN].streamoff = 1;
+	pthread_mutex_unlock(&g_mutex);
 
 	loopTimes--;	
 	if(!g_unCtrlCReceived)
@@ -2182,6 +2191,8 @@ Or reference the usage manual.\n\
 		goto FUNC_END;
 	}
 
+	pthread_mutex_init(&g_mutex, NULL);
+
 	if (strstr(component[nCmdIdx].szDevName, "/dev/video"))
 	{
 		printf("=====  select device =====\n");
@@ -2464,6 +2475,7 @@ FUNC_END:
 
 	}
 
+	pthread_mutex_destroy(&g_mutex);
 	printf("\nEND.\t loop_times=%d\n",(initLoopTimes - loopTimes));
 
 	return (ret_err);
