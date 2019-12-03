@@ -1,0 +1,35 @@
+ALSA CONF README
+~~~~~~~~~~~
+
+update-asound-conf.sh
+
+[cols=">s,6a",frame="topbot",options="header"]
+|====================================================================
+|Name | Description
+
+| Summary |
+Select a proper sound card for asound.conf
+
+| Automated |
+YES
+
+| Kernel Config Option |
+CONFIG_SND
+
+| Software Dependency |
+aplay is installed in rootfs
+
+| Non-default Hardware Configuration |
+N/A
+
+| Test Procedure |
+. Run:
+
+ /unit_tests/Audio# ./update-asound-conf.sh
+
+| Expected Result |
+The /etc/asound.conf is updated
+
+|====================================================================
+
+<<<
