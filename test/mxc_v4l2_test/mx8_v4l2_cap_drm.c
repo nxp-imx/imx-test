@@ -563,11 +563,7 @@ static int open_save_file(struct video_channel *video_ch)
 
 	for (i = 0; i < NUM_SENSORS; i++) {
 		if ((g_cam >> i) & 0x01) {
-#ifdef BUILD_FOR_ANDROID
 			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT, 0660);
-#else
-			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT);
-#endif
 			if (fd < 0) {
 				 v4l2_err("Channel[%d] unable to create recording file\n", i);
 				 while (i)
