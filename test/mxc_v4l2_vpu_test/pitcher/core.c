@@ -456,7 +456,7 @@ int pitcher_connect(unsigned int src, unsigned int dst)
 	if (!core->chns || !core->pipes)
 		return -RET_E_INVAL;
 
-	pipe = pitcher_get_unit_source(dchn);
+	pipe = pitcher_get_unit_source(dchn->unit);
 	if (pipe && pitcher_get_pipe_src(pipe) != schn)
 		return -RET_E_INVAL;
 

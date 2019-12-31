@@ -52,6 +52,14 @@
 
 #define DQEVENT
 
+#define LVL_BIT_FPS	(1 << 3)
+
+#define dec_bit_dbg(bit, fmt, arg...) \
+	do { \
+		if (dec_dbg_bit & (bit)) \
+			printf("[Decoder Test] " fmt, ## arg); \
+	} while (0)
+
 volatile int ret_err = 0;
 volatile unsigned int g_unCtrlCReceived = 0;
 unsigned  long time_total =0;
@@ -63,6 +71,7 @@ volatile int preLoopTimes = 1;
 volatile int initLoopTimes = 1;
 int frame_done = 0; 
 pthread_mutex_t g_mutex;
+int dec_dbg_bit = 0;
 
 static __u32  formats_compressed[] = 
 {
@@ -1079,7 +1088,9 @@ OPTIONS:\n\
     bs count        Specify the count of input buffer block size, the unit is Kb.\n\n\
     iqc count       Specify the count of input reqbuf.\n\n\
     oqc count       Specify the count of output reqbuf.\n\n\
-    dev device     Specify the VPU decoder device node(generally /dev/video12).\n\n\n\
+    dev device      Specify the VPU decoder device node(generally /dev/video12).\n\n\
+    dbg log_level   Specify bit mask of debug log.\n\n\
+                        LVL_BIT_FPS              1 << 3\n\n\n\
 EXAMPLES:\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 bs 500 ofmt 1 ofile test.yuv\n\n\
@@ -1355,7 +1366,7 @@ STREAMOUT_START:
 				outFrameNum++;
 				gettimeofday(&end, NULL);
 				used_time = (float)(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0);
-				printf("\rframes = %d, fps = %.2f, used_time = %.2f\t\t", outFrameNum, outFrameNum / used_time, used_time);
+				dec_bit_dbg(LVL_BIT_FPS, "\rframes = %d, fps = %.2f, used_time = %.2f\t\t", outFrameNum, outFrameNum / used_time, used_time);
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
 					{
@@ -2154,6 +2165,16 @@ HAS_2ND_CMD:
 			nArgNow++;
 			memset(component[nCmdIdx].szDevName, 0x00, sizeof(component[nCmdIdx].szDevName));
 			strcpy(component[nCmdIdx].szDevName, argv[nArgNow++]);
+		}
+		else if (!strcasecmp(argv[nArgNow], "DBG"))
+		{
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			if(isNumber(argv[nArgNow]))
+				dec_dbg_bit = atoi(argv[nArgNow++]);
 		}
 		else if (!strcasecmp(argv[nArgNow],"+"))
 		{
