@@ -116,8 +116,8 @@ typedef struct _ZV_YUV_DATAFORMAT
 	int32_t         nHeight;
 	int32_t         nBitCount;
 	uint32_t        nFrameRate;
-
 	uint32_t        nDataType;
+	uint32_t	stride;
 
 } ZV_YUV_DATAFORMAT, *PZV_YUV_DATAFORMAT;
 
@@ -125,6 +125,12 @@ typedef union _COMPONENT_PORT_OPEN_FORMAT
 {
 	ZV_YUV_DATAFORMAT   yuv;
 } COMPONENT_PORT_OPEN_FORMAT, *PCOMPONENT_PORT_OPEN_FORMAT;
+
+typedef enum _VPU_OUT_BIT_FMT
+{
+	VPU_OUT_BIT_PRECISE_8 = 0,
+	VPU_OUT_BIT_16
+} VPU_OUT_BIT_FMT;
 
 typedef struct _stream_media_t
 {
@@ -158,6 +164,8 @@ typedef struct _stream_media_t
 	unsigned int                inFrameCount;
 	unsigned int                done_flag;
 	unsigned int                streamoff;
+
+	VPU_OUT_BIT_FMT				outBit;
 } stream_media_t;
 
 typedef enum _stream_dir_e

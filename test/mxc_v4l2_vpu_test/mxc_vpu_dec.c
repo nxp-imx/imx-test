@@ -438,340 +438,245 @@ static void convert_inter_2_prog_4_nv12(unsigned char *buffer,
 	free(src);
 }
 
-//#define PRECISION_8BIT // 10 bits if not defined
+static int __ReadYUVFrame_FSL_8b(uint8_t *dst_addr, uint8_t *src_addr,
+                                  unsigned int width,  unsigned int height,
+                                  unsigned int stride, int h_cnt, int v_cnt)
+{
+        int h_num, v_num;
+        int i, j;
+        unsigned int v_base_offset;
+        uint8_t *cur_addr;
+        uint8_t *inter_buf;
+        int line_num;
+        int line_base;
+
+	inter_buf = (uint8_t *)malloc(8 * 128);
+	if (!inter_buf) {
+		printf("failed to alloc inter_buf\r\n");
+		return -1;
+	}
+
+        for (v_num = 0; v_num < v_cnt; v_num++)	{
+		v_base_offset = stride * 128 * v_num;
+
+		for (h_num = 0; h_num < h_cnt; h_num++) {
+			cur_addr = (uint8_t *)(src_addr + h_num * (8 * 128) + v_base_offset);
+			memcpy(inter_buf, cur_addr, 8 * 128);
+
+			for (i = 0; i < 128; i++) {
+				line_num  = i + 128 * v_num;
+				line_base = line_num * width;
+				for (j = 0; j < 8; j++)
+					dst_addr[line_base + (8 * h_num) + j] = inter_buf[8 * i + j];
+			}
+		}
+	}
+
+        free(inter_buf);
+        return 0;
+}
+
 // Read 8-bit FSL stored image
 // Format is based on ratser array of tiles, where a tile is 1KB = 8x128
 static unsigned int ReadYUVFrame_FSL_8b(unsigned int nPicWidth,
 					unsigned int nPicHeight,
 					unsigned int uVOffsetLuma,
 					unsigned int uVOffsetChroma,
-					unsigned int nFsWidth,
+					unsigned int stride,
 					uint8_t **nBaseAddr,
 					uint8_t *pDstBuffer,
 					unsigned int bInterlaced
 				       )
 {
-	unsigned int i;
-	unsigned int h_tiles, v_tiles, v_offset, nLines, vtile, htile;
-	unsigned int nLinesLuma  = nPicHeight;
-	unsigned int nLinesChroma = nPicHeight >> 1;
-	uint8_t      *cur_addr;
-	unsigned int *pBuffer = (unsigned int *)pDstBuffer;
-	unsigned int *pTmpBuffer;
+        unsigned int luma_lines, chro_lines;
+        uint8_t *dst_buf;
+        uint8_t *base_addr;
+        int h_cnt, v_cnt;
 
-	pTmpBuffer = (unsigned int*)malloc(256 * 4);
-	if (!pTmpBuffer) {
-		printf("failed to alloc pTmpBuffer\r\n");
-		return -1;
+	dst_buf = pDstBuffer;
+	luma_lines = nPicHeight;
+	chro_lines = nPicHeight / 2;
+	if (bInterlaced) {
+		luma_lines = luma_lines / 2;
+		chro_lines = chro_lines / 2;
 	}
 
+	/* read luma */
+        base_addr = nBaseAddr[0];
+	h_cnt   = (nPicWidth + 7) / 8;
+	v_cnt   = (luma_lines + 127) / 128;
+
+	__ReadYUVFrame_FSL_8b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt);
+	if (bInterlaced) {
+		/* Read Bot Luma */
+                dst_buf += (nPicWidth * nPicHeight) / 2;
+                __ReadYUVFrame_FSL_8b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt);
+		dst_buf += (nPicWidth * nPicHeight) / 2;
+	} else {
+		dst_buf += (nPicWidth * nPicHeight);
+	}
+
+	/* read chroma */
+        base_addr = nBaseAddr[1];
+	h_cnt   = (nPicWidth + 7) / 8;
+	v_cnt   = (chro_lines + 127) / 128;
+    __ReadYUVFrame_FSL_8b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt);
 	if (bInterlaced)
 	{
-		nLinesLuma   >>= 1;
-		nLinesChroma >>= 1;
-	}
-
-	// Read Top Luma
-	nLines    = nLinesLuma;
-	v_offset  = uVOffsetLuma;
-	h_tiles   = (nPicWidth + 7) >> 3;
-	v_tiles   = (nLines + v_offset + 127) >> 7;
-
-	for (vtile = 0; vtile < v_tiles; vtile++)
-	{
-		unsigned int v_base_offset = nFsWidth * 128 * vtile;
-
-		for (htile = 0; htile < h_tiles; htile++)
-		{
-			cur_addr = (uint8_t *)(nBaseAddr[0] + htile * 1024 + v_base_offset);
-			memcpy(pTmpBuffer, cur_addr, 256 * 4);
-
-			for (i = 0; i < 128; i++)
-			{
-				int line_num  = (i + 128 * vtile) - v_offset;
-				unsigned int line_base = (line_num * nPicWidth) >> 2;
-				// Skip data that is off the bottom of the pic
-				if (line_num == (int)nLines)
-					break;
-				// Skip data that is off the top of the pic
-				if (line_num < 0)
-					continue;
-				pBuffer[line_base + (2 * htile) + 0] = pTmpBuffer[2 * i + 0];
-				pBuffer[line_base + (2 * htile) + 1] = pTmpBuffer[2 * i + 1];
-			}        
-		}
-	}
-
-	if (bInterlaced)
-	{
-		pBuffer += (nPicWidth * nPicHeight) >> 3;
-
-		// Read Bot Luma
-		nLines = nLinesLuma;
-		v_offset = uVOffsetLuma;
-		h_tiles = (nPicWidth + 7) >> 3;
-		v_tiles = (nLines + v_offset + 127) >> 7;
-
-		for (vtile = 0; vtile < v_tiles; vtile++)
-		{
-			unsigned int v_base_offset = nFsWidth * 128 * vtile;
-
-			for (htile = 0; htile < h_tiles; htile++)
-			{
-				cur_addr = (uint8_t *)(nBaseAddr[2] + htile * 1024 + v_base_offset);
-				memcpy(pTmpBuffer, cur_addr, 256 * 4);
-
-				for (i = 0; i < 128; i++)
-				{
-					int line_num = (i + 128 * vtile) - v_offset;
-					unsigned int line_base = (line_num * nPicWidth) >> 2;
-					// Skip data that is off the bottom of the pic
-					if (line_num == (int)nLines)
-						break;
-					// Skip data that is off the top of the pic
-					if (line_num < 0)
-						continue;
-					pBuffer[line_base + (2 * htile) + 0] = pTmpBuffer[2 * i + 0];
-					pBuffer[line_base + (2 * htile) + 1] = pTmpBuffer[2 * i + 1];
-				}
-			}
-		}
-
-		pBuffer += (nPicWidth * nPicHeight) >> 3;
-	}
-	else
-	{
-		pBuffer += (nPicWidth * nPicHeight) >> 2;
-	}
-
-	// Read Top Chroma
-	nLines    = nLinesChroma;
-	v_offset  = uVOffsetChroma;
-	h_tiles = (nPicWidth + 7) >> 3;
-	v_tiles = (nLines + v_offset + 127) >> 7;
-	for (vtile = 0; vtile < v_tiles; vtile++)
-	{
-		unsigned int v_base_offset = nFsWidth * 128 * vtile;
-
-		for (htile = 0; htile < h_tiles; htile++)
-		{
-			cur_addr = (uint8_t *)(nBaseAddr[1] + htile * 1024 + v_base_offset);
-			memcpy(pTmpBuffer, cur_addr, 256 * 4);
-
-			for (i = 0; i < 128; i++)
-			{
-				int line_num = (i + 128 * vtile) - v_offset;
-				unsigned int line_base = (line_num * nPicWidth) >> 2;
-				// Skip data that is off the bottom of the pic
-				if (line_num == (int)nLines)
-					break;
-				// Skip data that is off the top of the pic
-				if (line_num < 0)
-					continue;
-				pBuffer[line_base + (2 * htile) + 0] = pTmpBuffer[2 * i + 0];
-				pBuffer[line_base + (2 * htile) + 1] = pTmpBuffer[2 * i + 1];
-			}
-		}
-	}
-
-	if (bInterlaced)
-	{
-		pBuffer += (nPicWidth * nPicHeight) >> 4;
-
-		// Read Bot Chroma
-		nLines = nLinesChroma;
-		v_offset = uVOffsetChroma;
-		h_tiles = (nPicWidth + 7) >> 3;
-		v_tiles = (nLines + v_offset + 127) >> 7;
-		for (vtile = 0; vtile < v_tiles; vtile++)
-		{
-			unsigned int v_base_offset = nFsWidth * 128 * vtile;
-
-			for (htile = 0; htile < h_tiles; htile++)
-			{
-				cur_addr = (uint8_t *)(nBaseAddr[3] + htile * 1024 + v_base_offset);
-				memcpy(pTmpBuffer, cur_addr, 256 * 4);
-
-				for (i = 0; i < 128; i++)
-				{
-					int line_num = (i + 128 * vtile) - v_offset;
-					unsigned int line_base = (line_num * nPicWidth) >> 2;
-					// Skip data that is off the bottom of the pic
-					if (line_num == (int)nLines)
-						break;
-					// Skip data that is off the top of the pic
-					if (line_num < 0)
-						continue;
-					pBuffer[line_base + (2 * htile) + 0] = pTmpBuffer[2 * i + 0];
-					pBuffer[line_base + (2 * htile) + 1] = pTmpBuffer[2 * i + 1];
-				}
-			}
-		}
+		/* Read Bot Chroma */
+                dst_buf += (nPicWidth * nPicHeight) / 4;
+                __ReadYUVFrame_FSL_8b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt);
 	}
 
 	if (bInterlaced)
 		convert_inter_2_prog_4_nv12(pDstBuffer, nPicWidth, nPicHeight, nPicWidth * nPicHeight, nPicWidth * nPicHeight / 2);
 
-	free(pTmpBuffer);
-	return(0);
+	return 0;
 }
 
-// Read 10bit packed FSL stored image
-// Format is based on ratser array of tiles, where a tile is 1KB = 8x128
-static unsigned int ReadYUVFrame_FSL_10b(unsigned int nPicWidth,
-					 unsigned int nPicHeight,
-					 unsigned int uVOffsetLuma,
-					 unsigned int uVOffsetChroma,
-					 unsigned int nFsWidth,
-					 unsigned char **nBaseAddr,
-					 unsigned char *pDstBuffer,
-					 unsigned int bInterlaced
-					)
+/* PRECISION_8BIT: [0,1,2,3,4,5,6,7,8,9] -> [0,1,2,3,4,5,6,7]
+ * 16-bit: [0,1,2,3,4,5,6,7,8,9] -> [0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9]
+ */
+static int __ReadYUVFrame_FSL_10b(void *dst_addr, uint8_t *src_addr,
+                                  unsigned int width,  unsigned int height,
+                                  unsigned int stride, int h_cnt, int v_cnt,
+								  unsigned int bitCnt)
 {
-#define RB_WIDTH (4096*5/4/4)
-	unsigned int (*pRowBuffer)[RB_WIDTH];
-	unsigned int i;
-	unsigned int h_tiles,v_tiles,v_offset,nLines,vtile,htile;
-	unsigned int nLinesLuma  = nPicHeight;
-	unsigned int nLinesChroma = nPicHeight>>1;
-	unsigned char *cur_addr;
-#ifdef PRECISION_8BIT
-	unsigned char *pBuffer = (unsigned char *)pDstBuffer;
-#else
-	uint16_t *pBuffer = (uint16_t *)pDstBuffer;
-#endif
-	unsigned int *pTmpBuffer;
-	unsigned int pix;
+	int h_num, v_num;
+	int i, j, k, pix;
+	unsigned int v_base_offset;
+	uint8_t *cur_addr;
+	uint8_t *inter_buf = NULL;
+	int line_num;
+	int line_base;
+	uint8_t (*row_buf)[stride] = NULL;
+	uint8_t *line_buf;
+	int bit_pos, byte_loc, bit_loc;
+	uint16_t byte_16;
+	uint8_t *p_addr_8 = NULL;
+	uint16_t *p_addr_16 = NULL;
+	int ret = 0;
 
-	pRowBuffer = malloc(128 * RB_WIDTH * 4);
-	if (!pRowBuffer) {
-		printf("failed to alloc pRowBuffer\n");
-		return -1;
+	if (bitCnt == 8)
+		p_addr_8 = (uint8_t *)dst_addr;
+	else
+		p_addr_16 = (uint16_t *)dst_addr;
+
+	inter_buf = (uint8_t *)malloc(8 * 128);
+	if (!inter_buf) {
+		printf("failed to alloc inter_buf\r\n");
+		ret = -1;
+		goto exit;
 	}
 
-	pTmpBuffer = malloc(256 * 4);
-	if (!pTmpBuffer) {
-		printf("failed to alloc pTmpBuffer\n");
-		return -1;
+	row_buf = malloc(128 * stride);
+	if (!row_buf) {
+		printf("failed to alloc row_buf\r\n");
+		ret = -1;
+		goto exit;
 	}
 
-	// Read Luma
-	nLines    = nLinesLuma;
-	v_offset  = uVOffsetLuma;
-	h_tiles   = ((nPicWidth*5/4) + 7) >>3;  // basically number of 8-byte words across the pic
-	v_tiles   = (nLines+v_offset+127) >>7;  // basically number of 128 line groups
+	for (v_num = 0; v_num < v_cnt; v_num++)	{
+		v_base_offset = stride * 128 * v_num;
 
-	for (vtile=0; vtile<v_tiles; vtile++)
-	{
-		unsigned int v_base_offset = nFsWidth*128*vtile;
+		for (h_num = 0; h_num < h_cnt; h_num++) {
+			cur_addr = (uint8_t *) (src_addr + h_num * (8 * 128) + v_base_offset);
+			memcpy(inter_buf, cur_addr, 8 * 128);
 
-		// Read Row of tiles as 10-bit
-		for (htile=0; htile<h_tiles;htile++)
-		{
-			cur_addr = (unsigned char *)(nBaseAddr[0] + htile*1024 + v_base_offset);
-			memcpy(pTmpBuffer, cur_addr, 256 * 4);
-
-			// Expand data into Rows
-			for (i = 0; i < 128; i++)
-			{
-				pRowBuffer[i][(2 * htile) + 0] = pTmpBuffer[2 * i + 0];
-				pRowBuffer[i][(2 * htile) + 1] = pTmpBuffer[2 * i + 1];
+			for (i = 0; i < 128; i++) {
+				for (j = 0; j < 8; j++)
+					row_buf[i][8 * h_num + j ] = inter_buf[8 * i + j];
 			}
 		}
 
-		// Convert the 10-bit data to 8-bit, by dropping the LSBs
-		for (i = 0; i < 128; i++)
-		{
-			unsigned char * pRow = (unsigned char *)&pRowBuffer[i];    // Pointer to start of row
-			int line_num = (i + 128 * vtile) - v_offset;  // line number in the potentially vertically offset image
-			unsigned int line_base = (line_num * nPicWidth);       // location of first pixel in the line in byte units
+		for (k = 0; k < 128; k++) {
+			line_buf = row_buf[k];
+			line_num = 128 * v_num + k;
+			line_base = line_num * width;
 
-			// Skip data that is off the bottom of the pic
-			if (line_num == (int)nLines)
-				break;
-			// Skip data that is off the top of the pic
-			if (line_num < 0)
-				continue;
-
-			// Convert and store 1 pixel at a time across the row
-			for (pix = 0; pix<nPicWidth; pix++)
-			{
-				unsigned int bit_pos         = 10 * pix;                                   // First bit of pixel across the packed line
-				unsigned int byte_loc        = bit_pos / 8;                                // Byte containing the first bit        
-				unsigned int bit_loc         = bit_pos % 8;                                // First bit location in the firstbyte counting down from MSB!
-				uint16_t two_bytes  = (pRow[byte_loc] << 8) | pRow[byte_loc + 1]; // The 2 bytes conaining the pixel
-#ifdef PRECISION_8BIT
-				unsigned char  the_pix    = two_bytes >> (8 - bit_loc);                 // Align the 8 MSBs to the LSB ans store in a char
-				// Store the converted pixel
-				pBuffer[line_base + pix] = the_pix;
-#else
-				pBuffer[line_base + pix] = (two_bytes >> (6 - bit_loc)) & 0x3FF;
-#endif
-				if ((line_num == 0) && (pix < 4))
-					printf("10b 0x%x\n", (two_bytes >> (6 - bit_loc)) & 0x3FF);
+			for (pix = 0; pix < width; pix++) {
+				bit_pos = 10 * pix;
+				byte_loc = bit_pos / 8;
+				bit_loc = bit_pos % 8;
+				byte_16 = line_buf[byte_loc] << 8 | line_buf[byte_loc + 1];
+				if (bitCnt == 8) {
+					p_addr_8[line_base + pix] = byte_16 >> (8 - bit_loc);
+				} else
+				{
+					byte_16 = (byte_16 >> (6 - bit_loc));
+					p_addr_16[line_base + pix] = byte_16 & 0x3ff;
+				}
 			}
 		}
 	}
 
-	pBuffer += (nPicWidth * nPicHeight);
+	ret = 0;
 
-	// Read Chroma
-	nLines    = nLinesChroma;
-	v_offset  = uVOffsetChroma;
-	h_tiles   = ((nPicWidth*5/4) + 7) >>3;  // basically number of 8-byte words across the pic
-	v_tiles   = (nLines+v_offset+127) >>7;  // basically number of 128 line groups
-	for (vtile = 0; vtile<v_tiles; vtile++)
-	{
-		unsigned int v_base_offset = nFsWidth*128*vtile;
+exit:
+    if(inter_buf)
+		free(inter_buf);
+	if (row_buf)
+		free(row_buf);
+    return ret;
+}
 
-		for (htile=0; htile<h_tiles;htile++)
-		{
-			cur_addr = (unsigned char *)(nBaseAddr[1] + htile * 1024 + v_base_offset);
-			memcpy(pTmpBuffer, cur_addr, 256 * 4);
+static unsigned int ReadYUVFrame_FSL_10b(unsigned int nPicWidth,
+					unsigned int nPicHeight,
+					unsigned int uVOffsetLuma,
+					unsigned int uVOffsetChroma,
+					unsigned int stride,
+					uint8_t **nBaseAddr,
+					uint8_t *pDstBuffer,
+					unsigned int bInterlaced,
+					unsigned int bitCnt
+				    )
+{
+	unsigned int luma_lines, chro_lines;
+	uint8_t *base_addr;
+	int h_cnt, v_cnt;
+	uint8_t *dst_buf = pDstBuffer;
+	int bit_ratio = bitCnt / 8;
 
-			// Expand data into Rows
-			for (i = 0; i < 128; i++)
-			{
-				pRowBuffer[i][(2 * htile) + 0] = pTmpBuffer[2 * i + 0];
-				pRowBuffer[i][(2 * htile) + 1] = pTmpBuffer[2 * i + 1];
-			}
-		}
-
-		// Convert the 10-bit data to 8-bit, by dropping the LSBs
-		for (i = 0; i < 128; i++)
-		{
-			unsigned char * pRow = (unsigned char *)&pRowBuffer[i];    // Pointer to start of row
-			int line_num = (i + 128 * vtile) - v_offset;  // line number in the potentially vertically offset image
-			unsigned int line_base = (line_num * nPicWidth);       // location of first pixel in the line in byte units
-
-			// Skip data that is off the bottom of the pic
-			if (line_num == (int)nLines)
-				break;
-			// Skip data that is off the top of the pic
-			if (line_num < 0)
-				continue;
-
-			// Convert and store 1 pixel at a time across the row
-			for (pix = 0; pix<nPicWidth; pix++)
-			{
-				unsigned int bit_pos         = 10 * pix;                                   // First bit of pixel across the packed line
-				unsigned int byte_loc        = bit_pos / 8;                                // Byte containing the first bit        
-				unsigned int bit_loc         = bit_pos % 8;                                // First bit location in the firstbyte counting down from MSB!
-				uint16_t two_bytes  = (pRow[byte_loc] << 8) | pRow[byte_loc + 1]; // The 2 bytes conaining the pixel
-#ifdef PRECISION_8BIT
-				unsigned char  the_pix    = two_bytes >> (8 - bit_loc);                 // Align the 8 MSBs to the LSB ans store in a char
-				// Store the converted pixel
-				pBuffer[line_base + pix] = the_pix;
-#else
-				pBuffer[line_base + pix] = (two_bytes >> (6 - bit_loc)) & 0x3FF;
-#endif
-			}
-		}
+	luma_lines = nPicHeight;
+	chro_lines = nPicHeight / 2;
+	if (bInterlaced) {
+		luma_lines = luma_lines / 2;
+		chro_lines = chro_lines / 2;
 	}
-	free(pRowBuffer);
-	free(pTmpBuffer);
-	return(0);
-}  
+
+	/* read luma */
+	base_addr = nBaseAddr[0];
+	h_cnt = ((nPicWidth * 10 / 8) + 7) / 8;
+	v_cnt = (luma_lines + 127) / 128;
+
+	__ReadYUVFrame_FSL_10b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt, bitCnt);
+	if (bInterlaced) {
+		/* Read Bot Luma */
+		dst_buf += (nPicWidth * nPicHeight) / 2 * bit_ratio;
+		__ReadYUVFrame_FSL_10b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt, bitCnt);
+		dst_buf += (nPicWidth * nPicHeight) / 2 * bit_ratio;
+	} else {
+		dst_buf += (nPicWidth * nPicHeight) * bit_ratio;
+	}
+
+	/* read chroma */
+	base_addr = nBaseAddr[1];
+	h_cnt   = (nPicWidth * 10 / 8 + 7) / 8;
+	v_cnt   = (chro_lines + 127) / 128;
+
+	__ReadYUVFrame_FSL_10b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt, bitCnt);
+
+	if (bInterlaced) {
+		/* Read Bot Chroma */
+        dst_buf += (nPicWidth * nPicHeight) / 4 * (bit_ratio);
+        __ReadYUVFrame_FSL_10b(dst_buf, base_addr, nPicWidth, nPicHeight, stride, h_cnt, v_cnt, bitCnt);
+	}
+
+	if (bInterlaced)
+		convert_inter_2_prog_4_nv12(pDstBuffer, nPicWidth*bit_ratio, nPicHeight, nPicWidth*nPicHeight*bit_ratio, nPicWidth*nPicHeight/2*bit_ratio);
+
+	return 0;
+}
 
 static void LoadFrameNV12 (unsigned char *pFrameBuffer, unsigned char *pYuvBuffer, unsigned int nFrameWidth, unsigned int nFrameHeight, unsigned int nSizeLuma, unsigned int bMonochrome, unsigned int bInterlaced)
 {
@@ -801,39 +706,38 @@ static void LoadFrameNV12 (unsigned char *pFrameBuffer, unsigned char *pYuvBuffe
 	}
 }
 
-static void LoadFrameNV12_10b (unsigned char *pFrameBuffer, unsigned char *pYuvBuffer, unsigned int nFrameWidth, unsigned int nFrameHeight, unsigned int nSizeLuma, unsigned int bMonochrome, unsigned int bInterlaced)
+static void LoadFrameNV12_10b (unsigned char *pFrameBuffer, unsigned char *pYuvBuffer, unsigned int nFrameWidth, unsigned int nFrameHeight, unsigned int nSizeLuma, unsigned int bMonochrome, unsigned int bInterlaced, unsigned int bitCnt)
 {
-	unsigned int nSizeUorV    = nSizeLuma >> 2;
-#ifdef PRECISION_8BIT
-	unsigned char *pYSrc  = pFrameBuffer;
-	unsigned char *pUVSrc = pYSrc + nSizeLuma;
+	if (bitCnt == 16) {
+		unsigned int nSizeUorV = nSizeLuma / 4;
+		uint16_t *pYSrc = (uint16_t *)pFrameBuffer;
+		uint16_t *pUVSrc = pYSrc + nSizeLuma;
 
-	unsigned char *pYDst  = pYuvBuffer;
-	unsigned char *pUDst  = pYuvBuffer + nSizeLuma;
-	unsigned char *pVDst  = pYuvBuffer + nSizeLuma + nSizeUorV;
+		uint16_t *pYDst  = (uint16_t *)pYuvBuffer;
+		uint16_t *pUDst  = (uint16_t *)pYuvBuffer + nSizeLuma;
+		uint16_t *pVDst  = (uint16_t *)pYuvBuffer + nSizeLuma + nSizeUorV;
+		uint16_t *pLast = pVDst;
 
-	unsigned char *pLast = pVDst;
-#else
-	uint16_t *pYSrc  = (uint16_t *)pFrameBuffer;
-	uint16_t *pUVSrc = pYSrc + nSizeLuma;
+		memcpy (pYDst, pYSrc, nSizeLuma * 2);
+		while (pUDst < pLast) {
+			*pUDst++ = *pUVSrc++;
+			*pVDst++ = *pUVSrc++;
+		}
+	} else {
+		unsigned int nSizeUorV = nSizeLuma / 4;
+		uint8_t *pYSrc = (uint8_t *)pFrameBuffer;
+		uint8_t *pUVSrc = pYSrc + nSizeLuma;
 
-	uint16_t *pYDst  = (uint16_t *)pYuvBuffer;
-	uint16_t *pUDst  = (uint16_t *)pYuvBuffer + nSizeLuma;
-	uint16_t *pVDst  = (uint16_t *)pYuvBuffer + nSizeLuma + nSizeUorV;
+		uint8_t *pYDst  = (uint8_t *)pYuvBuffer;
+		uint8_t *pUDst  = (uint8_t *)pYuvBuffer + nSizeLuma;
+		uint8_t *pVDst  = (uint8_t *)pYuvBuffer + nSizeLuma + nSizeUorV;
+		uint8_t *pLast = pVDst;
 
-	uint16_t *pLast = pVDst;
-#endif
-
-#ifdef PRECISION_8BIT
-	memcpy (pYDst, pYSrc, nSizeLuma);
-#else
-	memcpy (pYDst, pYSrc, nSizeLuma * 2);
-#endif
-
-	while (pUDst < pLast)
-	{
-		*pUDst++ = *pUVSrc++;
-		*pVDst++ = *pUVSrc++;
+		memcpy (pYDst, pYSrc, nSizeLuma);
+		while (pUDst < pLast) {
+			*pUDst++ = *pUVSrc++;
+			*pVDst++ = *pUVSrc++;
+		}
 	}
 }
 
@@ -895,6 +799,7 @@ int get_fmt(component_t *pComponent, stream_media_t *port, struct v4l2_format *f
 	port->openFormat.yuv.nBitCount = 12;
 	port->openFormat.yuv.nDataType = ZV_YUV_DATA_TYPE_NV12;
 	port->openFormat.yuv.nFrameRate = 30;
+	port->openFormat.yuv.stride = format->fmt.pix_mp.plane_fmt[0].bytesperline;
 	port->frame_size = (format->fmt.pix_mp.height * format->fmt.pix_mp.height * 3) / 2;
 	pComponent->ulWidth = format->fmt.pix_mp.width;
 	pComponent->ulHeight = format->fmt.pix_mp.height;
@@ -1060,8 +965,9 @@ void showUsage(void)
 Usage: ./mxc_v4l2_vpu_dec.out ifile [PATH] ifmt [IFMT] ofmt [OFMT] [OPTIONS]\n\n\
 OPTIONS:\n\
     --help          Show usage manual.\n\n\
-    PATH            Specify the input file path.\n\n\
-    IFMT            Specify input file encode format number. Format comparsion table:\n\
+    ifile path      Specify the input file path.\n\n\
+    path            Specify the input file path.\n\n\
+    ifmt            Specify input file encode format number. Format comparsion table:\n\
                         VPU_VIDEO_UNDEFINED           0\n\
                         VPU_VIDEO_AVC                 1\n\
                         VPU_VIDEO_VC1                 2\n\
@@ -1077,11 +983,14 @@ OPTIONS:\n\
                         VPU_VIDEO_AVC_MVC             12\n\
                         VPU_VIDEO_HEVC                13\n\
                         VPU_PIX_FMT_DIVX              14\n\n\
-    OFMT            Specify decode format number. Format comparsion table:\n\
+    ofmt            Specify decode format number. Format comparsion table:\n\
                         V4L2_PIX_FMT_NV12             0\n\
                         V4L2_PIX_FMT_YUV420           1\n\
                         VPU_PIX_FMT_TILED_8           2\n\
                         VPU_PIX_FMT_TILED_10          3\n\n\
+    obit            Specify output bit format for 10-bit encoded data:\n\
+                        VPU_OUT_BIT_PRECISE_8         0 (default)\n\
+                        VPU_OUT_BIT_16                1\n\n\
     ofile path      Specify the output file path.\n\n\
     loop times      Specify loop decode times to the same file. If the times not set, the loop continues.\n\n\
     frames count    Specify the count of decode frames. Default total decode.\n\n\
@@ -1099,6 +1008,130 @@ EXAMPLES:\n\
 
 }
 
+unsigned int dec_get_outBitCnt(VPU_OUT_BIT_FMT bit)
+{
+	unsigned int bitCnt = 0;
+
+	switch (bit)
+	{
+	case VPU_OUT_BIT_PRECISE_8:
+		bitCnt = 8;
+		break;
+	case VPU_OUT_BIT_16:
+		bitCnt = 16;
+		break;
+	default:
+		bitCnt = 8;
+		break;
+	}
+
+	return bitCnt;
+}
+
+int dec_write_buf(stream_media_t *port, struct v4l2_buffer *v4l2Buf,
+		struct zvapp_v4l_buf_info *appV4lBuf, FILE *fOutput)
+{
+	unsigned char *nBaseAddr[4];
+	unsigned int stride;
+	unsigned int b10format;
+	unsigned int bInterLace;
+	unsigned int totalSizeImage;
+	unsigned char *dstbuf = NULL;
+	unsigned char *yuvbuf = NULL;
+	unsigned int writeBytes;
+	unsigned int outBitCnt;
+	int width;
+	int height;
+	int ret = 0;
+
+	stride = port->openFormat.yuv.stride;
+	b10format = (v4l2Buf->reserved == 1) ? 1 : 0;
+	bInterLace = (v4l2Buf->field == 4) ? 1 : 0;
+	width = port->openFormat.yuv.nWidth;
+	height = port->openFormat.yuv.nHeight;
+
+	outBitCnt = dec_get_outBitCnt(port->outBit);
+	if (b10format)
+	{
+		if (outBitCnt == 16)
+			totalSizeImage = (v4l2Buf->m.planes[0].length + v4l2Buf->m.planes[1].length) * 2;
+		else
+			totalSizeImage = v4l2Buf->m.planes[0].length + v4l2Buf->m.planes[1].length;
+
+		writeBytes = (width * height * 3 / 2) * (outBitCnt / 8);
+	}
+	else
+	{
+		totalSizeImage = v4l2Buf->m.planes[0].length + v4l2Buf->m.planes[1].length;
+		writeBytes = width * height * 3 / 2;
+	}
+
+	dstbuf = (unsigned char *)malloc(totalSizeImage);
+	memset(dstbuf, 0x0, totalSizeImage);
+	if (!dstbuf)
+	{
+		printf("error: dstbuf alloc failed\n");
+		ret = -1;
+		goto exit;
+	}
+	yuvbuf = (unsigned char *)malloc(totalSizeImage);
+	memset(yuvbuf, 0x0, totalSizeImage);
+	if(!yuvbuf)
+	{
+		printf("error: yuvbuf alloc failed\n");
+		ret = -1;
+		goto exit;
+	}
+
+	nBaseAddr[0] = (unsigned char *)(appV4lBuf[v4l2Buf->index].addr[0] + v4l2Buf->m.planes[0].data_offset);
+	nBaseAddr[1] = (unsigned char *)(appV4lBuf[v4l2Buf->index].addr[1] + v4l2Buf->m.planes[1].data_offset);
+	nBaseAddr[2] = nBaseAddr[0]  + v4l2Buf->m.planes[0].length / 2;
+	nBaseAddr[3] = nBaseAddr[1] + v4l2Buf->m.planes[1].length / 2;
+
+	switch (port->fmt)
+	{
+	case V4L2_PIX_FMT_NV12:
+		if (b10format)
+			ReadYUVFrame_FSL_10b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, 0, outBitCnt);
+		else
+			ReadYUVFrame_FSL_8b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
+		fwrite((void *)yuvbuf, 1, writeBytes, fOutput);
+		break;
+	case V4L2_PIX_FMT_YUV420M:
+		if (b10format)
+		{
+			ReadYUVFrame_FSL_10b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, 0, outBitCnt);
+			LoadFrameNV12_10b (yuvbuf, dstbuf, width, height, width * height, 0, bInterLace, outBitCnt);
+		}
+		else
+		{
+			ReadYUVFrame_FSL_8b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
+			LoadFrameNV12(yuvbuf, dstbuf, width, height, width * height, 0, bInterLace);
+		}
+		fwrite((void *)dstbuf, 1, writeBytes, fOutput);
+		break;
+	case VPU_PIX_FMT_TILED_8:
+	case VPU_PIX_FMT_TILED_10:
+		fwrite((void *)nBaseAddr[0], 1, v4l2Buf->m.planes[0].bytesused, fOutput);
+		fwrite((void *)nBaseAddr[1], 1, v4l2Buf->m.planes[1].bytesused, fOutput);
+		break;
+	default:
+		printf("warning: please specify output format, or the format you specified is not standard. \n");
+		break;
+	}
+
+	fflush(fOutput);
+	ret = 0;
+
+exit:
+	if (dstbuf)
+		free(dstbuf);
+	if (yuvbuf)
+		free(yuvbuf);
+
+	return ret;
+}
+
 void test_streamout(component_t *pComponent)
 {
 	int					lErr = 0;
@@ -1106,8 +1139,6 @@ void test_streamout(component_t *pComponent)
 	struct zvapp_v4l_buf_info		*stAppV4lBuf;
 	struct v4l2_buffer			stV4lBuf;
 	struct v4l2_plane           		stV4lPlanes[3];
-	unsigned int				ulWidth;
-	unsigned int				ulHeight;
 	fd_set					rd_fds;
 	fd_set 					evt_fds;
 	struct timeval 				tv;
@@ -1141,9 +1172,6 @@ STREAMOUT_INFO:
 		g_unCtrlCReceived = 1;
 		goto FUNC_EXIT;
 	}
-	ulWidth = pComponent->ulWidth;
-	ulHeight = pComponent->ulHeight;
-
 
 	pComponent->crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	lErr = get_crop(pComponent);
@@ -1217,17 +1245,6 @@ STREAMOUT_START:
 			goto FUNC_EXIT;
 		}
 	}
-	else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
-	{
-		// output to null
-	}
-	else
-	{
-		printf("%s() Unknown media type %d.\n", __FUNCTION__, pComponent->ports[STREAM_DIR_OUT].eMediaType);
-		g_unCtrlCReceived = 1;
-		ret_err = 47;
-		goto FUNC_EXIT;
-	}
 
 	lErr = dec_streamon(pComponent, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	if (!lErr)
@@ -1268,11 +1285,8 @@ STREAMOUT_START:
 				lErr = ioctl(pComponent->hDev, VIDIOC_QBUF, &stAppV4lBuf[i].stV4lBuf);
 				if (lErr)
 				{
-					printf("%s() QBUF ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-					if (errno == EAGAIN)
-					{
-						lErr = 0;
-					}
+					if (lErr != EAGAIN)
+						printf("%s() QBUF ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
 					break;
 				}
 				else
@@ -1369,95 +1383,13 @@ STREAMOUT_START:
 				dec_bit_dbg(LVL_BIT_FPS, "\rframes = %d, fps = %.2f, used_time = %.2f\t\t", outFrameNum, outFrameNum / used_time, used_time);
 				if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_FILE_OUT)
 				{
-					{
-						unsigned char *nBaseAddr[4];
-						unsigned int horiAlign = V4L2_NXP_FRAME_HORIZONTAL_ALIGN - 1;
-						unsigned int stride = ((ulWidth + horiAlign) & ~horiAlign);
-						unsigned int b10format = (stV4lBuf.reserved == 1) ? 1 : 0;
-						unsigned int bInterLace = (stV4lBuf.field == 4) ? 1 : 0;
-						unsigned int byteused = ulWidth * ulHeight * 3 / 2;
-						unsigned int totalSizeImage = stV4lBuf.m.planes[0].length + stV4lBuf.m.planes[1].length;
-						unsigned char *dstbuf, *yuvbuf;
-
-						if (b10format)
-						{
-							printf("warning: unsupport 10bit stream.\n");
-							g_unCtrlCReceived = 1;
-							goto FUNC_END;
-						}
-
-						dstbuf = (unsigned char *)malloc(totalSizeImage);
-						if(!dstbuf)
-						{
-							printf("error: dstbuf alloc failed\n");
-							goto FUNC_END;
-						}
-						yuvbuf = (unsigned char *)malloc(totalSizeImage);
-						if(!yuvbuf)
-						{
-							printf("error: yuvbuf alloc failed\n");
-							goto FUNC_END;
-						}
-
-						nBaseAddr[0] = (unsigned char *)(stAppV4lBuf[stV4lBuf.index].addr[0] + stV4lBuf.m.planes[0].data_offset);
-						nBaseAddr[1] = (unsigned char *)(stAppV4lBuf[stV4lBuf.index].addr[1] + stV4lBuf.m.planes[1].data_offset);
-						nBaseAddr[2] = nBaseAddr[0]  + stV4lBuf.m.planes[0].length / 2;
-						nBaseAddr[3] = nBaseAddr[1] + stV4lBuf.m.planes[1].length / 2;
-
-						/*because hardware currently only support NY12_TILED format*/
-						/*so need to complete the subsequent conversion*/
-						switch (pComponent->ports[STREAM_DIR_OUT].fmt)
- 						{
-						case V4L2_PIX_FMT_NV12:
-							if (b10format)
-							{
-								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, 0);
-							}
-							else
-							{
-								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
-							}
-							fwrite((void *)yuvbuf, 1, byteused, fpOutput);
-							break;
-						case V4L2_PIX_FMT_YUV420M:
-							if (b10format)
-							{
-								ReadYUVFrame_FSL_10b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, 0);
-								LoadFrameNV12_10b (yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, 0);
-							}
-							else
-							{
-								ReadYUVFrame_FSL_8b(ulWidth, ulHeight, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
-								LoadFrameNV12(yuvbuf, dstbuf, ulWidth, ulHeight, ulWidth * ulHeight, 0, bInterLace);
-							}
-							fwrite((void *)dstbuf, 1, byteused, fpOutput);
-							break;
-						case VPU_PIX_FMT_TILED_8:
-						case VPU_PIX_FMT_TILED_10:
-							fwrite((void *)nBaseAddr[0], 1, stV4lBuf.m.planes[0].bytesused, fpOutput);
-							fwrite((void *)nBaseAddr[1], 1, stV4lBuf.m.planes[1].bytesused, fpOutput);
-							break;
-						default:
-							printf("warning: %s() please specify output format, or the format you specified is not standard. \n", __FUNCTION__);
-							break;
-						}
-						free(dstbuf);
-						free(yuvbuf);
-					}
+					dec_write_buf(&pComponent->ports[STREAM_DIR_OUT], &stV4lBuf, stAppV4lBuf, fpOutput);
 				}
-				else if (pComponent->ports[STREAM_DIR_OUT].eMediaType == MEDIA_NULL_OUT)
-				{
-				}
-				fflush(fpOutput);
 			}
 		}
 		else	
 		{
-			if (errno == EAGAIN)
-			{
-				lErr = 0;
-			}
-			else
+			if (errno != EAGAIN)
 			{
 				printf("\r%s()  DQBUF failed(%d) errno(%d)\n", __FUNCTION__, lErr, errno);
 			}
@@ -2070,6 +2002,18 @@ HAS_2ND_CMD:
 				nArgNow++;
 			}
         }
+		else if(!strcasecmp(argv[nArgNow],"OBIT"))
+		{
+			if(!HAS_ARG_NUM(argc,nArgNow,1))
+			{
+				break;
+			}
+			nArgNow++;
+			if(isNumber(argv[nArgNow]))
+			{
+				component[nCmdIdx].ports[STREAM_DIR_OUT].outBit = (VPU_OUT_BIT_FMT)abs(atoi(argv[nArgNow++]));
+			}
+		}
 		else if(!strcasecmp(argv[nArgNow],"BS"))
 		{
 			if(!HAS_ARG_NUM(argc,nArgNow,1))
