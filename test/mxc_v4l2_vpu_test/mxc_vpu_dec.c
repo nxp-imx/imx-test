@@ -52,8 +52,12 @@
 
 #define DQEVENT
 
-#define LVL_BIT_FPS	(1 << 3)
+#define LVL_BIT_WARN 	(1 << 0)
+#define LVL_BIT_EVENT	(1 << 1)
+#define LVL_BIT_INFO	(1 << 2)
+#define LVL_BIT_FPS		(1 << 3)
 
+#define dec_err(fmt, arg...) pr_info("[Decoder Test] " fmt, ## arg)
 #define dec_bit_dbg(bit, fmt, arg...) \
 	do { \
 		if (dec_dbg_bit & (bit)) \
@@ -71,7 +75,7 @@ volatile int preLoopTimes = 1;
 volatile int initLoopTimes = 1;
 int frame_done = 0; 
 pthread_mutex_t g_mutex;
-int dec_dbg_bit = 0;
+int dec_dbg_bit = LVL_BIT_WARN;
 
 static __u32  formats_compressed[] = 
 {
@@ -821,6 +825,47 @@ int set_fmt(component_t *pComponent, struct v4l2_format *format)
 	return 0;
 }
 
+int check_fmt(component_t *pComponent, struct v4l2_format *format)
+{
+	struct v4l2_fmtdesc fmt_desc;
+	int ret = -1;
+
+	fmt_desc.index = 0;
+	fmt_desc.type = format->type;
+
+	if (format->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
+		|| format->type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
+		dec_bit_dbg(LVL_BIT_INFO, "output support format:\n");
+	else if (format->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
+			|| format->type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		dec_bit_dbg(LVL_BIT_INFO, "capture support format:\n");
+	else
+		dec_bit_dbg(LVL_BIT_INFO, "format_type(%d) support format:\n",
+					format->type);
+
+	while (!ioctl(pComponent->hDev, VIDIOC_ENUM_FMT, &fmt_desc)) {
+		dec_bit_dbg(LVL_BIT_INFO, "%c%c%c%c\n",
+					(fmt_desc.pixelformat) & 0xff,
+					(fmt_desc.pixelformat >> 8) & 0xff,
+					(fmt_desc.pixelformat >> 16) & 0xff,
+					(fmt_desc.pixelformat >> 24) & 0xff);
+
+		if (fmt_desc.pixelformat == format->fmt.pix_mp.pixelformat)
+			ret = 0;
+
+		fmt_desc.index++;
+	}
+
+	if (ret == -1)
+		dec_bit_dbg(LVL_BIT_WARN, "warning: not support format: %c%c%c%c\n",
+				(format->fmt.pix_mp.pixelformat) & 0xff,
+				(format->fmt.pix_mp.pixelformat >> 8) & 0xff,
+				(format->fmt.pix_mp.pixelformat >> 16) & 0xff,
+				(format->fmt.pix_mp.pixelformat >> 24) & 0xff);
+
+	return ret;
+}
+
 int get_crop(component_t *pComponent)
 {
 	int lErr;
@@ -998,7 +1043,10 @@ OPTIONS:\n\
     iqc count       Specify the count of input reqbuf.\n\n\
     oqc count       Specify the count of output reqbuf.\n\n\
     dev device      Specify the VPU decoder device node(generally /dev/video12).\n\n\
-    dbg log_level   Specify bit mask of debug log.\n\n\
+    dbg log_level   Specify bit mask of debug log.\n\
+                        LVL_BIT_WARN             1 << 0\n\
+                        LVL_BIT_EVENT            1 << 1\n\
+                        LVL_BIT_INFO             1 << 2\n\
                         LVL_BIT_FPS              1 << 3\n\n\n\
 EXAMPLES:\n\
     ./mxc_v4l2_vpu_dec.out ifile decode.264 ifmt 1 ofmt 1 ofile test.yuv\n\n\
@@ -1512,6 +1560,12 @@ void test_streamin(component_t *pComponent)
 	}
 	format.fmt.pix_mp.num_planes = 1;
 	format.fmt.pix_mp.plane_fmt[0].sizeimage = pComponent->ports[STREAM_DIR_IN].frame_size;
+	lErr = check_fmt(pComponent, &format);
+	if (lErr < 0)
+	{
+		g_unCtrlCReceived = 1;
+		goto FUNC_EXIT;
+	}
 	lErr = set_fmt(pComponent, &format);
 	if (lErr < 0)
 	{
