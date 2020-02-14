@@ -1032,14 +1032,18 @@ int main(int ac, const char *av[])
 	if (err < 0)
 		goto end_err;
 
-	header_write(fd_dst);
+	if(snd_pcm_format_linear(audio_info.output_format) &&
+	   snd_pcm_format_signed(audio_info.output_format) > 0)
+		header_write(fd_dst);
 
 	/* Config HW */
 	err += play_file(fd_dst, fd_asrc, &audio_info);
 	if (err < 0)
 		goto end_err;
 
-	header_update(fd_dst, &audio_info);
+	if(snd_pcm_format_linear(audio_info.output_format) &&
+	   snd_pcm_format_signed(audio_info.output_format) > 0)
+		header_update(fd_dst, &audio_info);
 
 	ioctl(fd_asrc, ASRC_RELEASE_PAIR, &pair_index);
 
