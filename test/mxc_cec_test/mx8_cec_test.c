@@ -214,22 +214,25 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	printf("device[%s], name[%s], LA[%d]\n", caps.driver, caps.name, caps.available_log_addrs);
+	printf("device[%s], name[%s], LA[%d], capabilities[0x%x]\n",
+				caps.driver, caps.name, caps.available_log_addrs, caps.capabilities);
 
-	ret = ioctl(node.fd_cec, CEC_ADAP_G_PHYS_ADDR, &phyaddr);
-	if (ret)
-		printf("get phyaddr failed\n");
+	if (caps.capabilities & CEC_CAP_PHYS_ADDR) {
+		ret = ioctl(node.fd_cec, CEC_ADAP_G_PHYS_ADDR, &phyaddr);
+		if (ret)
+			printf("get phyaddr failed\n");
 
-	printf("Get phyaddr=0x%x\n", phyaddr);
+		printf("Get phyaddr=0x%x\n", phyaddr);
 
-	phyaddr = node.hdmi_id << 12;
-	ret = ioctl(node.fd_cec, CEC_ADAP_S_PHYS_ADDR, &phyaddr);
-	if (ret < 0) {
-		printf("set cec phy addr failed, %d\n", ret);
-		return -1;
+		phyaddr = node.hdmi_id << 12;
+		ret = ioctl(node.fd_cec, CEC_ADAP_S_PHYS_ADDR, &phyaddr);
+		if (ret < 0) {
+			printf("set cec phy addr failed, %d\n", ret);
+			return -1;
+		}
+
+		printf("Set phy addr success, phyaddr=0x%x\n", phyaddr);
 	}
-
-	printf("Set phy addr success, phyaddr=0x%x\n", phyaddr);
 
 	if (node.vendor == 0)
 		log_addrs.vendor_id = 0xABCD;
