@@ -1,5 +1,5 @@
 /*
- *  Copyright 2018 NXP
+ *  Copyright 2018-2020 NXP
  */
 
 /*
@@ -541,6 +541,14 @@ static unsigned int ReadYUVFrame_FSL_8b(unsigned int nPicWidth,
 /* PRECISION_8BIT: [0,1,2,3,4,5,6,7,8,9] -> [0,1,2,3,4,5,6,7]
  * 16-bit: [0,1,2,3,4,5,6,7,8,9] -> [0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9]
  */
+
+#define ALGORITHM_10BIT 1
+
+#if (ALGORITHM_10BIT == 1)
+
+/* Algorithm: 1
+ * frame buffer (10bit tiled) -> 128-line linear buffer (10bit) -> linear buffer (8bit)
+ */
 static int __ReadYUVFrame_FSL_10b(void *dst_addr, uint8_t *src_addr,
                                   unsigned int width,  unsigned int height,
                                   unsigned int stride, int h_cnt, int v_cnt,
@@ -623,6 +631,146 @@ exit:
 		free(row_buf);
     return ret;
 }
+
+#elif (ALGORITHM_10BIT == 2)
+/* Algorithm 2:
+ * frame buffer (10bit tiled) -> linear buffer (8bit), dst coordinate -> src
+ */
+static int __ReadYUVFrame_FSL_10b(void *dst_addr, uint8_t *src_addr,
+                                  unsigned int width,  unsigned int height,
+                                  unsigned int stride, int h_cnt, int v_cnt,
+				  unsigned int bitCnt)
+{
+	int h_num, v_num;
+	int sx, sy, dx, dy;
+	int i, j;
+	int i_in_src, j_in_src;
+	int first_byte_pos, second_byte_pos;
+	int dst_pos;
+	int bit_pos, bit_loc;
+	uint8_t first_byte, second_byte;
+	uint16_t byte_16;
+	uint8_t *dst_addr_8 = NULL;
+	uint16_t *dst_addr_16 = NULL;
+
+	if (bitCnt == 8)
+		dst_addr_8 = (uint8_t *)dst_addr;
+	else
+		dst_addr_16 = (uint16_t *)dst_addr;
+
+	/* transferd h_cnt calculated by ((nPicWidth * 10 / 8) + 7) / 8;
+	 * not suitable for this algorithm
+	 */
+	h_cnt = (width + 7) / 8;
+
+	for (v_num = 0; v_num < v_cnt; v_num++) {
+		for (h_num = 0; h_num < h_cnt; h_num++) {
+			for (i = 0; i < 128; i++) {
+				for (j = 0; j < 8; j++) {
+					dx = h_num * 8 + j;
+					dy = v_num * 128 + i;
+					sx = dx * 10 / 8;
+					sy = dy;
+					i_in_src = sy % 128;
+					j_in_src = sx % 8;
+					first_byte_pos = (sy / 128) * (stride * 128) + (sx / 8) * (8 * 128) + (i_in_src * 8) + j_in_src;
+					second_byte_pos = (j_in_src != 7) ? (first_byte_pos + 1) : (first_byte_pos + 8 * 127 + 1);
+					dst_pos = dy * width + dx;
+					first_byte = src_addr[first_byte_pos];
+					second_byte = src_addr[second_byte_pos];
+					bit_pos = dx * 10;
+					bit_loc = bit_pos % 8;
+					byte_16 = (first_byte << 8) | second_byte;
+					if (bitCnt == 8)
+						dst_addr_8[dst_pos] = byte_16 >> (8 - bit_loc);
+					else
+						dst_addr_16[dst_pos] = (byte_16 >> (6 - bit_loc)) & 0x3ff;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+#else
+
+/* Algorithm 3:
+ * frame buffer (10bit tiled) -> linear buffer (8bit), src coordinate -> dst
+ */
+static int __ReadYUVFrame_FSL_10b(void *dst_addr, uint8_t *src_addr,
+                                  unsigned int width,  unsigned int height,
+                                  unsigned int stride, int h_cnt, int v_cnt,
+				  unsigned int bitCnt)
+{
+	int h_num, v_num;
+	int sx, sy, dx, dy;
+	int i, j;
+	uint8_t *psrc;
+	uint8_t *dst_addr_8 = NULL;
+	uint8_t *pdst_8 = NULL;
+	uint16_t *dst_addr_16 = NULL;
+	uint16_t *pdst_16 = NULL;
+	int bit_pos, bit_loc;
+	uint8_t first_byte, second_byte;
+	uint16_t byte_16;
+	int start_pos = 0;
+
+	if (bitCnt == 8)
+		dst_addr_8 = (uint8_t *)dst_addr;
+	else
+		dst_addr_16 = (uint16_t *)dst_addr;
+
+	for (v_num = 0; v_num < v_cnt; v_num++)	{
+		for (h_num = 0; h_num < h_cnt; h_num++) {
+			sx = h_num * 8;
+			sy = v_num * 128;
+			dx = (sx * 8 + 9) / 10;
+			dy = sy;
+
+			for (i = 0; i < 128; i++) {
+				psrc = &src_addr[sy * (stride) + h_num * (8 * 128) + i * 8];
+				if (bitCnt == 8)
+					pdst_8 = &dst_addr_8[dy * width + i * width + dx];
+				else
+					pdst_16 = &dst_addr_16[dy * width + i * width + dx];
+				bit_pos = 10 * dx;
+
+				/* front remain 2 bit, that means the first byte(8bit) all belone front pixel, should skip it */
+				if ((sx * 8 % 10) == 2)
+					start_pos = 1;
+				else
+					start_pos = 0;
+
+				for (j = start_pos; j < 8; j++) {
+					first_byte = psrc[j];
+					second_byte = (j != 7) ? psrc[j + 1] : psrc[8 * 128];
+					byte_16 = (first_byte << 8) | second_byte;
+					bit_loc = bit_pos % 8;
+
+					if (bitCnt == 8) {
+						*pdst_8 = byte_16 >> (8 - bit_loc);
+						pdst_8++;
+					}
+					else {
+						*pdst_16 = (byte_16 >> (6 - bit_loc)) & 0x3ff;
+						pdst_16++;
+					}
+					bit_pos += 10;
+					/* first_byte use 2 bit, second_byte use 8 bit
+					 * seconed_byte exhaused, should skip in next cycle
+					 */
+					if (bit_loc == 6)
+						j++;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+#endif
 
 static unsigned int ReadYUVFrame_FSL_10b(unsigned int nPicWidth,
 					unsigned int nPicHeight,
@@ -1140,7 +1288,7 @@ int dec_write_buf(stream_media_t *port, struct v4l2_buffer *v4l2Buf,
 	{
 	case V4L2_PIX_FMT_NV12:
 		if (b10format)
-			ReadYUVFrame_FSL_10b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, 0, outBitCnt);
+			ReadYUVFrame_FSL_10b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace, outBitCnt);
 		else
 			ReadYUVFrame_FSL_8b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace);
 		fwrite((void *)yuvbuf, 1, writeBytes, fOutput);
@@ -1148,7 +1296,7 @@ int dec_write_buf(stream_media_t *port, struct v4l2_buffer *v4l2Buf,
 	case V4L2_PIX_FMT_YUV420M:
 		if (b10format)
 		{
-			ReadYUVFrame_FSL_10b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, 0, outBitCnt);
+			ReadYUVFrame_FSL_10b(width, height, 0, 0, stride, nBaseAddr, yuvbuf, bInterLace, outBitCnt);
 			LoadFrameNV12_10b (yuvbuf, dstbuf, width, height, width * height, 0, bInterLace, outBitCnt);
 		}
 		else
