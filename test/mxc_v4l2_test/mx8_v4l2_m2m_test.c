@@ -1155,7 +1155,7 @@ static int start_convert(struct mxc_m2m_device *m2m_dev)
 
 int main(int argc, char *argv[])
 {
-	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", " " };
+	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", "i.MX8MP", " " };
 	struct mxc_m2m_device *m2m_dev;
 	int ret = 0;
 
