@@ -275,6 +275,12 @@ bat_lowbus_prepare()
         cpufreq-set -g powersave
     fi
 
+    # set devfreq governor to powersave
+    if ddrc=$(bat_ddrc_device); then
+        BAT_SAVED_DDRC_DEVFREQ_GOV=$(cat $ddrc/governor)
+        echo "powersave" > $ddrc/governor
+    fi
+
     bat_unbind_device_glob "/sys/bus/sdio/drivers/brcmfmac/mmc*"
 }
 
@@ -288,6 +294,12 @@ bat_lowbus_cleanup()
     if [[ -n $BAT_SAVED_CPUFREQ_GOV ]]; then
         cpufreq-set -g $BAT_SAVED_CPUFREQ_GOV
         unset BAT_SAVED_CPUFREQ_GOV
+    fi
+
+    if [[ -n $BAT_SAVED_DDRC_DEVFREQ_GOV ]]; then
+        ddrc=$(bat_ddrc_device)
+        echo "$BAT_SAVED_DDRC_DEVFREQ_GOV" > $ddrc/governor
+        unset BAT_SAVED_DDRC_DEVFREQ_GOV
     fi
 
     if [[ -n $BAT_SAVED_PRINTK= ]]; then
@@ -347,6 +359,11 @@ kernel_is_version()
     else
         return 1
     fi
+}
+
+bat_ddrc_device()
+{
+    ls -d /sys/bus/platform/devices/*.memory-controller/devfreq/*
 }
 
 # Find memtool
