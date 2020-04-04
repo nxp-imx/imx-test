@@ -105,7 +105,7 @@ check_devfreq_set_freq()
 check_opt_devfreq_set_freq()
 {
     local devfreq
-    if devfreq=$(ls -d /sys/bus/platform/devices/$1/devfreq/devfreq*); then
+    if devfreq=$(ls -d /sys/bus/platform/devices/$1/devfreq/*); then
         check_devfreq_set_freq $devfreq $2
     else
         echo "ignore missing /sys/bus/platform/devices/$1"
