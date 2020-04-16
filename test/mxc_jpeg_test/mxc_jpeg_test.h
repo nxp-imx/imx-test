@@ -10,6 +10,8 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+#include <time.h>
+
 #define NUM_BUFS 1
 
 struct encoder_args {
@@ -444,6 +446,9 @@ void v4l2_qbuf_dqbuf_loop(int vdev_fd, int n, struct v4l2_buffer *buf_cap,
 			  struct v4l2_buffer *buf_out)
 {
 	int i;
+	struct timeval start, end;
+	time_t usecs;
+	double fps;
 
 	/*
 	 * repeatedly enqueue/dequeue 1 output buffer and 1 capture buffer,
@@ -474,6 +479,21 @@ void v4l2_qbuf_dqbuf_loop(int vdev_fd, int n, struct v4l2_buffer *buf_cap,
 			perror("VIDIOC_DQBUF IN");
 			exit(1);
 		}
+
+		/*
+		 * use capture and output buffer timestamps to measure
+		 * performance with as little overhead as possible
+		 */
+		start = buf_out->timestamp;
+		end = buf_cap->timestamp;
+		usecs = 1000000 * (end.tv_sec - start.tv_sec) +
+				end.tv_usec - start.tv_usec;
+		if (!usecs)
+			fps = 0;
+		else
+			fps = (double)1000000 / usecs;
+		printf("Iteration #%d misecrosecs=%lu fps=%.02lf\n",
+		       i, usecs, fps);
 	}
 }
 
