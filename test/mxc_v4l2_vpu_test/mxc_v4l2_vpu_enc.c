@@ -249,12 +249,6 @@ static int subscribe_event(int fd)
 
 	memset(&sub, 0, sizeof(sub));
 
-	sub.type = V4L2_EVENT_SOURCE_CHANGE;
-	ret = ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
-	if (ret < 0) {
-		PITCHER_LOG("fail to subscribe source change\n");
-		return -1;
-	}
 	sub.type = V4L2_EVENT_EOS;
 	ret = ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	if (ret < 0) {
@@ -735,7 +729,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	if (encoder->crop.width && encoder->crop.height) {
 		struct v4l2_crop crop;
 
-		crop.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+		crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		crop.c.left = encoder->crop.left;
 		crop.c.top = encoder->crop.top;
 		crop.c.width = encoder->crop.width;
