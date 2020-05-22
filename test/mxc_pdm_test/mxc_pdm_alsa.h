@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 NXP
+ * Copyright 2020-2017 NXP
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -24,6 +24,15 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <stdint.h>
+#ifdef HAS_IMX_SW_PDM
+#include <imx-swpdm.h>
+#endif
+
+#ifndef HAS_IMX_SW_PDM
+typedef enum CIC_pdmToPcmType {
+	CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable = 5,
+} cic_t;
+#endif
 /* structs */
 struct mxc_pdm_priv {
 	snd_pcm_t *pcm_handle;
@@ -36,6 +45,7 @@ struct mxc_pdm_priv {
 	unsigned int access_mode;
 	unsigned int time;
 	unsigned int seconds;
+	unsigned int samples_per_channel;
 	int bits_per_sample;
 	int bits_per_frame;
 	int write_pos;
@@ -44,8 +54,14 @@ struct mxc_pdm_priv {
 	int wperiods;
 	int frames;
 	int debug_info;
+	float gain;
 	float avg_time_used;
 	float time_used;
+	/* pdm to pcm simd */
+#ifdef HAS_IMX_SW_PDM
+	afe_t *afe;
+#endif
+	cic_t type;
 	/* sound buffer */
 	size_t buffer_size;
 	char *buffer;
