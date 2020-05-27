@@ -329,15 +329,18 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 	if (!priv->buffer)
 		return -ENOMEM;
 
-	priv->samples =
-		(uint64_t *)malloc(MXC_APP_NUM_FRAMES * sizeof(uint64_t *));
-	if (!priv->samples)
-		return -ENOMEM;
+	if (priv->type ==
+	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
+		priv->samples =
+			(uint64_t *)malloc(MXC_APP_NUM_FRAMES * sizeof(uint64_t *));
+		if (!priv->samples)
+			return -ENOMEM;
 
-	priv->cframes =
-		(int32_t *)malloc(MXC_APP_NUM_FRAMES * sizeof(int32_t *));
-	if (!priv->cframes)
-		return -ENOMEM;
+		priv->cframes =
+			(int32_t *)malloc(MXC_APP_NUM_FRAMES * sizeof(int32_t *));
+		if (!priv->cframes)
+			return -ENOMEM;
+	}
 
 	ret = snd_output_stdio_attach(&snd_log, stderr, 0);
 	if (ret < 0) {
@@ -360,9 +363,12 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 		return ret;
 	}
 
-	for (i = 0; i < 4; i++) {
-		cic_int[i] = 0;
-		cic_comb[i] = 0;
+	if (priv->type ==
+	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
+		for (i = 0; i < 4; i++) {
+			cic_int[i] = 0;
+			cic_comb[i] = 0;
+		}
 	}
 
 	/* dump handle properties */
@@ -375,8 +381,11 @@ void mxc_alsa_pdm_destroy(struct mxc_pdm_priv *priv)
 {
 	/* free and close resources */
 	free(priv->buffer);
-	free(priv->samples);
-	free(priv->cframes);
+	if (priv->type ==
+	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
+		free(priv->samples);
+		free(priv->cframes);
+	}
 	snd_pcm_nonblock(priv->pcm_handle, 0);
 	snd_pcm_drain(priv->pcm_handle);
 	snd_pcm_close(priv->pcm_handle);
@@ -407,12 +416,15 @@ int mxc_alsa_pdm_process(struct mxc_pdm_priv *priv)
 	/* init thread/mutex */
 	sem_init(&priv->sem, 0, 0);
 	pthread_mutex_init(&priv->mutex, NULL);
-	/* attach convert thread */
-	ret = pthread_create(&priv->thd_id[0], NULL,
+	/* attach convert thread - built in decimation algo */
+	if (priv->type ==
+	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
+		ret = pthread_create(&priv->thd_id[0], NULL,
 			mxc_alsa_pdm_convert, priv);
-	if (ret < 0) {
-		fprintf(stderr, "fail to create thread %d\n", ret);
-		return ret;
+		if (ret < 0) {
+			fprintf(stderr, "fail to create thread %d\n", ret);
+			return ret;
+		}
 	}
 
 	/* Calculate x seconds */
