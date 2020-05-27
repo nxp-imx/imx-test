@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 NXP
+ * Copyright 2020-2017 NXP
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -237,8 +237,6 @@ int mxc_alsa_pdm_set_params(struct mxc_pdm_priv *priv)
 			snd_pcm_format_physical_width(priv->format);
 	priv->bits_per_frame =
 			priv->bits_per_sample * priv->channels;
-	priv->period_frames =
-			priv->period_bytes / (priv->bits_per_frame >> 3);
 	/* get max supported buffer size */
 	ret = snd_pcm_hw_params_get_buffer_size_max(params,
 			&priv->buffer_frames);
@@ -246,6 +244,16 @@ int mxc_alsa_pdm_set_params(struct mxc_pdm_priv *priv)
 		fprintf(stderr, "get buffer size max error: %d\n", ret);
 		return -EINVAL;
 	}
+
+	ret = snd_pcm_hw_params_get_period_size_max(params,
+			&priv->period_bytes, 0);
+	if (ret < 0) {
+		fprintf(stderr, "get period size max error: %d\n", ret);
+		return -EINVAL;
+	}
+
+	priv->period_frames =
+			priv->period_bytes / (priv->bits_per_frame >> 3);
 
 	if ((priv->buffer_frames / priv->period_frames) < MXC_DRV_NUM_PERIODS) {
 		fprintf(stderr, "alsa buffer to small for needed frames: %lu\n",
@@ -278,6 +286,8 @@ int mxc_alsa_pdm_set_params(struct mxc_pdm_priv *priv)
 	}
 
 	snd_pcm_hw_params_get_period_time(params, &priv->time, NULL);
+	snd_pcm_hw_params_get_period_size(params, &priv->period_frames, NULL);
+	snd_pcm_hw_params_get_buffer_size(params, &priv->buffer_frames);
 
 	/* set software audio parameters */
 	snd_pcm_sw_params_current(priv->pcm_handle, swparams);
@@ -311,23 +321,18 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 	int i, ret;
 
 	/* Default configuration */
-	priv->channels = 1;
+	if (!priv->channels)
+		priv->channels = 1;
 	if (!priv->rate)
 		priv->rate = 16000;
 	priv->format = SND_PCM_FORMAT_S32_LE;
 	priv->access_mode = SND_PCM_ACCESS_RW_INTERLEAVED;
-	priv->period_bytes = MXC_APP_PERIOD_SIZE * priv->channels;
-	priv->buffer_size = priv->period_bytes;
 	priv->read_pos =  0;
 	priv->write_pos = 0;
 	priv->rperiods =  0;
 	priv->wperiods =  0;
 	priv->avg_time_used = 0;
 	priv->time_used = 0;
-	/* allocate record buffer */
-	priv->buffer = (char *)malloc(priv->buffer_size);
-	if (!priv->buffer)
-		return -ENOMEM;
 
 	if (priv->type ==
 	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
@@ -362,6 +367,12 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 		fprintf(stderr, "fail setting params error: %d\n", ret);
 		return ret;
 	}
+
+	/* allocate record buffer */
+	priv->buffer_size = (size_t)priv->buffer_frames;
+	priv->buffer = (char *)malloc(priv->buffer_size);
+	if (!priv->buffer)
+		return -ENOMEM;
 
 	if (priv->type ==
 	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {

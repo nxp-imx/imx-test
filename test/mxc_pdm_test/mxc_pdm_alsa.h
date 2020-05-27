@@ -39,9 +39,9 @@ struct mxc_pdm_priv {
 	snd_pcm_format_t format;
 	snd_pcm_uframes_t period_frames;
 	snd_pcm_uframes_t buffer_frames;
+	snd_pcm_uframes_t period_bytes;
 	unsigned int channels;
 	unsigned int rate;
-	unsigned int period_bytes;
 	unsigned int access_mode;
 	unsigned int time;
 	unsigned int seconds;
