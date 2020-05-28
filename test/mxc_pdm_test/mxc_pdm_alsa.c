@@ -25,6 +25,60 @@ static snd_output_t *snd_log = NULL;
 int32_t cic_int[4];
 int32_t cic_comb[4];
 
+#ifdef HAS_IMX_SW_PDM
+void *mxc_alsa_pdm_simd(void *data)
+{
+	struct mxc_pdm_priv *priv = (struct mxc_pdm_priv *)data;
+	double cpu_time_used = 0;
+	clock_t start, end;
+	int num_periods;
+	char *buffer;
+
+	if (priv->debug_info) {
+		fprintf(stderr, "afe.inputbuffer: %u\n",
+			priv->afe->inputBufferSizePerChannel);
+		fprintf(stderr, "afe.outputbuffer: %u\n",
+			priv->afe->outputBufferSizePerChannel);
+	}
+
+	while (!capture_exit) {
+		/* wait for next frame */
+		sem_wait(&priv->sem);
+		/* skip first 4 read periods PDM mic startup time */
+		if (priv->rperiods > 4) {
+			buffer = priv->buffer + priv->write_pos;
+
+			start = clock();
+			/* fill AFE input buffer */
+			memcpy(priv->afe->inputBuffer, buffer,
+				priv->afe->inputBufferSizePerChannel);
+
+			processAfeCic(priv->afe);
+			/* write pcm data */
+			fwrite(priv->afe->outputBuffer, sizeof(int32_t),
+				priv->afe->outputBufferSizePerChannel, priv->fd_out);
+			/* update write buffer pointer */
+			priv->write_pos += priv->afe->inputBufferSizePerChannel;
+
+			end = clock();
+			cpu_time_used = (float)(end - start) / CLOCKS_PER_SEC;
+			priv->avg_time_used =
+				(cpu_time_used + priv->avg_time_used) / 2;
+			priv->time_used += cpu_time_used;
+
+			priv->wperiods++;
+			/* reset write buffer position */
+			if (priv->write_pos >= priv->buffer_size)
+				priv->write_pos = 0;
+		}
+		/* check number of periods waiting to be written */
+		sem_getvalue(&priv->sem, &num_periods);
+	}
+
+	return NULL;
+}
+#endif
+
 void *mxc_alsa_pdm_convert(void *data)
 {
 	struct mxc_pdm_priv *priv = (struct mxc_pdm_priv *)data;
@@ -333,6 +387,11 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 	priv->wperiods =  0;
 	priv->avg_time_used = 0;
 	priv->time_used = 0;
+	/*pdm to pcm simd defaults */
+	if (!priv->samples_per_channel)
+		priv->samples_per_channel = 40;
+	if (!priv->gain)
+		priv->gain = 0;
 
 	if (priv->type ==
 	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
@@ -345,6 +404,26 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 			(int32_t *)malloc(MXC_APP_NUM_FRAMES * sizeof(int32_t *));
 		if (!priv->cframes)
 			return -ENOMEM;
+	} else {
+#ifdef HAS_IMX_SW_PDM
+		bool val;
+		/* pdm to pcm simd */
+		priv->afe = malloc(sizeof(afe_t));
+		if (!priv->afe)
+			return -ENOMEM;
+		/* set base parameters */
+		priv->afe->cicDecoderType = priv->type;
+		if (priv->gain)
+			priv->afe->outputGainFactor = priv->gain;
+		priv->afe->numberOfChannels = (unsigned)priv->channels;
+		/* init pdm to pcm simd */
+		val = constructAfeCicDecoder(priv->type, priv->afe,
+			priv->gain, priv->samples_per_channel);
+		if (val == false) {
+			fprintf(stderr, "fail to create AfeCicDecoder\n");
+			return -EINVAL;
+		}
+#endif
 	}
 
 	ret = snd_output_stdio_attach(&snd_log, stderr, 0);
@@ -396,6 +475,10 @@ void mxc_alsa_pdm_destroy(struct mxc_pdm_priv *priv)
 	    CIC_pdmToPcmType_cic_order_5_cic_downsample_unavailable) {
 		free(priv->samples);
 		free(priv->cframes);
+	} else {
+#ifdef HAS_IMX_SW_PDM
+		deleteAfeCicDecoder(priv->afe);
+#endif
 	}
 	snd_pcm_nonblock(priv->pcm_handle, 0);
 	snd_pcm_drain(priv->pcm_handle);
@@ -436,6 +519,15 @@ int mxc_alsa_pdm_process(struct mxc_pdm_priv *priv)
 			fprintf(stderr, "fail to create thread %d\n", ret);
 			return ret;
 		}
+	} else {
+#ifdef HAS_IMX_SW_PDM
+		ret = pthread_create(&priv->thd_id[0], NULL,
+			mxc_alsa_pdm_simd, priv);
+		if (ret < 0) {
+			fprintf(stderr, "fail to create thread %d\n", ret);
+			return ret;
+		}
+#endif
 	}
 
 	/* Calculate x seconds */
