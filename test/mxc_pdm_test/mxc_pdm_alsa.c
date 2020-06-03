@@ -379,7 +379,7 @@ int mxc_alsa_pdm_init(struct mxc_pdm_priv *priv)
 		priv->channels = 1;
 	if (!priv->rate)
 		priv->rate = 16000;
-	priv->format = SND_PCM_FORMAT_S32_LE;
+	priv->format = SND_PCM_FORMAT_DSD_U32_LE;
 	priv->access_mode = SND_PCM_ACCESS_RW_INTERLEAVED;
 	priv->read_pos =  0;
 	priv->write_pos = 0;
