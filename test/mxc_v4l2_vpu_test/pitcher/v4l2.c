@@ -69,7 +69,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		format.fmt.pix_mp.pixelformat = component->pixelformat;
 		format.fmt.pix_mp.width = component->width;
 		format.fmt.pix_mp.height = component->height;
-		format.fmt.pix_mp.num_planes = VIDEO_MAX_PLANES;
+		format.fmt.pix_mp.num_planes = 1;
 		for (i = 0; i < format.fmt.pix_mp.num_planes; i++) {
 			format.fmt.pix_mp.plane_fmt[i].bytesperline =
 							component->bytesperline;
@@ -212,20 +212,22 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	}
 
 	buffer = component->slots[v4lbuf.index];
+
 	if (!buffer)
 		return NULL;
 	component->slots[v4lbuf.index] = NULL;
 	if (V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
 		for (i = 0; i < v4lbuf.length; i++)
-			buffer->planes[i].bytesused =
-					v4lbuf.m.planes[i].bytesused;
+			buffer->planes[i].bytesused = v4lbuf.m.planes[i].bytesused;
 	} else {
 		buffer->planes[0].bytesused = v4lbuf.bytesused;
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(component->type)) {
-		if (v4lbuf.flags & V4L2_BUF_FLAG_LAST)
+		if (v4lbuf.flags & V4L2_BUF_FLAG_LAST
+			|| buffer->planes[0].bytesused == 0) {
 			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
+		}
 		component->frame_count++;
 	}
 
@@ -888,3 +890,189 @@ struct pitcher_unit_desc pitcher_v4l2_output = {
 	.fd = -1,
 	.events = EPOLLOUT | EPOLLET,
 };
+
+static int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)
+{
+	return ioctl(fd, VIDIOC_ENUM_FMT, fmt);
+}
+
+static int is_v4l2_mplane(struct v4l2_capability *cap)
+{
+    if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE_MPLANE
+			| V4L2_CAP_VIDEO_OUTPUT_MPLANE)
+			&& cap->capabilities & V4L2_CAP_STREAMING)
+        return TRUE;
+
+    if (cap->capabilities & V4L2_CAP_VIDEO_M2M_MPLANE)
+        return TRUE;
+
+    return FALSE;
+}
+
+static int is_v4l2_splane(struct v4l2_capability *cap)
+{
+    if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT)
+			&& cap->capabilities & V4L2_CAP_STREAMING)
+        return TRUE;
+
+    if (cap->capabilities & V4L2_CAP_VIDEO_M2M)
+        return TRUE;
+
+    return FALSE;
+}
+
+int check_v4l2_device_type(int fd, int *type)
+{
+	int CAPTURE_COMPRESSED = 1;
+	int CAPTURE_RAWDATA = 1 << 1;
+	int OUTPUT_COMPRESSED = 1 << 2;
+	int OUTPUT_RAWDATA = 1 << 3;
+	int mask = 0;
+	int vtype = 0;
+	struct v4l2_capability cap;
+	struct v4l2_fmtdesc fmt_desc;
+	int find = FALSE;
+	int m_plane = FALSE;
+	int ret = 0;
+
+	ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
+	if (ret != 0)
+		return FALSE;
+
+	if (is_v4l2_mplane(&cap)) {
+		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		m_plane = TRUE;
+	} else if (is_v4l2_splane(&cap)) {
+		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		m_plane = FALSE;
+	} else {
+		return FALSE;
+	}
+
+	fmt_desc.index = 0;
+	while (!v4l2_enum_fmt(fd, &fmt_desc) && !find) {
+		if (fmt_desc.flags & V4L2_FMT_FLAG_COMPRESSED) {
+			mask |= CAPTURE_COMPRESSED;
+			find = TRUE;
+			break;
+		}
+		switch (fmt_desc.pixelformat) {
+		case V4L2_PIX_FMT_H263:
+		case V4L2_PIX_FMT_H264:
+		case V4L2_PIX_FMT_H264_NO_SC:
+		case V4L2_PIX_FMT_H264_MVC:
+		case V4L2_PIX_FMT_MPEG1:
+		case V4L2_PIX_FMT_MPEG2:
+		case V4L2_PIX_FMT_MPEG4:
+		case V4L2_PIX_FMT_XVID:
+		case V4L2_PIX_FMT_VC1_ANNEX_G:
+		case V4L2_PIX_FMT_VC1_ANNEX_L:
+		case V4L2_PIX_FMT_VP8:
+		case V4L2_PIX_FMT_VP9:
+		case V4L2_PIX_FMT_HEVC:
+			mask |= CAPTURE_COMPRESSED;
+			find = TRUE;
+			break;
+		case V4L2_PIX_FMT_YUV420:
+		case V4L2_PIX_FMT_NV12:
+		case V4L2_PIX_FMT_NV21:
+			mask |= CAPTURE_RAWDATA;
+			find = TRUE;
+			break;
+		}
+		fmt_desc.index++;
+	}
+
+	if (fmt_desc.type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	else
+		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+
+	find = FALSE;
+	fmt_desc.index = 0;
+	while (!v4l2_enum_fmt(fd, &fmt_desc) && !find) {
+		if (fmt_desc.flags & V4L2_FMT_FLAG_COMPRESSED) {
+			mask |= OUTPUT_COMPRESSED;
+			find = TRUE;
+			break;
+		}
+		switch (fmt_desc.pixelformat) {
+		case V4L2_PIX_FMT_H263:
+		case V4L2_PIX_FMT_H264:
+		case V4L2_PIX_FMT_H264_NO_SC:
+		case V4L2_PIX_FMT_H264_MVC:
+		case V4L2_PIX_FMT_MPEG1:
+		case V4L2_PIX_FMT_MPEG2:
+		case V4L2_PIX_FMT_MPEG4:
+		case V4L2_PIX_FMT_XVID:
+		case V4L2_PIX_FMT_VC1_ANNEX_G:
+		case V4L2_PIX_FMT_VC1_ANNEX_L:
+		case V4L2_PIX_FMT_VP8:
+		case V4L2_PIX_FMT_VP9:
+		case V4L2_PIX_FMT_HEVC:
+			mask |= OUTPUT_COMPRESSED;
+			find = TRUE;
+			break;
+		case V4L2_PIX_FMT_YUV420:
+		case V4L2_PIX_FMT_NV12:
+		case V4L2_PIX_FMT_NV21:
+			mask |= OUTPUT_RAWDATA;
+			find = TRUE;
+			break;
+		}
+		fmt_desc.index++;
+	}
+
+	if ((mask & OUTPUT_RAWDATA) && (mask & CAPTURE_COMPRESSED)) {
+		if (m_plane)
+			vtype = V4L2_VIDEO_ENCODER_MPLANE;
+		else
+			vtype = V4L2_VIDEO_ENCODER;
+	} else if ((mask & OUTPUT_COMPRESSED) && (mask & CAPTURE_RAWDATA)) {
+		if (m_plane)
+			vtype = V4L2_VIDEO_DECODER_MPLANE;
+		else
+			vtype = V4L2_VIDEO_DECODER;
+	} else {
+		return FALSE;
+	};
+
+	if (vtype & *type) {
+		*type = vtype;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static int open_video_node_by_index(int index, int flags)
+{
+	char devname[32];
+
+	if (index < 0)
+		return -1;
+
+	snprintf(devname, sizeof(devname) - 1, "/dev/video%d", index);
+
+	return open(devname, flags);
+}
+
+int lookup_v4l2_device_and_open(int *type)
+{
+	const int offset = 0;
+	const int MAX_INDEX = 64;
+	int i;
+	int fd;
+
+	for (i = 0; i < MAX_INDEX; i++) {
+		fd = open_video_node_by_index((i + offset) % MAX_INDEX,
+									   O_RDWR | O_NONBLOCK);
+		if (fd < 0)
+			continue;
+		if (check_v4l2_device_type(fd, type) == TRUE)
+			return fd;
+		SAFE_CLOSE(fd, close);
+	}
+
+	return -1;
+}

@@ -178,51 +178,6 @@ static void sig_handler(int sign)
 	}
 }
 
-static int open_video_node_by_index(int index, int flags)
-{
-	char devname[32];
-
-	if (index < 0)
-		return -1;
-
-	snprintf(devname, sizeof(devname) - 1, "/dev/video%d", index);
-	PITCHER_LOG("open %s\n", devname);
-
-	return open(devname, flags);
-}
-
-static int is_vpu_encoder(struct v4l2_capability cap)
-{
-	if (strcmp((const char *)cap.driver, VPU_ENCODER_DRIVER) == 0)
-		return TRUE;
-	else
-		return FALSE;
-}
-
-static int lookup_encoder_and_open(void)
-{
-	const int offset = 13;
-	const int MAX_INDEX = 64;
-	int i;
-	int fd;
-	int ret;
-
-	for (i = 0; i < MAX_INDEX; i++) {
-		struct v4l2_capability cap;
-
-		fd = open_video_node_by_index((i + offset) % MAX_INDEX,
-						O_RDWR | O_NONBLOCK);
-		if (fd < 0)
-			continue;
-		ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
-		if (!ret && is_vpu_encoder(cap))
-			return fd;
-		SAFE_CLOSE(fd, close);
-	}
-
-	return -1;
-}
-
 static uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 {
 	uint32_t size = width * height;
@@ -752,18 +707,33 @@ static int init_encoder_node(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
 	int ret;
+	int device_type = V4L2_VIDEO_ENCODER | V4L2_VIDEO_ENCODER_MPLANE;
 
 	if (!node)
 		return -RET_E_INVAL;
 
 	encoder = container_of(node, struct encoder_test_t, node);
-	if (encoder->devnode)
+	if (encoder->devnode) {
 		encoder->fd = open(encoder->devnode, O_RDWR | O_NONBLOCK);
-	else
-		encoder->fd = lookup_encoder_and_open();
-	if (encoder->fd < 0) {
-		PITCHER_ERR("open encoder device node fail\n");
-		return -RET_E_OPEN;
+		if (check_v4l2_device_type(encoder->fd, &device_type) == FALSE) {
+			SAFE_CLOSE(encoder->fd, close);
+			PITCHER_ERR("open encoder device node fail\n");
+			return -RET_E_OPEN;
+		}
+	} else {
+		encoder->fd = lookup_v4l2_device_and_open(&device_type);
+		if (encoder->fd < 0) {
+			PITCHER_ERR("open encoder device node fail\n");
+			return -RET_E_OPEN;
+		}
+	}
+
+	if (device_type & V4L2_VIDEO_ENCODER) {
+			encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+			encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	} else {
+		encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+		encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	}
 
 	encoder->output.desc = pitcher_v4l2_output;

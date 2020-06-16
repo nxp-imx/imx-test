@@ -47,6 +47,11 @@ enum {
 	RET_E_NOT_SUPPORT,
 };
 
+#define V4L2_VIDEO_DECODER			1
+#define V4L2_VIDEO_DECODER_MPLANE	1 << 1
+#define V4L2_VIDEO_ENCODER			1 << 2
+#define V4L2_VIDEO_ENCODER_MPLANE	1 << 3
+
 #ifndef SAFE_RELEASE
 #define SAFE_RELEASE(p, func)	\
 	do {\
