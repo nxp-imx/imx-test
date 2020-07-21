@@ -896,7 +896,7 @@ static int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)
 	return ioctl(fd, VIDIOC_ENUM_FMT, fmt);
 }
 
-static int is_v4l2_mplane(struct v4l2_capability *cap)
+int is_v4l2_mplane(struct v4l2_capability *cap)
 {
     if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE_MPLANE
 			| V4L2_CAP_VIDEO_OUTPUT_MPLANE)
@@ -909,7 +909,7 @@ static int is_v4l2_mplane(struct v4l2_capability *cap)
     return FALSE;
 }
 
-static int is_v4l2_splane(struct v4l2_capability *cap)
+int is_v4l2_splane(struct v4l2_capability *cap)
 {
     if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT)
 			&& cap->capabilities & V4L2_CAP_STREAMING)
@@ -921,63 +921,27 @@ static int is_v4l2_splane(struct v4l2_capability *cap)
     return FALSE;
 }
 
-int check_v4l2_device_type(int fd, int *type)
+int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
 {
-	int CAPTURE_COMPRESSED = 1;
-	int CAPTURE_RAWDATA = 1 << 1;
-	int OUTPUT_COMPRESSED = 1 << 2;
-	int OUTPUT_RAWDATA = 1 << 3;
-	int mask = 0;
-	int vtype = 0;
-	struct v4l2_capability cap;
 	struct v4l2_fmtdesc fmt_desc;
-	int find = FALSE;
-	int m_plane = FALSE;
-	int ret = 0;
+	int out_find = FALSE;
+	int cap_find = FALSE;
+	struct v4l2_capability cap;
 
-	ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
-	if (ret != 0)
+	if (ioctl(fd, VIDIOC_QUERYCAP, &cap) != 0)
 		return FALSE;
 
-	if (is_v4l2_mplane(&cap)) {
+	if (is_v4l2_mplane(&cap))
 		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		m_plane = TRUE;
-	} else if (is_v4l2_splane(&cap)) {
+	else if (is_v4l2_splane(&cap))
 		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		m_plane = FALSE;
-	} else {
+	else
 		return FALSE;
-	}
 
 	fmt_desc.index = 0;
-	while (!v4l2_enum_fmt(fd, &fmt_desc) && !find) {
-		if (fmt_desc.flags & V4L2_FMT_FLAG_COMPRESSED) {
-			mask |= CAPTURE_COMPRESSED;
-			find = TRUE;
-			break;
-		}
-		switch (fmt_desc.pixelformat) {
-		case V4L2_PIX_FMT_H263:
-		case V4L2_PIX_FMT_H264:
-		case V4L2_PIX_FMT_H264_NO_SC:
-		case V4L2_PIX_FMT_H264_MVC:
-		case V4L2_PIX_FMT_MPEG1:
-		case V4L2_PIX_FMT_MPEG2:
-		case V4L2_PIX_FMT_MPEG4:
-		case V4L2_PIX_FMT_XVID:
-		case V4L2_PIX_FMT_VC1_ANNEX_G:
-		case V4L2_PIX_FMT_VC1_ANNEX_L:
-		case V4L2_PIX_FMT_VP8:
-		case V4L2_PIX_FMT_VP9:
-		case V4L2_PIX_FMT_HEVC:
-			mask |= CAPTURE_COMPRESSED;
-			find = TRUE;
-			break;
-		case V4L2_PIX_FMT_YUV420:
-		case V4L2_PIX_FMT_NV12:
-		case V4L2_PIX_FMT_NV21:
-			mask |= CAPTURE_RAWDATA;
-			find = TRUE;
+	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
+		if (fmt_desc.pixelformat == cap_fmt) {
+			cap_find = TRUE;
 			break;
 		}
 		fmt_desc.index++;
@@ -988,89 +952,48 @@ int check_v4l2_device_type(int fd, int *type)
 	else
 		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 
-	find = FALSE;
 	fmt_desc.index = 0;
-	while (!v4l2_enum_fmt(fd, &fmt_desc) && !find) {
-		if (fmt_desc.flags & V4L2_FMT_FLAG_COMPRESSED) {
-			mask |= OUTPUT_COMPRESSED;
-			find = TRUE;
-			break;
-		}
-		switch (fmt_desc.pixelformat) {
-		case V4L2_PIX_FMT_H263:
-		case V4L2_PIX_FMT_H264:
-		case V4L2_PIX_FMT_H264_NO_SC:
-		case V4L2_PIX_FMT_H264_MVC:
-		case V4L2_PIX_FMT_MPEG1:
-		case V4L2_PIX_FMT_MPEG2:
-		case V4L2_PIX_FMT_MPEG4:
-		case V4L2_PIX_FMT_XVID:
-		case V4L2_PIX_FMT_VC1_ANNEX_G:
-		case V4L2_PIX_FMT_VC1_ANNEX_L:
-		case V4L2_PIX_FMT_VP8:
-		case V4L2_PIX_FMT_VP9:
-		case V4L2_PIX_FMT_HEVC:
-			mask |= OUTPUT_COMPRESSED;
-			find = TRUE;
-			break;
-		case V4L2_PIX_FMT_YUV420:
-		case V4L2_PIX_FMT_NV12:
-		case V4L2_PIX_FMT_NV21:
-			mask |= OUTPUT_RAWDATA;
-			find = TRUE;
+	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
+		if (fmt_desc.pixelformat == out_fmt) {
+			out_find = TRUE;
 			break;
 		}
 		fmt_desc.index++;
 	}
 
-	if ((mask & OUTPUT_RAWDATA) && (mask & CAPTURE_COMPRESSED)) {
-		if (m_plane)
-			vtype = V4L2_VIDEO_ENCODER_MPLANE;
-		else
-			vtype = V4L2_VIDEO_ENCODER;
-	} else if ((mask & OUTPUT_COMPRESSED) && (mask & CAPTURE_RAWDATA)) {
-		if (m_plane)
-			vtype = V4L2_VIDEO_DECODER_MPLANE;
-		else
-			vtype = V4L2_VIDEO_DECODER;
-	} else {
-		return FALSE;
-	};
-
-	if (vtype & *type) {
-		*type = vtype;
+	if ((cap_find & out_find))
 		return TRUE;
-	}
 
 	return FALSE;
 }
 
-static int open_video_node_by_index(int index, int flags)
+static int open_video_node_by_index(int index, int flags, char *devname)
 {
-	char devname[32];
-
 	if (index < 0)
 		return -1;
 
-	snprintf(devname, sizeof(devname) - 1, "/dev/video%d", index);
+	snprintf(devname, MAXPATHLEN - 1, "/dev/video%d", index);
 
 	return open(devname, flags);
 }
 
-int lookup_v4l2_device_and_open(int *type)
+int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt)
 {
 	const int offset = 0;
 	const int MAX_INDEX = 64;
 	int i;
 	int fd;
+	char devname[MAXPATHLEN];
 
 	for (i = 0; i < MAX_INDEX; i++) {
 		fd = open_video_node_by_index((i + offset) % MAX_INDEX,
-									   O_RDWR | O_NONBLOCK);
+									   O_RDWR | O_NONBLOCK, devname);
 		if (fd < 0)
 			continue;
-		if (check_v4l2_device_type(fd, type) == TRUE)
+		if (check_v4l2_device_type(fd, out_fmt, cap_fmt) == TRUE) {
+			PITCHER_LOG("open %s\n", devname);
 			return fd;
+		}
 		SAFE_CLOSE(fd, close);
 	}
 

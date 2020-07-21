@@ -707,7 +707,7 @@ static int init_encoder_node(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
 	int ret;
-	int device_type = V4L2_VIDEO_ENCODER | V4L2_VIDEO_ENCODER_MPLANE;
+	struct v4l2_capability cap;
 
 	if (!node)
 		return -RET_E_INVAL;
@@ -715,20 +715,26 @@ static int init_encoder_node(struct test_node *node)
 	encoder = container_of(node, struct encoder_test_t, node);
 	if (encoder->devnode) {
 		encoder->fd = open(encoder->devnode, O_RDWR | O_NONBLOCK);
-		if (check_v4l2_device_type(encoder->fd, &device_type) == FALSE) {
+		PITCHER_LOG("open %s\n", encoder->devnode);
+		ret = check_v4l2_device_type(encoder->fd,
+									 encoder->output.pixelformat,
+									 encoder->capture.pixelformat);
+		if (ret == FALSE) {
 			SAFE_CLOSE(encoder->fd, close);
 			PITCHER_ERR("open encoder device node fail\n");
 			return -RET_E_OPEN;
 		}
 	} else {
-		encoder->fd = lookup_v4l2_device_and_open(&device_type);
+		encoder->fd = lookup_v4l2_device_and_open(encoder->output.pixelformat,
+												  encoder->capture.pixelformat);
 		if (encoder->fd < 0) {
 			PITCHER_ERR("open encoder device node fail\n");
 			return -RET_E_OPEN;
 		}
 	}
 
-	if (device_type & V4L2_VIDEO_ENCODER) {
+	ioctl(encoder->fd, VIDIOC_QUERYCAP, &cap);
+	if (is_v4l2_splane(&cap)) {
 			encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 			encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	} else {

@@ -46,8 +46,10 @@ struct v4l2_component_t {
 extern struct pitcher_unit_desc pitcher_v4l2_capture;
 extern struct pitcher_unit_desc pitcher_v4l2_output;
 
-int lookup_v4l2_device_and_open(int *type);
-int check_v4l2_device_type(int fd, int *type);
+int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt);
+int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt);
+int is_v4l2_mplane(struct v4l2_capability *cap);
+int is_v4l2_splane(struct v4l2_capability *cap);
 
 #ifdef __cplusplus
 }
