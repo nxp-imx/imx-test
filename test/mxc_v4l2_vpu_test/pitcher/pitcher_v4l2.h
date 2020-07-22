@@ -41,6 +41,8 @@ struct v4l2_component_t {
 	int (*stop)(struct v4l2_component_t *component);
 	int (*is_end)(struct v4l2_component_t *component);
 	void *priv;
+	uint64_t ts_b;
+	uint64_t ts_e;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;

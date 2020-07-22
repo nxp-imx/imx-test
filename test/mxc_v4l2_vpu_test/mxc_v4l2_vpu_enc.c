@@ -25,7 +25,6 @@
 #define VERSION_MAJOR		1
 #define VERSION_MINOR		0
 
-#define VPU_ENCODER_DRIVER	"vpu encoder"
 #define MAX_NODE_COUNT		32
 #define DEFAULT_FMT		V4L2_PIX_FMT_NV12
 #define DEFAULT_WIDTH		1920
@@ -33,12 +32,26 @@
 #define DEFAULT_FRAMERATE	30
 #define MIN_BS			128
 
+#define VPU_PIX_FMT_AVS		v4l2_fourcc('A', 'V', 'S', '0')
+#define VPU_PIX_FMT_ASP		v4l2_fourcc('A', 'S', 'P', '0')
+#define VPU_PIX_FMT_RV		v4l2_fourcc('R', 'V', '0', '0')
+#define VPU_PIX_FMT_VP6		v4l2_fourcc('V', 'P', '6', '0')
+#define VPU_PIX_FMT_SPK		v4l2_fourcc('S', 'P', 'K', '0')
+#define VPU_PIX_FMT_DIVX	v4l2_fourcc('D', 'I', 'V', 'X')
+#define VPU_PIX_FMT_HEVC	v4l2_fourcc('H', 'E', 'V', 'C')
+#define VPU_PIX_FMT_LOGO	v4l2_fourcc('L', 'O', 'G', 'O')
+#define VPU_PIX_FMT_TILED_8	v4l2_fourcc('Z', 'T', '0', '8')
+#define VPU_PIX_FMT_TILED_10	v4l2_fourcc('Z', 'T', '1', '0')
+
+#define V4L2_CID_USER_RAW_BASE	(V4L2_CID_USER_BASE + 0x1100)
+
 enum {
 	TEST_TYPE_ENCODER = 0,
 	TEST_TYPE_CAMERA,
 	TEST_TYPE_FILEIN,
 	TEST_TYPE_FILEOUT,
 	TEST_TYPE_CONVERT,
+	TEST_TYPE_DECODER,
 };
 
 struct test_node {
@@ -72,11 +85,23 @@ struct encoder_test_t {
 	uint32_t gop;
 	uint32_t bitrate_mode;
 	uint32_t target_bitrate;
+	uint32_t peak_bitrate;
 	uint32_t qp;
 	uint32_t low_latency_mode;
 	struct v4l2_rect crop;
 	uint32_t bframes;
 
+	const char *devnode;
+};
+
+struct decoder_test_t {
+	struct test_node node;
+	int fd;
+
+	struct v4l2_component_t capture;
+	struct v4l2_component_t output;
+
+	uint32_t sizeimage;
 	const char *devnode;
 };
 
@@ -131,6 +156,9 @@ struct mxc_vpu_test_subcmd {
 				char *argv[]);
 	struct test_node *(*alloc_node)(void);
 };
+
+static int stop_enc(struct v4l2_component_t *component);
+static int stop_dec(struct v4l2_component_t *component);
 
 static uint32_t bitmask;
 static struct test_node *nodes[MAX_NODE_COUNT];
@@ -204,6 +232,9 @@ static int subscribe_event(int fd)
 
 	memset(&sub, 0, sizeof(sub));
 
+	sub.type = V4L2_EVENT_SOURCE_CHANGE;
+	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+
 	sub.type = V4L2_EVENT_EOS;
 	ret = ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	if (ret < 0) {
@@ -253,6 +284,32 @@ static int check_eos(int fd)
 	if (!pitcher_poll(fd, POLLPRI, 0))
 		return false;
 	if (is_eos(fd))
+		return true;
+	return false;
+}
+
+static int is_source_change(int fd)
+{
+	struct v4l2_event evt;
+	int ret;
+
+	memset(&evt, 0, sizeof(struct v4l2_event));
+	ret = ioctl(fd, VIDIOC_DQEVENT, &evt);
+	if (ret < 0)
+		return 0;
+	if (evt.type == V4L2_EVENT_SOURCE_CHANGE) {
+		PITCHER_LOG("source change\n");
+		return 1;
+	}
+
+	return 0;
+}
+
+static int check_source_change(int fd)
+{
+	if (!pitcher_poll(fd, POLLPRI, 0))
+		return false;
+	if (is_source_change(fd))
 		return true;
 	return false;
 }
@@ -309,7 +366,10 @@ static int is_encoder_output_finish(struct v4l2_component_t *component)
 
 	encoder = container_of(component, struct encoder_test_t, output);
 
-	if (is_force_exit() || is_source_end(encoder->output.chnno)) {
+	if (is_source_end(encoder->output.chnno))
+		stop_enc(component);
+
+	if (is_force_exit() || encoder->capture.end) {
 		is_end = true;
 		if (!component->frame_count)
 			force_exit();
@@ -323,7 +383,61 @@ static int is_encoder_capture_finish(struct v4l2_component_t *component)
 	if (!component)
 		return true;
 
-	check_eos(component->fd);
+	if (check_eos(component->fd))
+		return true;
+
+	return is_force_exit();
+}
+
+static int is_decoder_output_finish(struct v4l2_component_t *component)
+{
+	struct decoder_test_t *decoder;
+	int is_end = false;
+	int ret = 0;
+
+	if (!component)
+		return true;
+
+	decoder = container_of(component, struct decoder_test_t, output);
+
+	if (is_source_end(decoder->output.chnno))
+		stop_dec(component);
+
+	if (is_force_exit() || decoder->capture.end) {
+		is_end = true;
+		if (!component->frame_count)
+			force_exit();
+	}
+
+	if (decoder->capture.chnno < 0 && check_source_change(component->fd)) {
+		ret = pitcher_register_chn(decoder->node.context,
+						&decoder->capture.desc,
+						&decoder->capture);
+
+		if (ret < 0) {
+			PITCHER_ERR("regisger %s fail\n",
+					decoder->capture.desc.name);
+		} else {
+			decoder->capture.chnno = ret;
+			ret = pitcher_start_chn(decoder->capture.chnno);
+		}
+		if (ret < 0) {
+			force_exit();
+			is_end = true;
+		}
+		PITCHER_LOG("decoder capture : %d x %d\n", decoder->capture.width, decoder->capture.height);
+	}
+
+	return is_end;
+}
+
+static int is_decoder_capture_finish(struct v4l2_component_t *component)
+{
+	if (!component)
+		return true;
+
+	if (check_eos(component->fd))
+		return true;
 
 	return is_force_exit();
 }
@@ -355,17 +469,53 @@ static int stop_enc(struct v4l2_component_t *component)
 	int ret;
 
 
-	if (!component || component->fd < 0)
+	if (!component || component->fd < 0 || !component->enable)
 		return -RET_E_INVAL;
 
 	PITCHER_LOG("stop encoder\n");
 
 	cmd.cmd = V4L2_ENC_CMD_STOP;
 	ret = ioctl(component->fd, VIDIOC_ENCODER_CMD, &cmd);
-	if (ret < 0) {
+	if (ret < 0)
 		PITCHER_ERR("stop enc fail\n");
+	component->enable = false;
+
+	return RET_OK;
+}
+
+static int start_dec(struct v4l2_component_t *component)
+{
+	struct v4l2_decoder_cmd cmd;
+	int ret;
+
+	if (!component || component->fd < 0)
+		return -RET_E_INVAL;
+
+	PITCHER_LOG("start decoder\n");
+	cmd.cmd = V4L2_DEC_CMD_START;
+	ret = ioctl(component->fd, VIDIOC_DECODER_CMD, &cmd);
+	if (ret < 0) {
+		PITCHER_ERR("start dec fail\n");
 		return -RET_E_INVAL;
 	}
+
+	return RET_OK;
+}
+
+static int stop_dec(struct v4l2_component_t *component)
+{
+	struct v4l2_decoder_cmd cmd;
+	int ret;
+
+	if (!component || component->fd < 0 || !component->enable)
+		return -RET_E_INVAL;
+
+	PITCHER_LOG("stop decoder\n");
+	cmd.cmd = V4L2_DEC_CMD_STOP;
+	ret = ioctl(component->fd, VIDIOC_DECODER_CMD, &cmd);
+	if (ret < 0)
+		PITCHER_ERR("stop dec fail\n");
+	component->enable = false;
 
 	return RET_OK;
 }
@@ -394,7 +544,7 @@ static int set_ctrl(int fd, int id, int value)
 		return -RET_E_INVAL;
 	}
 
-	PITCHER_LOG("[S]%s : %d\n", qctrl.name, ctrl.value);
+	PITCHER_LOG("[S]%s : %d (%d)\n", qctrl.name, ctrl.value, value);
 
 	return ret;
 }
@@ -438,9 +588,19 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default)"},
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
 	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is b"},
+	{"peak", 1, "--peak <br>\n\t\t\tset encoder peak bitrate, the unit is b"},
 	{"lowlatency", 1, "--lowlatency <mode>\n\t\t\tenable low latency mode, it will disable the display re-ordering"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
+	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265"},
+	{NULL, 0, NULL},
+};
+
+struct mxc_vpu_test_option decoder_options[] = {
+	{"key", 1, "--key <key>\n\t\t\tassign key number"},
+	{"source", 1, "--source <key no>\n\t\t\tset h264 encoder input key number"},
+	{"device", 1, "--device <devnode>\n\t\t\tassign encoder video device node"},
+	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
 	{NULL, 0, NULL},
 };
 
@@ -464,6 +624,8 @@ static int get_pixelfmt_from_str(const char *str)
 		return V4L2_PIX_FMT_YUV420;
 	if (!strcasecmp(str, "h264"))
 		return V4L2_PIX_FMT_H264;
+	if (!strcasecmp(str, "h265"))
+		return V4L2_PIX_FMT_HEVC;
 
 	PITCHER_ERR("unsupport pixelformat : %s\n", str);
 	return -RET_E_INVAL;
@@ -609,6 +771,22 @@ static void free_encoder_node(struct test_node *node)
 	PITCHER_LOG("encoder frame count : %ld -> %ld\n",
 			encoder->output.frame_count,
 			encoder->capture.frame_count);
+	if (encoder->capture.frame_count) {
+		uint64_t count = encoder->capture.frame_count;
+		uint64_t fps;
+		uint64_t ts_delta;
+
+		if (count > encoder->output.frame_count)
+			count = encoder->output.frame_count;
+		ts_delta = encoder->capture.ts_e - encoder->capture.ts_b;
+		fps = count * 1000000000 * 1000 / ts_delta;
+		PITCHER_LOG("encoder frame fps : %ld.%ld; time:%ld.%lds; count = %ld\n",
+				fps / 1000, fps % 1000,
+				ts_delta / 1000000000,
+				(ts_delta % 1000000000) / 1000000,
+				count);
+	}
+
 	unsubcribe_event(encoder->fd);
 	SAFE_CLOSE(encoder->output.chnno, pitcher_unregister_chn);
 	SAFE_CLOSE(encoder->capture.chnno, pitcher_unregister_chn);
@@ -676,6 +854,8 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_LEVEL, encoder->level);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->target_bitrate);
+	if (encoder->peak_bitrate)
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK, encoder->peak_bitrate);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, encoder->qp);
@@ -713,12 +893,13 @@ static int init_encoder_node(struct test_node *node)
 		return -RET_E_INVAL;
 
 	encoder = container_of(node, struct encoder_test_t, node);
+	encoder->capture.pixelformat = encoder->node.pixelformat;
 	if (encoder->devnode) {
 		encoder->fd = open(encoder->devnode, O_RDWR | O_NONBLOCK);
 		PITCHER_LOG("open %s\n", encoder->devnode);
 		ret = check_v4l2_device_type(encoder->fd,
-									 encoder->output.pixelformat,
-									 encoder->capture.pixelformat);
+						encoder->output.pixelformat,
+						encoder->capture.pixelformat);
 		if (ret == FALSE) {
 			SAFE_CLOSE(encoder->fd, close);
 			PITCHER_ERR("open encoder device node fail\n");
@@ -726,7 +907,7 @@ static int init_encoder_node(struct test_node *node)
 		}
 	} else {
 		encoder->fd = lookup_v4l2_device_and_open(encoder->output.pixelformat,
-												  encoder->capture.pixelformat);
+						encoder->capture.pixelformat);
 		if (encoder->fd < 0) {
 			PITCHER_ERR("open encoder device node fail\n");
 			return -RET_E_OPEN;
@@ -748,13 +929,17 @@ static int init_encoder_node(struct test_node *node)
 	encoder->output.fd = encoder->fd;
 	encoder->output.desc.fd = encoder->fd;
 	encoder->capture.desc.fd = encoder->fd;
+	encoder->output.desc.events |= encoder->capture.desc.events;
+	encoder->capture.desc.events = 0;
 	encoder->output.start = start_enc;
-	encoder->output.stop = stop_enc;
+	/*encoder->output.stop = stop_enc;*/
 
+	encoder->capture.pixelformat = encoder->node.pixelformat;
 	encoder->capture.width = encoder->node.width;
 	encoder->capture.height = encoder->node.height;
 	encoder->capture.framerate = encoder->node.framerate;
-	encoder->capture.sizeimage = 1024 * 1024;
+	encoder->capture.sizeimage =
+		encoder->output.width * encoder->output.height;
 	encoder->capture.bytesperline = encoder->node.width;
 	encoder->capture.is_end = is_encoder_capture_finish;
 	encoder->capture.buffer_count = 4;
@@ -768,8 +953,7 @@ static int init_encoder_node(struct test_node *node)
 	if (!encoder->output.bytesperline)
 		encoder->output.bytesperline = encoder->node.width;
 	encoder->output.framerate = encoder->node.framerate;
-	encoder->output.sizeimage =
-		encoder->output.width * encoder->output.height;
+	encoder->output.sizeimage = 0;
 	encoder->output.is_end = is_encoder_output_finish;
 	encoder->output.buffer_count = 4;
 	snprintf(encoder->output.desc.name, sizeof(encoder->output.desc.name),
@@ -801,16 +985,6 @@ static int init_encoder_node(struct test_node *node)
 		encoder->capture.height = encoder->crop.height;
 
 	ret = pitcher_register_chn(encoder->node.context,
-				&encoder->capture.desc,
-				&encoder->capture);
-	if (ret < 0) {
-		PITCHER_ERR("regisger %s fail\n", encoder->capture.desc.name);
-		SAFE_CLOSE(encoder->fd, close);
-		return ret;
-	}
-	encoder->capture.chnno = ret;
-
-	ret = pitcher_register_chn(encoder->node.context,
 				&encoder->output.desc,
 				&encoder->output);
 	if (ret < 0) {
@@ -820,6 +994,17 @@ static int init_encoder_node(struct test_node *node)
 		return ret;
 	}
 	encoder->output.chnno = ret;
+
+	ret = pitcher_register_chn(encoder->node.context,
+				&encoder->capture.desc,
+				&encoder->capture);
+	if (ret < 0) {
+		PITCHER_ERR("regisger %s fail\n", encoder->capture.desc.name);
+		SAFE_CLOSE(encoder->output.chnno, pitcher_unregister_chn);
+		SAFE_CLOSE(encoder->fd, close);
+		return ret;
+	}
+	encoder->capture.chnno = ret;
 
 	return set_encoder_parameters(encoder);
 }
@@ -903,6 +1088,8 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->qp = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "bitrate")) {
 		encoder->target_bitrate = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "peak")) {
+		encoder->peak_bitrate = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "lowlatency")) {
 		encoder->low_latency_mode = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
@@ -910,6 +1097,250 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->crop.top = strtol(argv[1], NULL, 0);
 		encoder->crop.width = strtol(argv[2], NULL, 0);
 		encoder->crop.height = strtol(argv[3], NULL, 0);
+	} else if (!strcasecmp(option->name, "fmt")) {
+		int fmt = get_pixelfmt_from_str(argv[0]);
+
+		if (fmt > 0)
+			encoder->node.pixelformat = fmt;
+	}
+
+	return RET_OK;
+}
+
+static int get_deocder_source_chnno(struct test_node *node)
+{
+	struct decoder_test_t *decoder;
+
+	if (!node)
+		return -RET_E_INVAL;
+
+	decoder = container_of(node, struct decoder_test_t, node);
+
+	return decoder->capture.chnno;
+}
+
+static int get_deocder_sink_chnno(struct test_node *node)
+{
+	struct decoder_test_t *decoder;
+
+	if (!node)
+		return -RET_E_INVAL;
+
+	decoder = container_of(node, struct decoder_test_t, node);
+
+	return decoder->output.chnno;
+}
+
+static int set_decoder_source(struct test_node *node, struct test_node *src)
+{
+	struct decoder_test_t *decoder;
+
+	if (!node || !src)
+		return -RET_E_INVAL;
+
+	decoder = container_of(node, struct decoder_test_t, node);
+
+	switch (src->pixelformat) {
+	case V4L2_PIX_FMT_H264:
+	case V4L2_PIX_FMT_VC1_ANNEX_G:
+	case V4L2_PIX_FMT_VC1_ANNEX_L:
+	case V4L2_PIX_FMT_MPEG2:
+	case VPU_PIX_FMT_AVS:
+	case V4L2_PIX_FMT_MPEG4:
+	case VPU_PIX_FMT_DIVX:
+	case V4L2_PIX_FMT_JPEG:
+	case VPU_PIX_FMT_RV:
+	case VPU_PIX_FMT_VP6:
+	case VPU_PIX_FMT_SPK:
+	case V4L2_PIX_FMT_H263:
+	case V4L2_PIX_FMT_VP8:
+	case V4L2_PIX_FMT_H264_MVC:
+	case VPU_PIX_FMT_HEVC:
+	case VPU_PIX_FMT_LOGO:
+		break;
+	default:
+		return -RET_E_NOT_SUPPORT;
+	}
+
+	decoder->output.pixelformat = src->pixelformat;
+	decoder->output.width = src->width;
+	decoder->output.height = src->height;
+
+	return RET_OK;
+}
+
+static void free_decoder_node(struct test_node *node)
+{
+	struct decoder_test_t *decoder;
+
+	if (!node)
+		return;
+
+	decoder = container_of(node, struct decoder_test_t, node);
+
+	PITCHER_LOG("decoder frame count : %ld -> %ld\n",
+			decoder->output.frame_count,
+			decoder->capture.frame_count);
+	if (decoder->capture.frame_count) {
+		uint64_t count = decoder->capture.frame_count;
+		uint64_t fps;
+		uint64_t ts_delta;
+
+		if (count > decoder->output.frame_count)
+			count = decoder->output.frame_count;
+		ts_delta = decoder->capture.ts_e - decoder->capture.ts_b;
+		fps = count * 1000000000 * 1000 / ts_delta;
+		PITCHER_LOG("decoder frame fps : %ld.%ld; time:%ld.%lds; count = %ld\n",
+				fps / 1000, fps % 1000,
+				ts_delta / 1000000000,
+				(ts_delta % 1000000000) / 1000000,
+				count);
+	}
+	unsubcribe_event(decoder->fd);
+	SAFE_CLOSE(decoder->output.chnno, pitcher_unregister_chn);
+	SAFE_CLOSE(decoder->capture.chnno, pitcher_unregister_chn);
+	SAFE_CLOSE(decoder->fd, close);
+	SAFE_RELEASE(decoder, pitcher_free);
+}
+
+static int init_decoder_node(struct test_node *node)
+{
+	struct decoder_test_t *decoder;
+	struct v4l2_capability cap;
+	int ret;
+
+	if (!node)
+		return -RET_E_INVAL;
+
+	decoder = container_of(node, struct decoder_test_t, node);
+	decoder->capture.pixelformat = decoder->node.pixelformat;
+	if (decoder->devnode) {
+		decoder->fd = open(decoder->devnode, O_RDWR | O_NONBLOCK);
+		if (decoder->fd >= 0 &&
+		    !check_v4l2_device_type(decoder->fd,
+					   decoder->output.pixelformat,
+					   decoder->capture.pixelformat))
+			SAFE_CLOSE(decoder->fd, close);
+	} else {
+		decoder->fd = lookup_v4l2_device_and_open(
+					decoder->output.pixelformat,
+					decoder->capture.pixelformat);
+	}
+	if (decoder->fd < 0) {
+		PITCHER_ERR("open decoder device node fail\n");
+		return -RET_E_OPEN;
+	}
+
+	ioctl(decoder->fd, VIDIOC_QUERYCAP, &cap);
+	if (is_v4l2_splane(&cap)) {
+		decoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		decoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	} else {
+		decoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+		decoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	}
+
+	if (decoder->fd < 0) {
+		PITCHER_ERR("open decoder device node fail\n");
+		return -RET_E_OPEN;
+	}
+	subscribe_event(decoder->fd);
+	/*set_ctrl(decoder->fd, V4L2_CID_USER_RAW_BASE, 0);*/
+
+	decoder->output.desc = pitcher_v4l2_output;
+	decoder->capture.desc = pitcher_v4l2_capture;
+	decoder->output.fd = decoder->fd;
+	decoder->capture.fd = decoder->fd;
+	decoder->output.desc.fd = decoder->fd;
+	decoder->capture.desc.fd = decoder->fd;
+	decoder->output.desc.events |= decoder->capture.desc.events;
+	decoder->capture.desc.events = 0;
+
+	decoder->output.start = start_dec;
+	/*decoder->output.stop = stop_dec;*/
+	decoder->output.sizeimage = decoder->sizeimage;
+	decoder->output.is_end = is_decoder_output_finish;
+	decoder->output.buffer_count = 4;
+	snprintf(decoder->output.desc.name, sizeof(decoder->output.desc.name),
+			"decoder output.%d", decoder->node.key);
+
+	decoder->capture.pixelformat = decoder->node.pixelformat;
+	decoder->capture.is_end = is_decoder_capture_finish;
+	decoder->capture.buffer_count = 4;
+	snprintf(decoder->capture.desc.name, sizeof(decoder->capture.desc.name),
+			"decoder capture.%d", decoder->node.key);
+
+	ret = pitcher_register_chn(decoder->node.context,
+				&decoder->output.desc,
+				&decoder->output);
+	if (ret < 0) {
+		PITCHER_ERR("regisger %s fail\n", decoder->output.desc.name);
+		SAFE_CLOSE(decoder->fd, close);
+		return ret;
+	}
+	decoder->output.chnno = ret;
+
+	return ret;
+}
+
+static struct test_node *alloc_decoder_node(void)
+{
+	struct decoder_test_t *decoder;
+
+	decoder = pitcher_calloc(1, sizeof(*decoder));
+	if (!decoder)
+		return NULL;
+
+	decoder->node.key = -1;
+	decoder->node.source = -1;
+	decoder->fd = -1;
+	decoder->node.type = TEST_TYPE_DECODER;
+	decoder->node.pixelformat = V4L2_PIX_FMT_NV12;
+	decoder->sizeimage = 1024 * 1024;
+
+	decoder->node.init_node = init_decoder_node;
+	decoder->node.free_node = free_decoder_node;
+	decoder->node.set_source = set_decoder_source;
+	decoder->node.get_source_chnno = get_deocder_source_chnno;
+	decoder->node.get_sink_chnno = get_deocder_sink_chnno;
+
+	decoder->output.chnno = -1;
+	decoder->capture.chnno = -1;
+	decoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	decoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	decoder->output.memory = V4L2_MEMORY_MMAP;
+	decoder->capture.memory = V4L2_MEMORY_MMAP;
+	decoder->output.pixelformat = V4L2_PIX_FMT_H264;
+	decoder->capture.pixelformat = V4L2_PIX_FMT_NV12;
+
+	return &decoder->node;
+}
+
+static int parse_decoder_option(struct test_node *node,
+				struct mxc_vpu_test_option *option,
+				char *argv[])
+{
+	struct decoder_test_t *decoder;
+
+	if (!node || !option || !option->name)
+		return -RET_E_INVAL;
+	if (option->arg_num && !argv)
+		return -RET_E_INVAL;
+
+	decoder = container_of(node, struct decoder_test_t, node);
+
+	if (!strcasecmp(option->name, "key")) {
+		decoder->node.key = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "source")) {
+		decoder->node.source = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "device")) {
+		decoder->devnode = argv[0];
+	} else if (!strcasecmp(option->name, "bs")) {
+		uint32_t bs = strtol(argv[0], NULL, 0);
+
+		if (bs < MIN_BS)
+			bs = MIN_BS;
+		decoder->sizeimage = bs * 1024;
 	}
 
 	return RET_OK;
@@ -1634,6 +2065,13 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.type = TEST_TYPE_ENCODER,
 		.parse_option = parse_encoder_option,
 		.alloc_node = alloc_encoder_node,
+	},
+	{
+		.subcmd = "decoder",
+		.option = decoder_options,
+		.type = TEST_TYPE_DECODER,
+		.parse_option = parse_decoder_option,
+		.alloc_node = alloc_decoder_node,
 	},
 	{
 		.subcmd = "ofile",

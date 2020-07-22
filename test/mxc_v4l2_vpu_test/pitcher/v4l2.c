@@ -17,6 +17,7 @@
 #include <poll.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include <time.h>
 #include "pitcher_def.h"
 #include "pitcher.h"
 #include "pitcher_v4l2.h"
@@ -25,8 +26,9 @@ static int __is_v4l2_end(struct v4l2_component_t *component)
 {
 	assert(component);
 
-	if (component->end)
+	if (component->end) {
 		return true;
+	}
 
 	if (component->is_end && component->is_end(component)) {
 		component->end = true;
@@ -69,7 +71,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		format.fmt.pix_mp.pixelformat = component->pixelformat;
 		format.fmt.pix_mp.width = component->width;
 		format.fmt.pix_mp.height = component->height;
-		format.fmt.pix_mp.num_planes = 1;
+		format.fmt.pix_mp.num_planes = 2;
 		for (i = 0; i < format.fmt.pix_mp.num_planes; i++) {
 			format.fmt.pix_mp.plane_fmt[i].bytesperline =
 							component->bytesperline;
@@ -206,8 +208,13 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 		v4lbuf.length = ARRAY_SIZE(planes);
 	}
 	ret = ioctl(fd, VIDIOC_DQBUF, &v4lbuf);
+	if (errno == EPIPE) {
+		PITCHER_LOG("dqbuf : EPIPE\n");
+		component->end = true;
+		return NULL;
+	}
 	if (ret) {
-		PITCHER_ERR("dqbuf fail, error: %s\n", strerror(errno));
+		PITCHER_ERR("dqbuf fail, error: %s, %d\n", strerror(errno), ret);
 		return NULL;
 	}
 
@@ -484,7 +491,7 @@ static int __recycle_v4l2_buffer(struct pitcher_buffer *buffer,
 
 	if (!component->enable)
 		is_del = true;
-	if (__is_v4l2_end(component))
+	if (component->end)
 		is_del = true;
 	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
 		is_del = true;
@@ -637,6 +644,8 @@ static int start_v4l2(void *arg)
 	if (component->start)
 		component->start(component);
 
+	component->ts_b = pitcher_get_monotonic_raw_time();
+
 	return RET_OK;
 }
 
@@ -649,6 +658,7 @@ static int stop_v4l2(void *arg)
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
 
+	component->ts_e = pitcher_get_monotonic_raw_time();
 	if (component->stop)
 		component->stop(component);
 
@@ -818,8 +828,10 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 	}
 
 	SAFE_RELEASE(component->buffers[buffer->index], pitcher_put_buffer);
-	if (pbuf->flags & PITCHER_BUFFER_FLAG_LAST)
-		component->end = true;
+	/*
+	 *if (pbuf->flags & PITCHER_BUFFER_FLAG_LAST)
+	 *        component->end = true;
+	 */
 
 	return ret;
 }
@@ -851,8 +863,10 @@ static int run_v4l2(void *arg, struct pitcher_buffer *pbuf)
 	else
 		pitcher_push_back_output(component->chnno, buffer);
 
-	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
+	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST) {
 		component->end = true;
+	}
+
 	SAFE_RELEASE(buffer, pitcher_put_buffer);
 	ret = RET_OK;
 
@@ -921,45 +935,45 @@ int is_v4l2_splane(struct v4l2_capability *cap)
     return FALSE;
 }
 
-int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
+static int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
 {
 	struct v4l2_fmtdesc fmt_desc;
-	int out_find = FALSE;
-	int cap_find = FALSE;
+
+	fmt_desc.type = type;
+	fmt_desc.index = 0;
+
+	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
+		if (fmt_desc.pixelformat == pixelformat)
+			return TRUE;
+		fmt_desc.index++;
+	}
+
+	return FALSE;
+}
+
+int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
+{
+	uint32_t out_type;
+	uint32_t cap_type;
+	int out_find = TRUE;
+	int cap_find = TRUE;
 	struct v4l2_capability cap;
 
 	if (ioctl(fd, VIDIOC_QUERYCAP, &cap) != 0)
 		return FALSE;
 
-	if (is_v4l2_mplane(&cap))
-		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	else if (is_v4l2_splane(&cap))
-		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	else
-		return FALSE;
-
-	fmt_desc.index = 0;
-	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
-		if (fmt_desc.pixelformat == cap_fmt) {
-			cap_find = TRUE;
-			break;
-		}
-		fmt_desc.index++;
+	if (is_v4l2_mplane(&cap)) {
+		cap_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	} else {
+		cap_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 	}
 
-	if (fmt_desc.type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
-		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	else
-		fmt_desc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-
-	fmt_desc.index = 0;
-	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
-		if (fmt_desc.pixelformat == out_fmt) {
-			out_find = TRUE;
-			break;
-		}
-		fmt_desc.index++;
-	}
+	if (cap_fmt)
+		cap_find = check_v4l2_support_fmt(fd, cap_type, cap_fmt);
+	if (out_fmt)
+		out_find = check_v4l2_support_fmt(fd, out_type, out_fmt);
 
 	if ((cap_find & out_find))
 		return TRUE;
@@ -967,27 +981,16 @@ int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
 	return FALSE;
 }
 
-static int open_video_node_by_index(int index, int flags, char *devname)
-{
-	if (index < 0)
-		return -1;
-
-	snprintf(devname, MAXPATHLEN - 1, "/dev/video%d", index);
-
-	return open(devname, flags);
-}
-
 int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt)
 {
-	const int offset = 0;
 	const int MAX_INDEX = 64;
 	int i;
 	int fd;
 	char devname[MAXPATHLEN];
 
 	for (i = 0; i < MAX_INDEX; i++) {
-		fd = open_video_node_by_index((i + offset) % MAX_INDEX,
-									   O_RDWR | O_NONBLOCK, devname);
+		snprintf(devname, MAXPATHLEN - 1, "/dev/video%d", i);
+		fd = open(devname, O_RDWR | O_NONBLOCK);
 		if (fd < 0)
 			continue;
 		if (check_v4l2_device_type(fd, out_fmt, cap_fmt) == TRUE) {

@@ -20,7 +20,7 @@
 #include "queue.h"
 #include "loop.h"
 
-#define LOOP_TIMEOUT_DEFAULT		10
+#define LOOP_TIMEOUT_DEFAULT		1
 #define SIG_TERM_LOOP			(__SIGRTMIN + 0x100)
 
 struct pitcher_loop_t {
@@ -124,7 +124,7 @@ static int __timer_func(unsigned long item, void *arg)
 
 	delta = (loop->tv - node->tv) / NSEC_PER_MSEC;
 	node->tv = loop->tv;
-	if (delta >= node->timeout) {
+	if (!task->interval || delta >= node->timeout) {
 		node->timeout = task->interval;
 		if (node->times > 0)
 			node->times--;
@@ -200,6 +200,7 @@ static int __process_poll(struct pitcher_loop_t *loop)
 	pitcher_queue_enumerate(loop->pools, __epoll_func, (void *)loop);
 
 	nfds = epoll_wait(loop->epoll_fd, events, ECOUNT, loop->left_time);
+
 	for (i = 0; i < nfds; i++) {
 		struct pitcher_loop_node *node = events[i].data.ptr;
 		struct pitcher_poll_fd *pfd;
@@ -217,7 +218,6 @@ static int __process_poll(struct pitcher_loop_t *loop)
 			pitcher_queue_enumerate(loop->pools,
 						__del_poll, (void *)pfd);
 	}
-
 
 	return RET_OK;
 }
@@ -406,9 +406,6 @@ int pitcher_loop_add_task(Loop l, struct pitcher_timer_task *task)
 
 	if (!task || !task->func)
 		return -RET_E_INVAL;
-
-	if (!task->interval)
-		task->interval = LOOP_TIMEOUT_DEFAULT;
 
 	node = pitcher_calloc(1, sizeof(*node));
 	if (!node)
