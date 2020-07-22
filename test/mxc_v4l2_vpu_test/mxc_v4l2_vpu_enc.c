@@ -21,6 +21,7 @@
 #include "pitcher/pitcher_def.h"
 #include "pitcher/pitcher.h"
 #include "pitcher/pitcher_v4l2.h"
+#include "pitcher/parse.h"
 
 #define VERSION_MAJOR		1
 #define VERSION_MINOR		0
@@ -39,6 +40,7 @@ enum {
 	TEST_TYPE_FILEOUT,
 	TEST_TYPE_CONVERT,
 	TEST_TYPE_DECODER,
+	TEST_TYPE_PARSER,
 };
 
 struct test_node {
@@ -128,7 +130,28 @@ struct convert_test_t {
 	int end;
 };
 
-struct mxc_vpu_test_option {
+struct parser_test_t {
+	struct test_node node;
+	struct pitcher_unit_desc desc;
+
+	int chnno;
+	unsigned long frame_count;
+	unsigned long frame_num;
+	char *filename;
+	char *mode;
+	int fd;
+	void *virt;
+	unsigned long size;
+	unsigned long offset;
+	int end;
+	int loop;
+	int show;
+
+	Parser p;
+};
+
+struct mxc_vpu_test_option
+{
 	const char *name;
 	uint32_t arg_num;
 	const char *desc;
@@ -595,6 +618,17 @@ struct mxc_vpu_test_option convert_options[] = {
 	{"key", 1, "--key <key>\n\t\t\tassign key number"},
 	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign output pixel format"},
+	{NULL, 0, NULL},
+};
+
+struct mxc_vpu_test_option parser_options[] = {
+	{"key",  1, "--key <key>\n\t\t\tassign key number"},
+	{"name", 1, "--name <filename>\n\t\t\tassign parse file name"},
+	{"fmt",  1, "--fmt <fmt>\n\t\t\tassign input file pixel format, current support h264, h265"},
+	{"size", 2, "--size <width> <height>\n\t\t\tset size"},
+	{"framenum", 1, "--framenum <number>\n\t\t\tset input/parse frame number"},
+	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
+	{"show", 0, "--show\n\t\t\tshow size and offset of per frame"},
 	{NULL, 0, NULL},
 };
 
@@ -2017,6 +2051,306 @@ static int parse_convert_option(struct test_node *node,
 	return RET_OK;
 }
 
+static int get_parser_chnno(struct test_node *node)
+{
+	struct parser_test_t *parser;
+
+	if (!node)
+		return -RET_E_NULL_POINTER;
+
+	parser = container_of(node, struct parser_test_t, node);
+
+	return parser->chnno;
+}
+
+static int parser_checkready(void *arg, int *is_end)
+{
+	struct parser_test_t *parser = arg;
+
+	if (!parser || parser->fd < 0)
+		return false;
+
+	if (is_termination())
+		parser->end = true;
+	if (is_end)
+		*is_end = parser->end;
+
+	if (parser->end)
+		return false;
+	if (pitcher_poll_idle_buffer(parser->chnno))
+		return true;
+
+	return false;
+}
+
+static int parser_run(void *arg, struct pitcher_buffer *pbuf)
+{
+	struct parser_test_t *parser = arg;
+	struct pitcher_buffer *buffer;
+	struct pitcher_frame *frame;
+
+	if (!parser || parser->fd < 0)
+		return -RET_E_INVAL;
+
+	frame = pitcher_parser_cur_frame(parser->p);
+
+	if (!frame) {
+		parser->end = true;
+		return RET_OK;
+	}
+
+	buffer = pitcher_get_idle_buffer(parser->chnno);
+	if (!buffer)
+		return -RET_E_NOT_READY;
+
+	if (parser->offset < parser->size) {
+		buffer->planes[0].bytesused = frame->size;
+		buffer->planes[0].virt = parser->virt + frame->offset;
+		parser->offset += buffer->planes[0].bytesused;
+		parser->frame_count++;
+		pitcher_parser_to_next_frame(parser->p);
+
+		if (frame->flag == PITCHER_BUFFER_FLAG_LAST || parser->offset >= parser->size) {
+			if (parser->loop) {
+				parser->loop--;
+				parser->offset = 0;
+				pitcher_parser_seek_to_begin(parser->p);
+			} else {
+				parser->end = true;
+			}
+		}
+	} else {
+		parser->end = true;
+	}
+
+	if (parser->frame_num > 0 && parser->frame_count >= parser->frame_num)
+		parser->end = true;
+
+	if (parser->end)
+		buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
+
+	pitcher_push_back_output(parser->chnno, buffer);
+
+	SAFE_RELEASE(buffer, pitcher_put_buffer);
+
+	return RET_OK;
+}
+
+static int parser_init_plane(struct pitcher_plane *plane,
+				unsigned int index, void *arg)
+{
+	return RET_OK;
+}
+
+static int parser_uninit_plane(struct pitcher_plane *plane,
+				unsigned int index, void *arg)
+{
+	return RET_OK;
+}
+
+static int parser_recycle_buffer(struct pitcher_buffer *buffer,
+				void *arg, int *del)
+{
+	struct parser_test_t *parser = arg;
+	int is_end = false;
+
+	if (!parser)
+		return -RET_E_NULL_POINTER;
+
+	if (pitcher_get_status(parser->chnno) && !parser->end)
+		pitcher_put_buffer_idle(parser->chnno, buffer);
+	else
+		is_end = true;
+
+	if (del)
+		*del = is_end;
+
+	return RET_OK;
+}
+
+static struct pitcher_buffer *parser_alloc_buffer(void *arg)
+{
+	struct parser_test_t *parser = arg;
+	struct pitcher_buffer_desc desc;
+
+	if (!parser || parser->fd < 0)
+		return NULL;
+
+	memset(&desc, 0, sizeof(desc));
+	desc.plane_count = 1;
+	desc.plane_size = get_image_size(parser->node.pixelformat,
+					parser->node.width,
+					parser->node.height);
+	desc.init_plane = parser_init_plane;
+	desc.uninit_plane = parser_uninit_plane;
+	desc.recycle = parser_recycle_buffer;
+	desc.arg = parser;
+
+	return pitcher_new_buffer(&desc);
+}
+
+static int init_parser_node(struct test_node *node)
+{
+	struct parser_test_t *parser;
+	struct pitcher_parser p;
+	int ret;
+
+	if (!node)
+		return -RET_E_NULL_POINTER;
+
+	parser = container_of(node, struct parser_test_t, node);
+	if (!parser->filename)
+		return -RET_E_INVAL;
+
+	if (is_support_parser(parser->node.pixelformat) == false) {
+		PITCHER_LOG("Format %c%c%c%c unsupported parser\n",
+			    (parser->node.pixelformat) & 0xff,
+			    (parser->node.pixelformat >> 8) & 0xff,
+			    (parser->node.pixelformat >> 16) & 0xff,
+			    (parser->node.pixelformat >> 24) & 0xff);
+
+		return -RET_E_NOT_SUPPORT;
+	}
+
+	parser->fd = open(parser->filename, O_RDONLY);
+	if (parser->fd < 0) {
+		PITCHER_ERR("open %s fail\n", parser->filename);
+		return -RET_E_OPEN;
+	}
+	parser->size = pitcher_get_file_size(parser->filename);
+	if (parser->size <= 0) {
+		PITCHER_ERR("invalid input file %s fail\n", parser->filename);
+		SAFE_CLOSE(parser->fd, close);
+		return -RET_E_OPEN;
+	}
+	parser->virt = mmap(NULL, parser->size, PROT_READ, MAP_SHARED, parser->fd, 0);
+	if (!parser->virt) {
+		PITCHER_ERR("mmap input file %s fail\n", parser->filename);
+		SAFE_CLOSE(parser->fd, close);
+		return -RET_E_MMAP;
+	}
+
+	parser->p = pitcher_new_parser();
+	if (parser->p == NULL)
+		return -RET_E_INVAL;
+	p.format = parser->node.pixelformat;
+	p.number = parser->frame_num;
+	p.virt = parser->virt;
+	p.size = parser->size;
+
+	pitcher_init_parser(&p, parser->p);
+
+	if (pitcher_parse(parser->p) != RET_OK) {
+		pitcher_del_parser(parser->p);
+		return -RET_E_INVAL;
+	}
+	pitcher_parser_seek_to_begin(parser->p);
+
+	if (parser->show)
+		pitcher_parser_show((void *)parser->p);
+
+	parser->desc.fd = -1;
+	parser->desc.check_ready = parser_checkready;
+	parser->desc.runfunc = parser_run;
+	parser->desc.buffer_count = 4;
+	parser->desc.alloc_buffer = parser_alloc_buffer;
+	snprintf(parser->desc.name, sizeof(parser->desc.name), "parser.%s.%d",
+			parser->filename, parser->node.key);
+
+	ret = pitcher_register_chn(parser->node.context, &parser->desc, parser);
+	if (ret < 0) {
+		PITCHER_ERR("register file input fail\n");
+		pitcher_del_parser(parser->p);
+		munmap(parser->virt, parser->size);
+		SAFE_CLOSE(parser->fd, close);
+		return ret;
+	}
+	parser->chnno = ret;
+
+	return RET_OK;
+}
+
+static void free_parser_node(struct test_node *node)
+{
+	struct parser_test_t *parser;
+
+	if (!node)
+		return;
+
+	parser = container_of(node, struct parser_test_t, node);
+
+	pitcher_del_parser(parser->p);
+
+	SAFE_CLOSE(parser->chnno, pitcher_unregister_chn);
+	if (parser->virt && parser->size) {
+		munmap(parser->virt, parser->size);
+		parser->virt = NULL;
+		parser->size = 0;
+	}
+	SAFE_CLOSE(parser->fd, close);
+	SAFE_RELEASE(parser, pitcher_free);
+}
+
+static struct test_node *alloc_parser_node(void)
+{
+	struct parser_test_t *parser;
+
+	parser = pitcher_calloc(1, sizeof(*parser));
+	if (!parser)
+		return NULL;
+
+	parser->node.key = -1;
+	parser->node.source = -1;
+	parser->node.type = TEST_TYPE_PARSER;
+	parser->node.pixelformat = V4L2_PIX_FMT_H264;
+	parser->node.get_source_chnno = get_parser_chnno;
+	parser->node.init_node = init_parser_node;
+	parser->node.free_node = free_parser_node;
+	parser->mode = "rb";
+	parser->chnno = -1;
+	parser->fd = -1;
+
+	return &parser->node;
+}
+
+static int parse_parser_option(struct test_node *node,
+			       struct mxc_vpu_test_option *option,
+			       char *argv[])
+{
+	struct parser_test_t *parser;
+
+	if (!node || !option || !option->name)
+		return -RET_E_INVAL;
+	if (option->arg_num && !argv)
+		return -RET_E_INVAL;
+
+	parser = container_of(node, struct parser_test_t, node);
+
+	if (!strcasecmp(option->name, "key")) {
+		parser->node.key = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "name")) {
+		parser->filename = argv[0];
+	} else if (!strcasecmp(option->name, "fmt")) {
+		int fmt = get_pixelfmt_from_str(argv[0]);
+
+		if (fmt < 0)
+			return fmt;
+		parser->node.pixelformat = fmt;
+	} else if (!strcasecmp(option->name, "size")) {
+		parser->node.width = strtol(argv[0], NULL, 0);
+		parser->node.height = strtol(argv[1], NULL, 0);
+	} else if (!strcasecmp(option->name, "framenum")) {
+		parser->frame_num = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "loop")) {
+		parser->loop = strtol(argv[0], NULL, 0);
+		PITCHER_LOG("set loop: %d\n", parser->loop);
+	} else if (!strcasecmp(option->name, "show")) {
+		parser->show = true;
+	}
+
+	return RET_OK;
+}
+
 struct mxc_vpu_test_subcmd subcmds[] = {
 	{
 		.subcmd = "ifile",
@@ -2059,6 +2393,13 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.type = TEST_TYPE_CONVERT,
 		.parse_option = parse_convert_option,
 		.alloc_node = alloc_convert_node,
+	},
+	{
+		.subcmd = "parser",
+		.option = parser_options,
+		.type = TEST_TYPE_PARSER,
+		.parse_option = parse_parser_option,
+		.alloc_node = alloc_parser_node,
 	},
 };
 

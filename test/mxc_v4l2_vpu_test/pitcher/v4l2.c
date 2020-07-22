@@ -781,6 +781,9 @@ static int __transfer_output_buffer_mmap(struct pitcher_buffer *src,
 			if (total >= src->planes[0].bytesused)
 				break;
 		}
+		if (total < src->planes[0].bytesused)
+			PITCHER_ERR("Not all data transferred 0x%lx / 0x%lx\n",
+					src->planes[0].bytesused, total);
 	} else if (src->count == dst->count) {
 		for (i = 0; i < dst->count; i++) {
 			if (dst->planes[i].size < src->planes[i].bytesused)
