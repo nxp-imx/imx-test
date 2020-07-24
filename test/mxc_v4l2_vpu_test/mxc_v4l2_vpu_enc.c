@@ -32,19 +32,6 @@
 #define DEFAULT_FRAMERATE	30
 #define MIN_BS			128
 
-#define VPU_PIX_FMT_AVS		v4l2_fourcc('A', 'V', 'S', '0')
-#define VPU_PIX_FMT_ASP		v4l2_fourcc('A', 'S', 'P', '0')
-#define VPU_PIX_FMT_RV		v4l2_fourcc('R', 'V', '0', '0')
-#define VPU_PIX_FMT_VP6		v4l2_fourcc('V', 'P', '6', '0')
-#define VPU_PIX_FMT_SPK		v4l2_fourcc('S', 'P', 'K', '0')
-#define VPU_PIX_FMT_DIVX	v4l2_fourcc('D', 'I', 'V', 'X')
-#define VPU_PIX_FMT_HEVC	v4l2_fourcc('H', 'E', 'V', 'C')
-#define VPU_PIX_FMT_LOGO	v4l2_fourcc('L', 'O', 'G', 'O')
-#define VPU_PIX_FMT_TILED_8	v4l2_fourcc('Z', 'T', '0', '8')
-#define VPU_PIX_FMT_TILED_10	v4l2_fourcc('Z', 'T', '1', '0')
-
-#define V4L2_CID_USER_RAW_BASE	(V4L2_CID_USER_BASE + 0x1100)
-
 enum {
 	TEST_TYPE_ENCODER = 0,
 	TEST_TYPE_CAMERA,
@@ -1142,21 +1129,8 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 
 	switch (src->pixelformat) {
 	case V4L2_PIX_FMT_H264:
-	case V4L2_PIX_FMT_VC1_ANNEX_G:
-	case V4L2_PIX_FMT_VC1_ANNEX_L:
-	case V4L2_PIX_FMT_MPEG2:
-	case VPU_PIX_FMT_AVS:
-	case V4L2_PIX_FMT_MPEG4:
-	case VPU_PIX_FMT_DIVX:
-	case V4L2_PIX_FMT_JPEG:
-	case VPU_PIX_FMT_RV:
-	case VPU_PIX_FMT_VP6:
-	case VPU_PIX_FMT_SPK:
-	case V4L2_PIX_FMT_H263:
-	case V4L2_PIX_FMT_VP8:
 	case V4L2_PIX_FMT_H264_MVC:
-	case VPU_PIX_FMT_HEVC:
-	case VPU_PIX_FMT_LOGO:
+	case V4L2_PIX_FMT_HEVC:
 		break;
 	default:
 		return -RET_E_NOT_SUPPORT;
@@ -1245,7 +1219,6 @@ static int init_decoder_node(struct test_node *node)
 		return -RET_E_OPEN;
 	}
 	subscribe_event(decoder->fd);
-	/*set_ctrl(decoder->fd, V4L2_CID_USER_RAW_BASE, 0);*/
 
 	decoder->output.desc = pitcher_v4l2_output;
 	decoder->capture.desc = pitcher_v4l2_capture;
