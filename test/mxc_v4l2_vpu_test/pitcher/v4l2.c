@@ -208,12 +208,12 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 		v4lbuf.length = ARRAY_SIZE(planes);
 	}
 	ret = ioctl(fd, VIDIOC_DQBUF, &v4lbuf);
-	if (errno == EPIPE) {
-		PITCHER_LOG("dqbuf : EPIPE\n");
-		component->end = true;
-		return NULL;
-	}
 	if (ret) {
+		if (errno == EPIPE) {
+			PITCHER_LOG("dqbuf : EPIPE\n");
+			component->end = true;
+			return NULL;
+		}
 		PITCHER_ERR("dqbuf fail, error: %s, %d\n", strerror(errno), ret);
 		return NULL;
 	}
