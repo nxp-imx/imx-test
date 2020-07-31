@@ -238,7 +238,6 @@ static uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 static int subscribe_event(int fd)
 {
 	struct v4l2_event_subscription sub;
-	int ret;
 
 	memset(&sub, 0, sizeof(sub));
 
@@ -246,11 +245,7 @@ static int subscribe_event(int fd)
 	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 
 	sub.type = V4L2_EVENT_EOS;
-	ret = ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
-	if (ret < 0) {
-		PITCHER_LOG("fail to subscribe eos\n");
-		return -1;
-	}
+	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 
 	return 0;
 }
@@ -454,21 +449,7 @@ static int is_decoder_capture_finish(struct v4l2_component_t *component)
 
 static int start_enc(struct v4l2_component_t *component)
 {
-	struct v4l2_encoder_cmd cmd;
-	int ret;
-
-	if (!component || component->fd < 0)
-		return -RET_E_INVAL;
-
-	subscribe_event(component->fd);
-
 	PITCHER_LOG("start encoder\n");
-	cmd.cmd = V4L2_ENC_CMD_START;
-	ret = ioctl(component->fd, VIDIOC_ENCODER_CMD, &cmd);
-	if (ret < 0) {
-		PITCHER_ERR("start enc fail\n");
-		return -RET_E_INVAL;
-	}
 
 	return RET_OK;
 }
@@ -495,20 +476,7 @@ static int stop_enc(struct v4l2_component_t *component)
 
 static int start_dec(struct v4l2_component_t *component)
 {
-	struct v4l2_decoder_cmd cmd;
-	int ret;
-
-	if (!component || component->fd < 0)
-		return -RET_E_INVAL;
-
 	PITCHER_LOG("start decoder\n");
-	cmd.cmd = V4L2_DEC_CMD_START;
-	ret = ioctl(component->fd, VIDIOC_DECODER_CMD, &cmd);
-	if (ret < 0) {
-		PITCHER_ERR("start dec fail\n");
-		return -RET_E_INVAL;
-	}
-
 	return RET_OK;
 }
 
@@ -937,12 +905,14 @@ static int init_encoder_node(struct test_node *node)
 
 	ioctl(encoder->fd, VIDIOC_QUERYCAP, &cap);
 	if (is_v4l2_splane(&cap)) {
-			encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-			encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	} else {
 		encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 		encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	}
+
+	subscribe_event(encoder->fd);
 
 	encoder->output.desc = pitcher_v4l2_output;
 	encoder->capture.desc = pitcher_v4l2_capture;
@@ -1006,17 +976,6 @@ static int init_encoder_node(struct test_node *node)
 		encoder->capture.height = encoder->crop.height;
 
 	ret = pitcher_register_chn(encoder->node.context,
-				&encoder->output.desc,
-				&encoder->output);
-	if (ret < 0) {
-		PITCHER_ERR("regisger %s fail\n", encoder->capture.desc.name);
-		SAFE_CLOSE(encoder->capture.chnno, pitcher_unregister_chn);
-		SAFE_CLOSE(encoder->fd, close);
-		return ret;
-	}
-	encoder->output.chnno = ret;
-
-	ret = pitcher_register_chn(encoder->node.context,
 				&encoder->capture.desc,
 				&encoder->capture);
 	if (ret < 0) {
@@ -1026,6 +985,17 @@ static int init_encoder_node(struct test_node *node)
 		return ret;
 	}
 	encoder->capture.chnno = ret;
+
+	ret = pitcher_register_chn(encoder->node.context,
+				&encoder->output.desc,
+				&encoder->output);
+	if (ret < 0) {
+		PITCHER_ERR("regisger %s fail\n", encoder->capture.desc.name);
+		SAFE_CLOSE(encoder->capture.chnno, pitcher_unregister_chn);
+		SAFE_CLOSE(encoder->fd, close);
+		return ret;
+	}
+	encoder->output.chnno = ret;
 
 	return set_encoder_parameters(encoder);
 }
@@ -1248,10 +1218,6 @@ static int init_decoder_node(struct test_node *node)
 		decoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	}
 
-	if (decoder->fd < 0) {
-		PITCHER_ERR("open decoder device node fail\n");
-		return -RET_E_OPEN;
-	}
 	subscribe_event(decoder->fd);
 
 	decoder->output.desc = pitcher_v4l2_output;
@@ -2241,7 +2207,7 @@ static int init_parser_node(struct test_node *node)
 	pitcher_init_parser(&p, parser->p);
 
 	if (pitcher_parse(parser->p) != RET_OK) {
-		pitcher_del_parser(parser->p);
+		SAFE_RELEASE(parser->p, pitcher_del_parser);
 		return -RET_E_INVAL;
 	}
 	pitcher_parser_seek_to_begin(parser->p);
