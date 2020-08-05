@@ -14,13 +14,14 @@
 #include "pitcher.h"
 #include "h265_parse.h"
 
-
-static int h265_check_nal_type(char nal, const char *arr, int size)
+static int h265_check_frame_nal(int type)
 {
 	int i;
+	char nal_type[] = HEVC_NAL_TYPE;
 
-	for (i = 0; i < size; i++) {
-		if (nal == arr[i])
+	type = (type & 0x7E) >> 1;
+	for (i = 0; i < ARRAY_SIZE(nal_type); i++) {
+		if (type == nal_type[i])
 			return TRUE;
 	}
 
@@ -29,84 +30,5 @@ static int h265_check_nal_type(char nal, const char *arr, int size)
 
 int h265_parse(Parser p, void *arg)
 {
-	struct pitcher_parser *parser;
-	char *start = NULL;
-	char *current = NULL;
-	char scode[] = HEVC_SCODE;
-	int next[] = HEVC_SCODE;
-	int scode_size = ARRAY_SIZE(scode);
-	char nal_type[] = HEVC_NAL_TYPE;
-	char nal_code = 0x0;
-	int prefix_len = 0;
-	int prefix_len2 = 0;
-	int offset = 0;
-	int idx = 0;
-	int end_flag = 0;
-	int file_size;
-
-	if (!p)
-		return -RET_E_INVAL;
-
-	parser = (struct pitcher_parser *)p;
-	current = start = parser->virt;
-	file_size = parser->size;
-
-	get_kmp_next(scode, next, scode_size);
-	prefix_len = kmp_search(start, file_size, scode, scode_size, next);
-	if (prefix_len < 0)
-		return -RET_E_EMPTY;
-	offset = prefix_len;
-	current = start + offset;
-
-	while (offset < file_size && !end_flag) {
-		prefix_len = kmp_search(current + scode_size, file_size - offset,
-					scode, scode_size, next);
-		if (prefix_len < 0) {
-			end_flag = 1;
-			prefix_len = file_size - offset;
-		}
-
-		nal_code =  (current[scode_size] & 0x7E) >> 1;
-		if (h265_check_nal_type(nal_code, nal_type, ARRAY_SIZE(nal_type)))
-		{
-			struct pitcher_frame *frame = pitcher_calloc(1, sizeof(*frame));
-			if (!frame) {
-				PITCHER_ERR("allco pitcher_frame fail\n");
-				return -RET_E_INVAL;
-			}
-
-			if (idx == 0)
-				frame->offset = 0;
-			else
-				frame->offset = offset;
-			frame->size = prefix_len + scode_size + prefix_len2;
-			frame->idx = idx;
-			idx++;
-			if ((parser->number > 0 && idx == parser->number)
-			    || end_flag == 1) {
-				frame->flag = PITCHER_BUFFER_FLAG_LAST;
-				end_flag = 1;
-			}
-			pitcher_parser_push(parser, frame);
-			prefix_len2 = 0;
-		} else {
-			if (end_flag) {
-				/* for end of data, add it to last frame */
-				struct pitcher_frame *frame = pitcher_parser_last_frame(parser);
-
-				frame->size += prefix_len;
-				frame->flag = PITCHER_BUFFER_FLAG_LAST;
-			} else {
-				prefix_len2 += prefix_len + scode_size;
-			}
-		}
-
-		offset += prefix_len + scode_size;
-		current = start + offset;
-	}
-
-	parser->number = idx;
-	pitcher_parser_seek_to_begin(parser);
-	PITCHER_LOG("parse frame count : %ld\n", parser->number);
-	return RET_OK;
+	return pitcher_parse_h26x(p, h265_check_frame_nal);
 }

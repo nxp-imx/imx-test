@@ -21,7 +21,7 @@ void *_pitcher_malloc(size_t size, const char *func, int line)
 	atomic_inc(&total_count);
 	ptr = malloc(size);
 #ifdef PITCHER_MEM_DEBUG
-	PITCHER_LOG("++ <%s, %d> %p, %ld\n", func, line, ptr, size);
+	PITCHER_LOG("++ %p <%s, %d>  %ld\n", ptr, func, line, size);
 #endif
 
 	return ptr;
@@ -43,7 +43,7 @@ void *_pitcher_calloc(size_t nmemb, size_t size, const char *func, int line)
 	atomic_inc(&total_count);
 	ptr = calloc(nmemb, size);
 #ifdef PITCHER_MEM_DEBUG
-	PITCHER_LOG("++ <%s, %d> %p, %ld\n", func, line, ptr, size);
+	PITCHER_LOG("++ %p <%s, %d>  %ld\n", ptr, func, line, size);
 #endif
 
 	return ptr;

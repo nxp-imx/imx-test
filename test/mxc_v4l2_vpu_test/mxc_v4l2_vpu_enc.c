@@ -2226,7 +2226,7 @@ static int init_parser_node(struct test_node *node)
 	ret = pitcher_register_chn(parser->node.context, &parser->desc, parser);
 	if (ret < 0) {
 		PITCHER_ERR("register file input fail\n");
-		pitcher_del_parser(parser->p);
+		SAFE_RELEASE(parser->p, pitcher_del_parser);
 		munmap(parser->virt, parser->size);
 		SAFE_CLOSE(parser->fd, close);
 		return ret;
@@ -2245,8 +2245,6 @@ static void free_parser_node(struct test_node *node)
 
 	parser = container_of(node, struct parser_test_t, node);
 
-	pitcher_del_parser(parser->p);
-
 	SAFE_CLOSE(parser->chnno, pitcher_unregister_chn);
 	if (parser->virt && parser->size) {
 		munmap(parser->virt, parser->size);
@@ -2254,6 +2252,7 @@ static void free_parser_node(struct test_node *node)
 		parser->size = 0;
 	}
 	SAFE_CLOSE(parser->fd, close);
+	SAFE_RELEASE(parser->p, pitcher_del_parser);
 	SAFE_RELEASE(parser, pitcher_free);
 }
 

@@ -48,8 +48,12 @@ int pitcher_parse(Parser p);
 int is_support_parser(unsigned int fmt);
 void pitcher_parser_show(Parser p);
 
-void get_kmp_next(const char *p, int *next, int size);
-int kmp_search(char *s, int s_len, const char *p, int p_len, int *next);
+void get_kmp_next(const char *p, int64_t *next, int64_t size);
+int64_t kmp_search(char *s, int64_t s_len, const char *p, int64_t p_len, int64_t *next);
+int pitcher_parser_push_new_frame(Parser p, int64_t offset, int64_t size,
+		int idx, int end_flag);
+
+int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int));
 
 #ifdef __cplusplus
 }

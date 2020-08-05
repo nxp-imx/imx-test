@@ -22,10 +22,10 @@ struct parse_handler {
 	int (*handle_parse)(Parser p, void *arg);
 };
 
-void get_kmp_next(const char *p, int *next, int size)
+void get_kmp_next(const char *p, int64_t *next, int64_t size)
 {
-	int k = -1;
-	int j = 0;
+	int64_t k = -1;
+	int64_t j = 0;
 
 	next[0] = -1;
 	while (j < size - 1) {
@@ -39,10 +39,10 @@ void get_kmp_next(const char *p, int *next, int size)
 	}
 }
 
-int kmp_search(char *s, int s_len, const char *p, int p_len, int *next)
+int64_t kmp_search(char *s, int64_t s_len, const char *p, int64_t p_len, int64_t *next)
 {
-	int i = 0;
-	int j = 0;
+	int64_t i = 0;
+	int64_t j = 0;
 
 	while (i < s_len && j < p_len) {
 		if (j == -1 || s[i] == p[j]) {
@@ -124,7 +124,6 @@ void pitcher_parser_to_prev_frame(Parser p)
 struct pitcher_parser *pitcher_new_parser(void)
 {
 	struct pitcher_parser *parser;
-	struct pitcher_frame *frame = pitcher_calloc(1, sizeof(*frame));
 
 	parser = pitcher_calloc(1, sizeof(*parser));
 	if (!parser)
@@ -231,4 +230,91 @@ int pitcher_parse(Parser p)
 		return -RET_E_NOT_SUPPORT;
 
 	return handler->handle_parse(p, handler);
+}
+
+int pitcher_parser_push_new_frame(Parser p, int64_t offset, int64_t size,
+		int idx, int end_flag)
+{
+	struct pitcher_parser *parser = (struct pitcher_parser *)p;
+	struct pitcher_frame *frame = pitcher_calloc(1, sizeof(*frame));
+
+	if (!frame) {
+		PITCHER_ERR("allco pitcher_frame fail\n");
+		return -RET_E_INVAL;
+	}
+
+	frame->offset = offset;
+	frame->size = size;
+	frame->idx = idx;
+
+	pitcher_parser_push(parser, frame);
+
+	return RET_OK;
+}
+
+int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
+{
+	struct pitcher_parser *parser;
+	char *current = NULL;
+	char scode[] = {0x0, 0x0, 0x0, 0x1};
+	int64_t next[] = {0x0, 0x0, 0x0, 0x1};
+	const int64_t scode_size = ARRAY_SIZE(scode);
+	int64_t start = -1;
+	int64_t offset = 0;
+	int64_t end = 0;
+	long left_bytes;
+	int frame_count = 0;
+	int index = 0;
+
+	if (!p || !check_nal_is_frame)
+		return -RET_E_INVAL;
+
+	parser = (struct pitcher_parser *)p;
+	current = parser->virt;
+	left_bytes = parser->size;
+	get_kmp_next(scode, next, scode_size);
+
+	PITCHER_LOG("total file size: 0x%lx\n", left_bytes);
+	while (left_bytes > 0) {
+		offset = kmp_search(current,
+					left_bytes,
+					scode, scode_size, next);
+		if (offset < 0)
+			break;
+		if (start < 0)
+			start = offset;
+
+		current += offset + scode_size;
+		left_bytes -= (offset + scode_size);
+		if (left_bytes <= 0)
+			break;
+		if (check_nal_is_frame(current[0])) {
+			end = (current - parser->virt - scode_size);
+			frame_count++;
+		}
+
+		if (frame_count > 1) {
+			frame_count--;
+			pitcher_parser_push_new_frame(parser,
+							start,
+							end - start,
+							index++,
+							0);
+			start = end;
+		}
+
+	}
+
+	end = parser->size;
+	if (frame_count) {
+		frame_count--;
+		pitcher_parser_push_new_frame(parser,
+						start,
+						end - start,
+						index++,
+						1);
+		start = end;
+	}
+
+	return RET_OK;
 }
