@@ -24,6 +24,7 @@
 #include "pitcher/parse.h"
 #include "pitcher/platform.h"
 #include "pitcher/platform_8x.h"
+#include "pitcher/convert.h"
 
 #define VERSION_MAJOR		1
 #define VERSION_MINOR		0
@@ -220,25 +221,6 @@ static void sig_handler(int sign)
 	}
 }
 
-static uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
-{
-	uint32_t size = width * height;
-
-	switch (fmt) {
-	case V4L2_PIX_FMT_NV12:
-	case V4L2_PIX_FMT_YUV420:
-		size = ((width * 12) >> 3) * height;
-		break;
-	case V4L2_PIX_FMT_YUYV:
-		size = width * height * 2;
-		break;
-	default:
-		break;
-	}
-
-	return size;
-}
-
 static int subscribe_event(int fd)
 {
 	struct v4l2_event_subscription sub;
@@ -398,6 +380,27 @@ static int is_encoder_capture_finish(struct v4l2_component_t *component)
 	return is_force_exit();
 }
 
+static void switch_fmt_to_tile(unsigned int *fmt)
+{
+	switch (*fmt) {
+	case V4L2_PIX_FMT_NV12:
+		*fmt = V4L2_PIX_FMT_NV12_TILE;
+	default:
+		break;
+	}
+}
+
+static void sync_decoder_node_info(struct decoder_test_t *decoder)
+{
+	assert(decoder);
+
+	decoder->node.width = decoder->capture.width;
+	decoder->node.height = decoder->capture.height;
+	decoder->node.pixelformat = decoder->capture.pixelformat;
+	if (decoder->platform.type == IMX_8X)
+		switch_fmt_to_tile(&decoder->node.pixelformat);
+}
+
 static int is_decoder_output_finish(struct v4l2_component_t *component)
 {
 	struct decoder_test_t *decoder;
@@ -434,6 +437,8 @@ static int is_decoder_output_finish(struct v4l2_component_t *component)
 			force_exit();
 			is_end = true;
 		}
+
+		sync_decoder_node_info(decoder);
 		PITCHER_LOG("decoder capture : %d x %d\n", decoder->capture.width, decoder->capture.height);
 	}
 
@@ -587,6 +592,10 @@ static int get_pixelfmt_from_str(const char *str)
 		return V4L2_PIX_FMT_YUV420;
 	if (!strcasecmp(str, "yuv420p"))
 		return V4L2_PIX_FMT_YUV420;
+	if (!strcasecmp(str, "na12"))
+		return V4L2_PIX_FMT_NV12_TILE;
+	if (!strcasecmp(str, "nt12"))
+		return V4L2_PIX_FMT_NV12_TILE_10BIT;
 	if (!strcasecmp(str, "h264"))
 		return V4L2_PIX_FMT_H264;
 	if (!strcasecmp(str, "h265"))
@@ -1644,7 +1653,6 @@ static int ofile_checkready(void *arg, int *is_end)
 		file->end = true;
 	if (is_source_end(file->chnno))
 		file->end = true;
-
 	if (is_end)
 		*is_end = file->end;
 
@@ -1752,6 +1760,22 @@ static int parse_ofile_option(struct test_node *node,
 	return RET_OK;
 }
 
+static int set_convert_source(struct test_node *node,
+				struct test_node *src)
+{
+	struct convert_test_t *cvrt;
+
+	if (!node || !src)
+		return -RET_E_INVAL;
+
+	cvrt = container_of(node, struct convert_test_t, node);
+	cvrt->node.width = src->width;
+	cvrt->node.height = src->height;
+	cvrt->ifmt = src->pixelformat;
+
+	return RET_OK;
+}
+
 static int recycle_convert_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
@@ -1772,25 +1796,53 @@ static int recycle_convert_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
+static int convert_init_plane(struct pitcher_plane *plane, unsigned int index,
+				void *arg)
+{
+	assert(plane);
+
+	if (!plane->size)
+		return RET_OK;
+
+	return pitcher_alloc_plane(plane, index, arg);
+}
+
 static struct pitcher_buffer *alloc_convert_buffer(void *arg)
 {
 	struct convert_test_t *cvrt = arg;
 	struct pitcher_buffer_desc desc;
+	struct test_node *src_node;
 
 	if (!cvrt)
 		return NULL;
+
+	src_node = nodes[cvrt->node.source];
+	if (!src_node)
+		return NULL;
+	if (cvrt->node.width != src_node->width
+	    || cvrt->node.height != src_node->height)
+		set_convert_source(&cvrt->node, src_node);
 
 	memset(&desc, 0, sizeof(desc));
 	desc.plane_count = 1;
 	desc.plane_size = get_image_size(cvrt->node.pixelformat,
 					cvrt->node.width,
 					cvrt->node.height);
-	desc.init_plane = pitcher_alloc_plane;
+	desc.init_plane = convert_init_plane;
 	desc.uninit_plane = pitcher_free_plane;
 	desc.recycle = recycle_convert_buffer;
 	desc.arg = cvrt;
 
 	return pitcher_new_buffer(&desc);
+}
+
+static int convert_start(void *arg)
+{
+	struct convert_test_t *cvrt = arg;
+
+	cvrt->end = false;
+
+	return RET_OK;
 }
 
 static int convert_checkready(void *arg, int *is_end)
@@ -1818,89 +1870,13 @@ static int convert_checkready(void *arg, int *is_end)
 	return false;
 }
 
-static void convert_i420_to_nv12(struct pitcher_buffer *src,
-				struct pitcher_buffer *dst,
-				uint32_t width, uint32_t height)
-{
-	uint8_t *u_start;
-	uint8_t *v_start;
-	uint8_t *uv_temp;
-	uint32_t uv_size = width * height / 2;
-	int i;
-	int j;
-
-	switch (src->count) {
-	case 1:
-		u_start = src->planes[0].virt + width * height;
-		v_start = u_start + uv_size / 2;
-		break;
-	case 2:
-		u_start = src->planes[1].virt;
-		v_start = u_start + uv_size / 2;
-		break;
-	case 3:
-		u_start = src->planes[1].virt;
-		v_start = src->planes[2].virt;
-		break;
-	default:
-		return;
-	}
-
-	switch (dst->count) {
-	case 1:
-		uv_temp = dst->planes[0].virt + width * height;
-		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-								width, height);
-		break;
-	case 2:
-		dst->planes[0].bytesused = width * height;
-		dst->planes[1].bytesused = uv_size;
-		uv_temp = dst->planes[1].virt;
-		break;
-	default:
-		return;
-	}
-
-	memcpy(dst->planes[0].virt, src->planes[0].virt, width * height);
-	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
-		uv_temp[j] = u_start[i];
-		uv_temp[j + 1] = v_start[i];
-	}
-}
-
-static void convert_frame_to_nv12(struct pitcher_buffer *src,
-				struct pitcher_buffer *dst,
-				uint32_t fmt, uint32_t width, uint32_t height)
-{
-	switch (fmt) {
-	case V4L2_PIX_FMT_YUV420:
-		convert_i420_to_nv12(src, dst, width, height);
-		break;
-	default:
-		break;
-	}
-}
-
-static void convert_frame(struct pitcher_buffer *src,
-				struct pitcher_buffer *dst,
-				uint32_t src_fmt, uint32_t dst_fmt,
-				uint32_t width, uint32_t height)
-{
-	switch (dst_fmt) {
-	case V4L2_PIX_FMT_NV12:
-		convert_frame_to_nv12(src, dst, src_fmt, width, height);
-		break;
-	default:
-		break;
-	}
-}
-
 static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct convert_test_t *cvrt = arg;
 
 	if (!cvrt || !pbuf)
 		return -RET_E_INVAL;
+
 
 	if (cvrt->ifmt != cvrt->node.pixelformat) {
 		struct pitcher_buffer *buffer;
@@ -1910,12 +1886,14 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 			return -RET_E_NOT_READY;
 
 		convert_frame(pbuf, buffer,
-					cvrt->ifmt, cvrt->node.pixelformat,
-					cvrt->node.width, cvrt->node.height);
+			      cvrt->ifmt, cvrt->node.pixelformat,
+			      cvrt->node.width, cvrt->node.height);
 		pitcher_push_back_output(cvrt->chnno, buffer);
 		SAFE_RELEASE(buffer, pitcher_put_buffer);
+		SAFE_RELEASE(pbuf, pitcher_put_buffer);
 	} else {
 		pitcher_push_back_output(cvrt->chnno, pbuf);
+		SAFE_RELEASE(pbuf, pitcher_put_buffer);
 	}
 
 	return RET_OK;
@@ -1925,6 +1903,7 @@ static int init_convert_node(struct test_node *node)
 {
 	struct convert_test_t *cvrt;
 	int ret;
+	struct test_node *src_node;
 
 	if (!node)
 		return -RET_E_NULL_POINTER;
@@ -1934,6 +1913,8 @@ static int init_convert_node(struct test_node *node)
 	switch (cvrt->ifmt) {
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_YUV420:
+	case V4L2_PIX_FMT_NV12_TILE:
+	case V4L2_PIX_FMT_NV12_TILE_10BIT:
 		break;
 	default:
 		return -RET_E_NOT_SUPPORT;
@@ -1945,10 +1926,15 @@ static int init_convert_node(struct test_node *node)
 	default:
 		return -RET_E_NOT_SUPPORT;
 	}
-	if (!cvrt->node.width || !cvrt->node.height)
-		return -RET_E_INVAL;
+
+	if (!cvrt->node.width || !cvrt->node.height) {
+		src_node = nodes[cvrt->node.source];
+		if (src_node && src_node->type == TEST_TYPE_FILEIN)
+			return -RET_E_INVAL;
+	}
 
 	cvrt->desc.fd = -1;
+	cvrt->desc.start = convert_start;
 	cvrt->desc.check_ready = convert_checkready;
 	cvrt->desc.runfunc = convert_run;
 	cvrt->desc.buffer_count = 4;
@@ -1974,7 +1960,7 @@ static void free_convert_node(struct test_node *node)
 		return;
 
 	cvrt = container_of(node, struct convert_test_t, node);
-
+	SAFE_CLOSE(cvrt->chnno, pitcher_unregister_chn);
 	SAFE_RELEASE(cvrt, pitcher_free);
 }
 
@@ -1988,22 +1974,6 @@ static int get_convert_chnno(struct test_node *node)
 	cvrt = container_of(node, struct convert_test_t, node);
 
 	return cvrt->chnno;
-}
-
-static int set_convert_source(struct test_node *node,
-				struct test_node *src)
-{
-	struct convert_test_t *cvrt;
-
-	if (!node || !src)
-		return -RET_E_INVAL;
-
-	cvrt = container_of(node, struct convert_test_t, node);
-	cvrt->node.width = src->width;
-	cvrt->node.height = src->height;
-	cvrt->ifmt = src->pixelformat;
-
-	return RET_OK;
 }
 
 static struct test_node *alloc_convert_node(void)
@@ -2713,6 +2683,15 @@ static int check_ctrl_ready(void *arg, int *is_end)
 			ret = pitcher_start_chn(dchn);
 			if (ret < 0) {
 				PITCHER_ERR("start %d fail\n", dst->key);
+				end = true;
+				force_exit();
+			}
+		}
+
+		if (pitcher_get_status(schn) && !pitcher_get_status(dchn)) {
+			ret = pitcher_start_chn(dchn);
+			if (ret < 0) {
+				PITCHER_ERR("start %d fail\n", src->key);
 				end = true;
 				force_exit();
 			}

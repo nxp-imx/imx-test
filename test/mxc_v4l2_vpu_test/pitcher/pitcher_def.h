@@ -120,6 +120,14 @@ enum {
 
 #define MAXPATHLEN	255
 
+#ifndef ALIGN
+#define ALIGN(x, a)		__ALIGN(x, (typeof(x))(a) - 1)
+#define __ALIGN(x, mask)	(((x) + (mask)) & ~(mask))
+#endif
+#ifndef ALIGN_DOWN
+#define ALIGN_DOWN		ALIGN((x) - ((a) - 1), (a))
+#endif
+
 int pitcher_poll(int fd, short events, int timeout);
 uint64_t pitcher_get_realtime_time(void);
 uint64_t pitcher_get_monotonic_time(void);

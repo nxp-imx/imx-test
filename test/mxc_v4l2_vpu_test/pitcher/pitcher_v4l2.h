@@ -53,7 +53,7 @@ int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt);
 int is_v4l2_mplane(struct v4l2_capability *cap);
 int is_v4l2_splane(struct v4l2_capability *cap);
 int set_ctrl(int fd, int id, int value);
-
+uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height);
 #ifdef __cplusplus
 }
 #endif

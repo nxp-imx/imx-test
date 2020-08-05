@@ -47,7 +47,6 @@ int pitcher_free_plane(struct pitcher_plane *plane,
 		return RET_OK;
 
 	SAFE_RELEASE(plane->virt, pitcher_free);
-
 	return RET_OK;
 }
 

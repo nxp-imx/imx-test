@@ -87,6 +87,7 @@ struct pitcher_obj *pitcher_get_obj(struct pitcher_obj *obj)
 	obj->refcount++;
 	pthread_mutex_unlock(&obj->mutex);
 
+
 	return obj;
 }
 

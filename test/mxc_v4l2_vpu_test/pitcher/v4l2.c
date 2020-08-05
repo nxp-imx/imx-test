@@ -21,6 +21,7 @@
 #include "pitcher_def.h"
 #include "pitcher.h"
 #include "pitcher_v4l2.h"
+#include "platform_8x.h"
 
 static int __is_v4l2_end(struct v4l2_component_t *component)
 {
@@ -85,10 +86,21 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		return -RET_E_INVAL;
 	}
 	ioctl(fd, VIDIOC_G_FMT, &format);
-	if (V4L2_TYPE_IS_MULTIPLANAR(component->type))
-		component->num_planes = format.fmt.pix_mp.num_planes;
-	else
+	if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
 		component->num_planes = 1;
+		component->width = format.fmt.pix.width;
+		component->height = format.fmt.pix.height;
+		component->pixelformat = format.fmt.pix.pixelformat;
+		component->sizeimage = format.fmt.pix.sizeimage;
+		component->bytesperline = format.fmt.pix.bytesperline;
+	} else {
+		component->num_planes = format.fmt.pix_mp.num_planes;
+		component->width = format.fmt.pix_mp.width;
+		component->height = format.fmt.pix_mp.height;
+		component->pixelformat = format.fmt.pix_mp.pixelformat;
+		component->sizeimage = format.fmt.pix_mp.plane_fmt[0].sizeimage;
+		component->bytesperline = format.fmt.pix_mp.plane_fmt[0].bytesperline;
+	}
 
 	return RET_OK;
 }
@@ -900,7 +912,7 @@ struct pitcher_unit_desc pitcher_v4l2_capture = {
 };
 
 struct pitcher_unit_desc pitcher_v4l2_output = {
-	.name = "capture",
+	.name = "output",
 	.init = init_v4l2,
 	.cleanup = cleanup_v4l2,
 	.start = start_v4l2,
@@ -1037,4 +1049,33 @@ int set_ctrl(int fd, int id, int value)
 	PITCHER_LOG("[S]%s : %d (%d)\n", qctrl.name, ctrl.value, value);
 
 	return ret;
+}
+
+uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
+{
+	uint32_t size = width * height;
+
+	switch (fmt) {
+	case V4L2_PIX_FMT_NV12:
+	case V4L2_PIX_FMT_YUV420:
+		size = ((width * 12) >> 3) * height;
+		break;
+	case V4L2_PIX_FMT_YUYV:
+		size = width * height * 2;
+		break;
+	case V4L2_PIX_FMT_NV12_TILE:
+		width = ALIGN(width, IMX8X_HORIZONTAL_STRIDE);
+		height = ALIGN(height, IMX8X_VERTICAL_STRIDE);
+		size = ((width * 12) >> 3) * height;
+		break;
+	case V4L2_PIX_FMT_NV12_TILE_10BIT:
+		width = ALIGN(((width * 10) >> 3), IMX8X_HORIZONTAL_STRIDE);
+		height = ALIGN(height, IMX8X_VERTICAL_STRIDE);
+		size = ((width * 12) >> 3) * height;
+		break;
+	default:
+		break;
+	}
+
+	return size;
 }

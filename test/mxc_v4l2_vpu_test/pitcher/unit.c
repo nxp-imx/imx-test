@@ -178,7 +178,6 @@ static int __free_buffer(struct pitcher_unit *unit)
 		return RET_OK;
 
 	pitcher_queue_clear(unit->idles, __del_buffer_func, unit);
-
 	return RET_OK;
 }
 

@@ -18,7 +18,8 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			pitcher/parse.o \
 			pitcher/h264_parse.o \
 			pitcher/h265_parse.o \
-			pitcher/platform_8x.o
+			pitcher/platform_8x.o \
+			pitcher/convert.o
 
 LDFLAGS += -lpthread
 COPY = README

@@ -25,7 +25,11 @@ extern "C"
 #define VPU_PIX_FMT_SPK				v4l2_fourcc('S', 'P', 'K', '0')
 #define VPU_PIX_FMT_DIVX			v4l2_fourcc('D', 'I', 'V', 'X')
 #define VPU_PIX_FMT_LOGO			v4l2_fourcc('L', 'O', 'G', 'O')
+#define V4L2_PIX_FMT_NV12_TILE                  v4l2_fourcc('N', 'A', '1', '2')  /* Y/CbCr 4:2:0 for i.MX8X 8bit */
+#define V4L2_PIX_FMT_NV12_TILE_10BIT            v4l2_fourcc('N', 'T', '1', '2')  /* Y/CbCr 4:2:0 for i.MX8X 10bit */
 
+#define IMX8X_HORIZONTAL_STRIDE			512
+#define IMX8X_VERTICAL_STRIDE			512
 
 int set_decoder_parameter_8x(void *arg);
 
