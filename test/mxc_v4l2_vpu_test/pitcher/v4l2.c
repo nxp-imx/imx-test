@@ -786,8 +786,12 @@ static int __transfer_output_buffer_mmap(struct pitcher_buffer *src,
 					src->planes[0].bytesused, total);
 	} else if (src->count == dst->count) {
 		for (i = 0; i < dst->count; i++) {
-			if (dst->planes[i].size < src->planes[i].bytesused)
+			if (dst->planes[i].size < src->planes[i].bytesused) {
+				PITCHER_ERR("dst->planes[%d].size(0x%lx) < src->planes[%d].bytesused(0x%lx)\n",
+					     i, dst->planes[i].size,
+					     i, src->planes[i].bytesused);
 				return -RET_E_INVAL;
+			}
 			memcpy(dst->planes[i].virt, src->planes[i].virt,
 					src->planes[i].bytesused);
 			dst->planes[i].bytesused = src->planes[i].bytesused;
@@ -1004,4 +1008,33 @@ int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt)
 	}
 
 	return -1;
+}
+
+int set_ctrl(int fd, int id, int value)
+{
+	struct v4l2_queryctrl qctrl;
+	struct v4l2_control ctrl;
+	int ret;
+
+	memset(&qctrl, 0, sizeof(qctrl));
+	qctrl.id = id;
+	ret = ioctl(fd, VIDIOC_QUERYCTRL, &qctrl);
+	if (ret < 0) {
+		PITCHER_ERR("query ctrl(%d) fail\n", id);
+		return -RET_E_INVAL;
+	}
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = id;
+	ctrl.value = value;
+
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		PITCHER_ERR("set ctrl(%s : %d) fail\n", qctrl.name, value);
+		return -RET_E_INVAL;
+	}
+
+	PITCHER_LOG("[S]%s : %d (%d)\n", qctrl.name, ctrl.value, value);
+
+	return ret;
 }

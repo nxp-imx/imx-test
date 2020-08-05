@@ -22,6 +22,8 @@
 #include "pitcher/pitcher.h"
 #include "pitcher/pitcher_v4l2.h"
 #include "pitcher/parse.h"
+#include "pitcher/platform.h"
+#include "pitcher/platform_8x.h"
 
 #define VERSION_MAJOR		1
 #define VERSION_MINOR		0
@@ -92,6 +94,8 @@ struct decoder_test_t {
 
 	uint32_t sizeimage;
 	const char *devnode;
+
+	struct platform_t platform;
 };
 
 struct camera_test_t {
@@ -498,35 +502,6 @@ static int stop_dec(struct v4l2_component_t *component)
 	return RET_OK;
 }
 
-static int set_ctrl(int fd, int id, int value)
-{
-	struct v4l2_queryctrl qctrl;
-	struct v4l2_control ctrl;
-	int ret;
-
-	memset(&qctrl, 0, sizeof(qctrl));
-	qctrl.id = id;
-	ret = ioctl(fd, VIDIOC_QUERYCTRL, &qctrl);
-	if (ret < 0) {
-		PITCHER_ERR("query ctrl(%d) fail\n", id);
-		return -RET_E_INVAL;
-	}
-
-	memset(&ctrl, 0, sizeof(ctrl));
-	ctrl.id = id;
-	ctrl.value = value;
-
-	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
-	if (ret < 0) {
-		PITCHER_ERR("set ctrl(%s : %d) fail\n", qctrl.name, value);
-		return -RET_E_INVAL;
-	}
-
-	PITCHER_LOG("[S]%s : %d (%d)\n", qctrl.name, ctrl.value, value);
-
-	return ret;
-}
-
 struct mxc_vpu_test_option ifile_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"name", 1, "--name <filename>\n\t\t\tassign input file name"},
@@ -579,6 +554,7 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"source", 1, "--source <key no>\n\t\t\tset h264 encoder input key number"},
 	{"device", 1, "--device <devnode>\n\t\t\tassign encoder video device node"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
+	{"framemode", 1, "--framemode <level>\n\t\t\tSpecify input frame mode, 1: frame level, 2: non-frame level"},
 	{NULL, 0, NULL},
 };
 
@@ -615,6 +591,32 @@ static int get_pixelfmt_from_str(const char *str)
 		return V4L2_PIX_FMT_H264;
 	if (!strcasecmp(str, "h265"))
 		return V4L2_PIX_FMT_HEVC;
+	if (!strcasecmp(str, "mpeg2"))
+		return V4L2_PIX_FMT_MPEG2;
+	if (!strcasecmp(str, "mpeg4"))
+		return V4L2_PIX_FMT_MPEG4;
+	if (!strcasecmp(str, "h263"))
+		return V4L2_PIX_FMT_H263;
+	if (!strcasecmp(str, "jpeg"))
+		return V4L2_PIX_FMT_JPEG;
+	if (!strcasecmp(str, "vc1l"))
+		return V4L2_PIX_FMT_VC1_ANNEX_L;
+	if (!strcasecmp(str, "vc1g"))
+		return V4L2_PIX_FMT_VC1_ANNEX_G;
+	if (!strcasecmp(str, "xvid"))
+		return V4L2_PIX_FMT_XVID;
+	if (!strcasecmp(str, "vp8"))
+		return V4L2_PIX_FMT_VP8;
+	if (!strcasecmp(str, "vp6"))
+		return VPU_PIX_FMT_VP6;
+	if (!strcasecmp(str, "avs"))
+		return VPU_PIX_FMT_AVS;
+	if (!strcasecmp(str, "rv"))
+		return VPU_PIX_FMT_RV;
+	if (!strcasecmp(str, "spk"))
+		return VPU_PIX_FMT_SPK;
+	if (!strcasecmp(str, "divx"))
+		return VPU_PIX_FMT_DIVX;
 
 	PITCHER_ERR("unsupport pixelformat : %s\n", str);
 	return -RET_E_INVAL;
@@ -1135,6 +1137,19 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 	case V4L2_PIX_FMT_H264:
 	case V4L2_PIX_FMT_H264_MVC:
 	case V4L2_PIX_FMT_HEVC:
+	case V4L2_PIX_FMT_MPEG2:
+	case V4L2_PIX_FMT_MPEG4:
+	case V4L2_PIX_FMT_H263:
+	case V4L2_PIX_FMT_JPEG:
+	case V4L2_PIX_FMT_VC1_ANNEX_L:
+	case V4L2_PIX_FMT_VC1_ANNEX_G:
+	case V4L2_PIX_FMT_XVID:
+	case V4L2_PIX_FMT_VP8:
+	case VPU_PIX_FMT_VP6:
+	case VPU_PIX_FMT_AVS:
+	case VPU_PIX_FMT_RV:
+	case VPU_PIX_FMT_SPK:
+	case VPU_PIX_FMT_DIVX:
 		break;
 	default:
 		return -RET_E_NOT_SUPPORT;
@@ -1164,8 +1179,6 @@ static void free_decoder_node(struct test_node *node)
 		uint64_t fps;
 		uint64_t ts_delta;
 
-		if (count > decoder->output.frame_count)
-			count = decoder->output.frame_count;
 		ts_delta = decoder->capture.ts_e - decoder->capture.ts_b;
 		fps = count * 1000000000 * 1000 / ts_delta;
 		PITCHER_LOG("decoder frame fps : %ld.%ld; time:%ld.%lds; count = %ld\n",
@@ -1179,6 +1192,28 @@ static void free_decoder_node(struct test_node *node)
 	SAFE_CLOSE(decoder->capture.chnno, pitcher_unregister_chn);
 	SAFE_CLOSE(decoder->fd, close);
 	SAFE_RELEASE(decoder, pitcher_free);
+}
+
+static int init_decoder_platform(struct decoder_test_t *decoder)
+{
+	struct v4l2_capability cap;
+
+	ioctl(decoder->fd, VIDIOC_QUERYCAP, &cap);
+	if (!strcasecmp((const char*)cap.driver, "vpu B0")) {
+		decoder->platform.type = IMX_8X;
+		decoder->platform.set_decoder_parameter = set_decoder_parameter_8x;
+	} else if (!strcasecmp((const char*)cap.driver, "vsi_v4l2")) {
+		decoder->platform.type = IMX_8M;
+	} else {
+		decoder->platform.type = OTHERS;
+	}
+
+	decoder->platform.fd = decoder->fd;
+
+	if (decoder->platform.set_decoder_parameter)
+		return decoder->platform.set_decoder_parameter(&(decoder->platform));
+	else
+		return RET_OK;
 }
 
 static int init_decoder_node(struct test_node *node)
@@ -1253,7 +1288,7 @@ static int init_decoder_node(struct test_node *node)
 	}
 	decoder->output.chnno = ret;
 
-	return ret;
+	return init_decoder_platform(decoder);
 }
 
 static struct test_node *alloc_decoder_node(void)
@@ -1269,7 +1304,7 @@ static struct test_node *alloc_decoder_node(void)
 	decoder->fd = -1;
 	decoder->node.type = TEST_TYPE_DECODER;
 	decoder->node.pixelformat = V4L2_PIX_FMT_NV12;
-	decoder->sizeimage = 1024 * 1024;
+	decoder->sizeimage = DEFAULT_WIDTH * DEFAULT_HEIGHT;
 
 	decoder->node.init_node = init_decoder_node;
 	decoder->node.free_node = free_decoder_node;
@@ -1314,6 +1349,8 @@ static int parse_decoder_option(struct test_node *node,
 		if (bs < MIN_BS)
 			bs = MIN_BS;
 		decoder->sizeimage = bs * 1024;
+	} else if (!strcasecmp(option->name, "framemode")) {
+		decoder->platform.frame_mode = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
@@ -1442,11 +1479,14 @@ static int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 	size = buffer->planes[0].size;
 	buffer->planes[0].bytesused = 0;
 
-	if (size + file->offset <= file->size) {
+	if (file->offset < file->size) {
 		buffer->planes[0].virt = file->virt + file->offset;
-		buffer->planes[0].bytesused = size;
+		if (size + file->offset <= file->size)
+			buffer->planes[0].bytesused = size;
+		else
+			buffer->planes[0].bytesused = file->size - file->offset;
 		file->offset += buffer->planes[0].bytesused;
-		if (file->loop && size + file->offset > file->size) {
+		if (file->loop && file->offset >= file->size) {
 			if (file->loop > 0)
 				file->loop--;
 			file->offset = 0;
@@ -1459,7 +1499,7 @@ static int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 	if (file->frame_num > 0 && file->frame_count >= file->frame_num)
 		file->end = true;
 
-	if (size + file->offset > file->size || file->end) {
+	if (file->offset >= file->size || file->end) {
 		file->end = true;
 		buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
 	}

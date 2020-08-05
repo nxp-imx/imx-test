@@ -52,6 +52,7 @@ int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt);
 int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt);
 int is_v4l2_mplane(struct v4l2_capability *cap);
 int is_v4l2_splane(struct v4l2_capability *cap);
+int set_ctrl(int fd, int id, int value);
 
 #ifdef __cplusplus
 }
