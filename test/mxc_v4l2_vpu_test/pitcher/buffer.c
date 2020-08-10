@@ -61,6 +61,7 @@ static void __release_buffer(struct pitcher_obj *obj)
 
 	exb = container_of(obj, struct ext_buffer, obj);
 
+	exb->buffer.flags = 0;
 	if (exb->recycle)
 		exb->recycle(&exb->buffer, exb->arg, &is_del);
 	if (!is_del)

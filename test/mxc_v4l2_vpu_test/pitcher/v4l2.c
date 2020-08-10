@@ -51,8 +51,14 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 
 	memset(&format, 0, sizeof(format));
 	format.type = component->type;
+	ioctl(fd, VIDIOC_G_FMT, &format);
+	if (!component->pixelformat) {
+		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type))
+			component->pixelformat = format.fmt.pix.pixelformat;
+		else
+			component->pixelformat = format.fmt.pix_mp.pixelformat;
+	}
 	if (!component->width || !component->height) {
-		ioctl(fd, VIDIOC_G_FMT, &format);
 		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
 			component->width = format.fmt.pix.width;
 			component->height = format.fmt.pix.height;
@@ -226,7 +232,7 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 			component->end = true;
 			return NULL;
 		}
-		PITCHER_ERR("dqbuf fail, error: %s, %d\n", strerror(errno), ret);
+		PITCHER_ERR("dqbuf fail, error: %s, %d\n", strerror(errno), errno);
 		return NULL;
 	}
 
@@ -243,6 +249,13 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(component->type)) {
+		if (v4lbuf.flags & V4L2_BUF_FLAG_KEYFRAME)
+			SET_BUFFER_TYPE(buffer->flags, BUFFER_TYPE_KEYFRAME);
+		else if (v4lbuf.flags & V4L2_BUF_FLAG_PFRAME)
+			SET_BUFFER_TYPE(buffer->flags, BUFFER_TYPE_PFRAME);
+		else if (v4lbuf.flags & V4L2_BUF_FLAG_BFRAME)
+			SET_BUFFER_TYPE(buffer->flags, BUFFER_TYPE_BFRAME);
+
 		if (v4lbuf.flags & V4L2_BUF_FLAG_LAST
 			|| buffer->planes[0].bytesused == 0) {
 			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
@@ -575,12 +588,33 @@ static void __clear_error_buffers(struct v4l2_component_t *component)
 static int init_v4l2(void *arg)
 {
 	struct v4l2_component_t *component = arg;
-	int ret;
 
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
 
 	PITCHER_LOG("init : %s\n", component->desc.name);
+
+	return RET_OK;
+}
+
+static int cleanup_v4l2(void *arg)
+{
+	struct v4l2_component_t *component = arg;
+
+	if (!component || component->fd < 0)
+		return -RET_E_INVAL;
+
+	PITCHER_LOG("cleanup : %s\n", component->desc.name);
+
+	return RET_OK;
+}
+
+static int __init_v4l2(struct v4l2_component_t *component)
+{
+	int ret;
+
+	if (!component || component->fd < 0)
+		return -RET_E_INVAL;
 
 	ret = __set_v4l2_fmt(component);
 	if (ret < 0) {
@@ -609,15 +643,12 @@ static int init_v4l2(void *arg)
 	return RET_OK;
 }
 
-static int cleanup_v4l2(void *arg)
+static int __cleanup_v4l2(struct v4l2_component_t *component)
 {
-	struct v4l2_component_t *component = arg;
 	int i;
 
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
-
-	PITCHER_LOG("cleanup : %s\n", component->desc.name);
 
 	__clear_error_buffers(component);
 	for (i = 0; i < component->buffer_count; i++) {
@@ -637,6 +668,10 @@ static int start_v4l2(void *arg)
 
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
+
+	ret = __init_v4l2(component);
+	if (ret < 0)
+		return ret;
 
 	component->enable = true;
 	if (!V4L2_TYPE_IS_OUTPUT(component->type)) {
@@ -680,6 +715,7 @@ static int stop_v4l2(void *arg)
 		return ret;
 	}
 	component->enable = false;
+	component->end = false;
 
 	for (i = 0; i < component->buffer_count; i++) {
 		struct pitcher_buffer *buffer = component->slots[i];
@@ -701,7 +737,37 @@ static int stop_v4l2(void *arg)
 		SAFE_RELEASE(component->buffers[i], pitcher_put_buffer);
 	}
 
-	return RET_OK;
+	return __cleanup_v4l2(component);
+}
+
+static void __check_v4l2_events(struct v4l2_component_t *component)
+{
+	struct v4l2_event evt;
+	int ret;
+
+	if (!component || component->fd < 0)
+		return;
+
+	if (!pitcher_poll(component->fd, POLLPRI, 0))
+		return;
+
+	memset(&evt, 0, sizeof(struct v4l2_event));
+	ret = ioctl(component->fd, VIDIOC_DQEVENT, &evt);
+	if (ret < 0)
+		return;
+
+	switch (evt.type) {
+	case V4L2_EVENT_EOS:
+		PITCHER_LOG("Receive EOS, fd = %d\n", component->fd);
+		component->eos_received = true;
+		break;
+	case V4L2_EVENT_SOURCE_CHANGE:
+		PITCHER_LOG("Receive Source Change, fd = %d\n", component->fd);
+		component->resolution_change = true;
+		break;
+	default:
+		break;
+	}
 }
 
 static int check_v4l2_ready(void *arg, int *is_end)
@@ -720,6 +786,10 @@ static int check_v4l2_ready(void *arg, int *is_end)
 			*is_end = true;
 		return false;
 	}
+
+	if (V4L2_TYPE_IS_OUTPUT(component->type))
+		__check_v4l2_events(component);
+
 
 	__clear_error_buffers(component);
 	for (i = 0; i < component->buffer_count; i++) {
@@ -827,6 +897,8 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 	if (!V4L2_TYPE_IS_OUTPUT(component->type))
 		return RET_OK;
 
+	__check_v4l2_events(component);
+
 	if (!pbuf)
 		return -RET_E_NOT_READY;
 
@@ -847,10 +919,6 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 	}
 
 	SAFE_RELEASE(component->buffers[buffer->index], pitcher_put_buffer);
-	/*
-	 *if (pbuf->flags & PITCHER_BUFFER_FLAG_LAST)
-	 *        component->end = true;
-	 */
 
 	return ret;
 }
@@ -883,6 +951,7 @@ static int run_v4l2(void *arg, struct pitcher_buffer *pbuf)
 		pitcher_push_back_output(component->chnno, buffer);
 
 	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST) {
+		PITCHER_LOG("LAST BUFFER received\n");
 		component->end = true;
 	}
 
@@ -921,7 +990,7 @@ struct pitcher_unit_desc pitcher_v4l2_output = {
 	.runfunc = run_v4l2,
 	.buffer_count = 0,
 	.fd = -1,
-	.events = EPOLLOUT | EPOLLET,
+	.events = EPOLLOUT | EPOLLET | EPOLLPRI,
 };
 
 static int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)

@@ -15,8 +15,29 @@ extern "C"
 #include <sys/epoll.h>
 
 enum {
+	PITCHER_STATE_STOPPED = 0,
+	PITCHER_STATE_STOPPING,
+	PITCHER_STATE_ACTIVE,
+	PITCHER_STATE_UNKNOWN
+};
+
+enum {
 	PITCHER_BUFFER_FLAG_LAST = (1 << 0),
 };
+
+enum {
+	BUFFER_TYPE_DEFAULT = 0,
+	BUFFER_TYPE_KEYFRAME = 1,
+	BUFFER_TYPE_PFRAME,
+	BUFFER_TYPE_BFRAME,
+};
+
+#define BUFFER_TYPE_MASK	0x3
+#define BUFFER_TYPE_OFFSET	16
+#define SET_BUFFER_TYPE(flags, type)	\
+	(flags) |= (((type) & BUFFER_TYPE_MASK) << BUFFER_TYPE_OFFSET)
+#define GET_BUFFER_TYPE(flags, type)	\
+	(((flags) >> BUFFER_TYPE_OFFSET) & BUFFER_TYPE_MASK)
 
 struct pitcher_plane {
 	void *virt;
@@ -85,7 +106,9 @@ int pitcher_unregister_chn(unsigned int chnno);
 int pitcher_connect(unsigned int src, unsigned int dst);
 int pitcher_disconnect(unsigned int src, unsigned int dst);
 int pitcher_get_source(unsigned int chnno);
+int pitcher_get_sink(unsigned int chnno);
 unsigned int pitcher_get_status(unsigned int chnno);
+unsigned int pitcher_is_active(unsigned int chnno);
 int pitcher_poll_idle_buffer(unsigned int chnno);
 struct pitcher_buffer *pitcher_get_idle_buffer(unsigned int chnno);
 void pitcher_put_buffer_idle(unsigned int chnno, struct pitcher_buffer *buffer);

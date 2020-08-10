@@ -35,7 +35,7 @@ struct pitcher_chn {
 	char name[64];
 	unsigned int chnno;
 	Unit unit;
-	unsigned int enable;
+	unsigned int state;
 	struct pitcher_poll_fd pfd;
 	struct pitcher_core *core;
 };
@@ -193,12 +193,88 @@ static struct pitcher_chn *__find_chn(unsigned int chnno)
 	return NULL;
 }
 
-static void __set_chn_status(struct pitcher_chn *chn, int enable)
+static void __set_chn_status(struct pitcher_chn *chn, unsigned int state)
 {
-	if (enable)
-		chn->enable = true;
-	else
-		chn->enable = false;
+	if (state == PITCHER_STATE_STOPPING)
+		PITCHER_LOG("stopping : %s\n", chn->name);
+	if (state < PITCHER_STATE_UNKNOWN)
+		chn->state = state;
+}
+
+static int __find_source_chn(unsigned long item, void *arg)
+{
+	Pipe pipe = (Pipe)item;
+	struct connect_t *ct = arg;
+
+	if (!pipe || !ct || !ct->dst)
+		return 0;
+
+	if (pitcher_get_pipe_dst(pipe) == ct->dst)
+		ct->src = pitcher_get_pipe_src(pipe);
+
+	return 0;
+}
+
+static int __find_sink_chn(unsigned long item, void *arg)
+{
+	Pipe pipe = (Pipe)item;
+	struct connect_t *ct = arg;
+
+	if (!pipe || !ct || !ct->src)
+		return 0;
+
+	if (pitcher_get_pipe_src(pipe) == ct->src)
+		ct->dst = pitcher_get_pipe_dst(pipe);
+
+	return 0;
+}
+
+static struct pitcher_chn *__get_source_chn(unsigned int chnno)
+{
+	struct pitcher_core *core;
+	struct pitcher_chn *chn;
+	struct connect_t ct;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return NULL;
+
+	core = chn->core;
+	assert(core);
+	if (!core->chns || !core->pipes)
+		return NULL;
+
+	ct.src = NULL;
+	ct.dst = chn;
+	pitcher_queue_enumerate(core->pipes, __find_source_chn, (void *)&ct);
+	if (!ct.src)
+		return NULL;
+
+	return ct.src;
+}
+
+static struct pitcher_chn *__get_sink_chn(unsigned int chnno)
+{
+	struct pitcher_core *core;
+	struct pitcher_chn *chn;
+	struct connect_t ct;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return NULL;
+
+	core = chn->core;
+	assert(core);
+	if (!core->chns || !core->pipes)
+		return NULL;
+
+	ct.src = chn;
+	ct.dst = NULL;
+	pitcher_queue_enumerate(core->pipes, __find_sink_chn, (void *)&ct);
+	if (!ct.dst)
+		return NULL;
+
+	return ct.dst;
 }
 
 static int __start_chn(unsigned long item, void *arg)
@@ -209,17 +285,17 @@ static int __start_chn(unsigned long item, void *arg)
 	if (!chn)
 		return 0;
 
-	if (chn->enable)
+	if (chn->state == PITCHER_STATE_ACTIVE)
 		return 0;
 
 	ret = pitcher_unit_start(chn->unit);
 	if (!ret) {
-		__set_chn_status(chn, true);
+		__set_chn_status(chn, PITCHER_STATE_ACTIVE);
 		if (chn->pfd.func)
 			pitcher_loop_add_poll_fd(chn->core->loop, &chn->pfd);
 	}
 
-	if (chn->enable)
+	if (chn->state == PITCHER_STATE_ACTIVE)
 		chn->core->enable_count++;
 	chn->core->total_count++;
 
@@ -233,36 +309,71 @@ static int __stop_chn(unsigned long item, void *arg)
 	if (!chn)
 		return 0;
 
-	if (!chn->enable)
+	if (chn->state == PITCHER_STATE_STOPPED)
 		return 0;
 
 	if (chn->pfd.func)
 		pitcher_loop_del_poll_fd(chn->core->loop, &chn->pfd);
 
 	pitcher_unit_stop(chn->unit);
-	__set_chn_status(chn, false);
+	__set_chn_status(chn, PITCHER_STATE_STOPPED);
 
 	return 0;
 }
 
-static int __process_chn_run(struct pitcher_chn *chn)
+static int __process_chn_active(struct pitcher_chn *chn)
 {
 	int ready = 0;
 	int is_end = 0;
 
 	if (!chn)
 		return -RET_E_NULL_POINTER;
-
-	if (!chn->enable)
+	if (chn->state != PITCHER_STATE_ACTIVE)
 		return RET_OK;
 
 	ready = pitcher_unit_check_ready(chn->unit, &is_end);
 	if (ready)
 		pitcher_unit_run(chn->unit);
 
-	if (is_end) {
-		pitcher_unit_stop(chn->unit);
-		__set_chn_status(chn, false);
+	if (is_end)
+		__set_chn_status(chn, PITCHER_STATE_STOPPING);
+
+	return RET_OK;
+}
+
+static int __process_chn_stopping(struct pitcher_chn *chn)
+{
+	struct pitcher_chn *dst;
+
+	if (!chn)
+		return -RET_E_NULL_POINTER;
+	if (chn->state != PITCHER_STATE_STOPPING)
+		return RET_OK;
+
+	dst = __get_sink_chn(chn->chnno);
+	if (dst && dst->state != PITCHER_STATE_STOPPED)
+		return RET_OK;
+
+	pitcher_unit_stop(chn->unit);
+	__set_chn_status(chn, PITCHER_STATE_STOPPED);
+
+	return RET_OK;
+}
+
+static int __process_chn_run(struct pitcher_chn *chn)
+{
+	if (!chn)
+		return -RET_E_NULL_POINTER;
+
+	switch (chn->state) {
+	case PITCHER_STATE_ACTIVE:
+		__process_chn_active(chn);
+		break;
+	case PITCHER_STATE_STOPPING:
+		__process_chn_stopping(chn);
+		break;
+	default:
+		break;
 	}
 
 	return RET_OK;
@@ -276,12 +387,12 @@ static int __run_chn(unsigned long item, void *arg)
 	if (!chn || !ptr)
 		return 0;
 
-	if (!chn->enable)
+	if (chn->state == PITCHER_STATE_STOPPED)
 		return 0;
 
 	__process_chn_run(chn);
 
-	if (chn->enable)
+	if (chn->state != PITCHER_STATE_STOPPED)
 		(*ptr)++;
 
 	return 0;
@@ -313,7 +424,7 @@ static int __poll_func(struct pitcher_poll_fd *pfd,
 	assert(pfd);
 
 	chn = container_of(pfd, struct pitcher_chn, pfd);
-	if (chn->enable) {
+	if (chn->state != PITCHER_STATE_STOPPED) {
 		/*if events == 0, it means timeout*/
 		if (chn->pfd.events & events || !events)
 			__process_chn_run(chn);
@@ -322,7 +433,7 @@ static int __poll_func(struct pitcher_poll_fd *pfd,
 					chn->name, chn->pfd.events, events);
 	}
 
-	if (!chn->enable)
+	if (chn->state == PITCHER_STATE_STOPPED)
 		is_del = true;
 	if (del)
 		*del = is_del;
@@ -416,6 +527,7 @@ int pitcher_register_chn(PitcherContext context,
 	snprintf(chn->name, sizeof(chn->name), "%s", desc->name);
 	chn->chnno = chnno;
 	chn->core = core;
+	__set_chn_status(chn, PITCHER_STATE_STOPPED);
 	list_add_tail(&chn->list, &chns);
 	pitcher_queue_push_back(core->chns, (unsigned long)chn);
 
@@ -535,12 +647,18 @@ void pitcher_put_buffer_idle(unsigned int chnno, struct pitcher_buffer *buffer)
 void pitcher_push_back_output(unsigned int chnno, struct pitcher_buffer *buffer)
 {
 	struct pitcher_chn *chn;
+	int dst;
 
 	chn = __find_chn(chnno);
 	if (!chn)
 		return;
 	if (!buffer)
 		return;
+
+	dst = pitcher_get_sink(chnno);
+	if (dst >= 0 &&
+	    pitcher_get_status(dst) == PITCHER_STATE_STOPPED)
+		pitcher_start_chn(dst);
 
 	pitcher_unit_push_back_output(chn->unit, buffer);
 }
@@ -553,45 +671,40 @@ unsigned int pitcher_get_status(unsigned int chnno)
 	if (!chn)
 		return false;
 
-	return chn->enable;
+	return chn->state;
 }
 
-static int __find_source_chn(unsigned long item, void *arg)
+unsigned int pitcher_is_active(unsigned int chnno)
 {
-	Pipe pipe = (Pipe)item;
-	struct connect_t *ct = arg;
+	struct pitcher_chn *chn;
 
-	if (!pipe || !ct || !ct->dst)
-		return 0;
+	chn = __find_chn(chnno);
+	if (!chn)
+		return false;
 
-	if (pitcher_get_pipe_dst(pipe) == ct->dst)
-		ct->src = pitcher_get_pipe_src(pipe);
-
-	return 0;
+	return chn->state == PITCHER_STATE_ACTIVE;
 }
 
 int pitcher_get_source(unsigned int chnno)
 {
-	struct pitcher_core *core;
 	struct pitcher_chn *chn;
-	struct connect_t ct;
 
-	chn = __find_chn(chnno);
+	chn = __get_source_chn(chnno);
 	if (!chn)
 		return -RET_E_NOT_FOUND;
 
-	core = chn->core;
-	assert(core);
-	if (!core->chns || !core->pipes)
-		return -RET_E_INVAL;
+	return chn->chnno;
+}
 
-	ct.src = NULL;
-	ct.dst = chn;
-	pitcher_queue_enumerate(core->pipes, __find_source_chn, (void *)&ct);
-	if (!ct.src)
+int pitcher_get_sink(unsigned int chnno)
+{
+	struct pitcher_chn *chn;
+
+	chn = __get_sink_chn(chnno);
+	if (!chn)
 		return -RET_E_NOT_FOUND;
 
-	return ct.src->chnno;
+	return chn->chnno;
 }
 
 int pitcher_chn_poll_input(unsigned int chnno)

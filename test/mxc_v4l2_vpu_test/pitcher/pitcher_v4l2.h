@@ -43,6 +43,8 @@ struct v4l2_component_t {
 	void *priv;
 	uint64_t ts_b;
 	uint64_t ts_e;
+	int eos_received;
+	int resolution_change;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;

@@ -26,7 +26,7 @@
 #include "pitcher/platform_8x.h"
 #include "pitcher/convert.h"
 
-#define VERSION_MAJOR		1
+#define VERSION_MAJOR		2
 #define VERSION_MINOR		0
 
 #define MAX_NODE_COUNT		32
@@ -253,58 +253,6 @@ static int unsubcribe_event(int fd)
 	return 0;
 }
 
-static int is_eos(int fd)
-{
-	struct v4l2_event evt;
-	int ret;
-
-	memset(&evt, 0, sizeof(struct v4l2_event));
-	ret = ioctl(fd, VIDIOC_DQEVENT, &evt);
-	if (ret < 0)
-		return 0;
-	if (evt.type == V4L2_EVENT_EOS) {
-		PITCHER_LOG("Receive EOS\n");
-		return 1;
-	}
-
-	return 0;
-}
-
-static int check_eos(int fd)
-{
-	if (!pitcher_poll(fd, POLLPRI, 0))
-		return false;
-	if (is_eos(fd))
-		return true;
-	return false;
-}
-
-static int is_source_change(int fd)
-{
-	struct v4l2_event evt;
-	int ret;
-
-	memset(&evt, 0, sizeof(struct v4l2_event));
-	ret = ioctl(fd, VIDIOC_DQEVENT, &evt);
-	if (ret < 0)
-		return 0;
-	if (evt.type == V4L2_EVENT_SOURCE_CHANGE) {
-		PITCHER_LOG("source change\n");
-		return 1;
-	}
-
-	return 0;
-}
-
-static int check_source_change(int fd)
-{
-	if (!pitcher_poll(fd, POLLPRI, 0))
-		return false;
-	if (is_source_change(fd))
-		return true;
-	return false;
-}
-
 static int is_source_end(int chnno)
 {
 	int source;
@@ -319,7 +267,7 @@ static int is_source_end(int chnno)
 	if (source < 0)
 		return true;
 
-	if (!pitcher_get_status(source))
+	if (!pitcher_is_active(source))
 		return true;
 
 	return false;
@@ -360,6 +308,10 @@ static int is_encoder_output_finish(struct v4l2_component_t *component)
 	if (is_source_end(encoder->output.chnno))
 		stop_enc(component);
 
+	if (component->eos_received) {
+		encoder->capture.eos_received = true;
+		component->eos_received = false;
+	}
 	if (is_force_exit() || encoder->capture.end) {
 		is_end = true;
 		if (!component->frame_count)
@@ -374,8 +326,10 @@ static int is_encoder_capture_finish(struct v4l2_component_t *component)
 	if (!component)
 		return true;
 
-	if (check_eos(component->fd))
+	if (component->eos_received) {
+		component->eos_received = false;
 		return true;
+	}
 
 	return is_force_exit();
 }
@@ -401,6 +355,52 @@ static void sync_decoder_node_info(struct decoder_test_t *decoder)
 		switch_fmt_to_tile(&decoder->node.pixelformat);
 }
 
+static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
+{
+	int ret;
+	int chnno;
+
+	if (!decoder->capture.resolution_change)
+		return RET_OK;
+
+	if (decoder->capture.chnno < 0) {
+		ret = pitcher_register_chn(decoder->node.context,
+						&decoder->capture.desc,
+						&decoder->capture);
+		if (ret < 0) {
+			PITCHER_ERR("regisger %s fail\n",
+					decoder->capture.desc.name);
+			return ret;
+		}
+		decoder->capture.chnno = ret;
+	}
+
+	chnno = decoder->capture.chnno;
+	if (pitcher_get_status(chnno) == PITCHER_STATE_STOPPED) {
+		decoder->capture.width = 0;
+		decoder->capture.height = 0;
+		ret = pitcher_start_chn(chnno);
+		if (ret < 0) {
+			force_exit();
+			return ret;
+		}
+
+		sync_decoder_node_info(decoder);
+		PITCHER_LOG("decoder capture : %d x %d\n",
+			decoder->capture.width, decoder->capture.height);
+		decoder->capture.resolution_change = false;
+
+		return RET_OK;
+	}
+
+	if (!decoder->capture.end) {
+		decoder->capture.end = true;
+		return RET_OK;
+	}
+
+	return RET_OK;
+}
+
 static int is_decoder_output_finish(struct v4l2_component_t *component)
 {
 	struct decoder_test_t *decoder;
@@ -415,31 +415,28 @@ static int is_decoder_output_finish(struct v4l2_component_t *component)
 	if (is_source_end(decoder->output.chnno))
 		stop_dec(component);
 
-	if (is_force_exit() || decoder->capture.end) {
+	if (component->eos_received) {
+		decoder->capture.eos_received = true;
+		component->eos_received = false;
+	}
+	if (component->resolution_change) {
+		component->resolution_change = false;
+		decoder->capture.resolution_change = true;
+	}
+	if (decoder->capture.resolution_change) {
+		ret = handle_decoder_resolution_change(decoder);
+		if (ret < 0)
+			is_end = true;
+	}
+
+	if (is_force_exit() ||
+	    (decoder->capture.end && !decoder->capture.resolution_change)) {
+		PITCHER_LOG("decoder output finish, capture: %d, %d\n",
+				decoder->capture.end,
+				decoder->capture.resolution_change);
 		is_end = true;
 		if (!component->frame_count)
 			force_exit();
-	}
-
-	if (decoder->capture.chnno < 0 && check_source_change(component->fd)) {
-		ret = pitcher_register_chn(decoder->node.context,
-						&decoder->capture.desc,
-						&decoder->capture);
-
-		if (ret < 0) {
-			PITCHER_ERR("regisger %s fail\n",
-					decoder->capture.desc.name);
-		} else {
-			decoder->capture.chnno = ret;
-			ret = pitcher_start_chn(decoder->capture.chnno);
-		}
-		if (ret < 0) {
-			force_exit();
-			is_end = true;
-		}
-
-		sync_decoder_node_info(decoder);
-		PITCHER_LOG("decoder capture : %d x %d\n", decoder->capture.width, decoder->capture.height);
 	}
 
 	return is_end;
@@ -450,8 +447,11 @@ static int is_decoder_capture_finish(struct v4l2_component_t *component)
 	if (!component)
 		return true;
 
-	if (check_eos(component->fd))
+	if (component->eos_received) {
+		if (!component->resolution_change)
+			component->eos_received = false;
 		return true;
+	}
 
 	return is_force_exit();
 }
@@ -560,6 +560,7 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"device", 1, "--device <devnode>\n\t\t\tassign encoder video device node"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
 	{"framemode", 1, "--framemode <level>\n\t\t\tSpecify input frame mode, 1: frame level, 2: non-frame level"},
+	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21, i420"},
 	{NULL, 0, NULL},
 };
 
@@ -588,6 +589,8 @@ static int get_pixelfmt_from_str(const char *str)
 
 	if (!strcasecmp(str, "nv12"))
 		return V4L2_PIX_FMT_NV12;
+	if (!strcasecmp(str, "nv21"))
+		return V4L2_PIX_FMT_NV21;
 	if (!strcasecmp(str, "i420"))
 		return V4L2_PIX_FMT_YUV420;
 	if (!strcasecmp(str, "yuv420p"))
@@ -803,9 +806,7 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 
 	encoder = container_of(node, struct encoder_test_t, node);
 
-	if (src->pixelformat != V4L2_PIX_FMT_NV12)
-		return -RET_E_NOT_MATCH;
-
+	encoder->output.pixelformat = src->pixelformat;
 	encoder->output.width = src->width;
 	encoder->output.height = src->height;
 	encoder->output.bytesperline = src->width;
@@ -1360,6 +1361,12 @@ static int parse_decoder_option(struct test_node *node,
 		decoder->sizeimage = bs * 1024;
 	} else if (!strcasecmp(option->name, "framemode")) {
 		decoder->platform.frame_mode = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "fmt")) {
+		int fmt = get_pixelfmt_from_str(argv[0]);
+
+		if (fmt < 0)
+			return fmt;
+		decoder->node.pixelformat = fmt;
 	}
 
 	return RET_OK;
@@ -1420,7 +1427,7 @@ static int ifile_recycle_buffer(struct pitcher_buffer *buffer,
 	if (!file)
 		return -RET_E_NULL_POINTER;
 
-	if (pitcher_get_status(file->chnno) && !file->end)
+	if (pitcher_is_active(file->chnno) && !file->end)
 		pitcher_put_buffer_idle(file->chnno, buffer);
 	else
 		is_end = true;
@@ -1785,7 +1792,7 @@ static int recycle_convert_buffer(struct pitcher_buffer *buffer,
 	if (!cvrt)
 		return -RET_E_NULL_POINTER;
 
-	if (pitcher_get_status(cvrt->chnno) && !cvrt->end)
+	if (pitcher_is_active(cvrt->chnno) && !cvrt->end)
 		pitcher_put_buffer_idle(cvrt->chnno, buffer);
 	else
 		is_end = true;
@@ -2133,7 +2140,7 @@ static int parser_recycle_buffer(struct pitcher_buffer *buffer,
 	if (!parser)
 		return -RET_E_NULL_POINTER;
 
-	if (pitcher_get_status(parser->chnno) && !parser->end)
+	if (pitcher_is_active(parser->chnno) && !parser->end)
 		pitcher_put_buffer_idle(parser->chnno, buffer);
 	else
 		is_end = true;
@@ -2522,7 +2529,6 @@ static int show_help(int argc, char *argv[])
 {
 	int i;
 
-	printf("mxc_v4l2_vpu_test.out V%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
 	printf("Type 'HELP' to see the list. ");
 	printf("Type 'HELP NAME' to find out more about subcmd 'NAME'\n");
 
@@ -2636,6 +2642,21 @@ static int disconnect_node(struct test_node *src, struct test_node *dst)
 	return pitcher_disconnect(schn, dchn);
 }
 
+static int check_node_is_stopped(struct test_node *node)
+{
+	int chnno = -1;
+
+	chnno = node->get_sink_chnno ? node->get_sink_chnno(node) : -1;
+	if (chnno >= 0 && pitcher_get_status(chnno) != PITCHER_STATE_STOPPED)
+		return false;
+
+	chnno = node->get_source_chnno ? node->get_source_chnno(node) : -1;
+	if (chnno >= 0 && pitcher_get_status(chnno) != PITCHER_STATE_STOPPED)
+		return false;
+
+	return true;
+}
+
 static int check_ctrl_ready(void *arg, int *is_end)
 {
 	int end = true;
@@ -2687,36 +2708,15 @@ static int check_ctrl_ready(void *arg, int *is_end)
 				force_exit();
 			}
 		}
-
-		if (pitcher_get_status(schn) && !pitcher_get_status(dchn)) {
-			ret = pitcher_start_chn(dchn);
-			if (ret < 0) {
-				PITCHER_ERR("start %d fail\n", src->key);
-				end = true;
-				force_exit();
-			}
-		}
 	}
 
 	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
-		int chnno = -1;
-
 		if (!nodes[i])
 			continue;
 
-		if (nodes[i]->get_sink_chnno) {
-			chnno = nodes[i]->get_sink_chnno(nodes[i]);
-			if (chnno >= 0 && pitcher_get_status(chnno)) {
-				end = false;
-				break;
-			}
-		}
-		if (nodes[i]->get_source_chnno) {
-			chnno = nodes[i]->get_source_chnno(nodes[i]);
-			if (chnno >= 0 && pitcher_get_status(chnno)) {
-				end = false;
-				break;
-			}
+		if (!check_node_is_stopped(nodes[i])) {
+			end = false;
+			break;
 		}
 	}
 
@@ -2742,6 +2742,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
+	printf("mxc_v4l2_vpu_test.out V%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
 	if (argc < 2 || !strcasecmp("help", argv[1]))
 		return show_help(argc, argv);
 
