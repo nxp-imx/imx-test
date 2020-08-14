@@ -1105,6 +1105,9 @@ int set_ctrl(int fd, int id, int value)
 		return -RET_E_INVAL;
 	}
 
+	value = max(value, qctrl.minimum);
+	value = min(value, qctrl.maximum);
+
 	memset(&ctrl, 0, sizeof(ctrl));
 	ctrl.id = id;
 	ctrl.value = value;

@@ -12,6 +12,7 @@
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
+#include <limits.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -842,17 +843,50 @@ static int get_encoder_sink_chnno(struct test_node *node)
 	return encoder->output.chnno;
 }
 
+static void validate_h264_profile_level(struct encoder_test_t *encoder)
+{
+	if (encoder->profile == UINT_MAX)
+		encoder->profile = V4L2_MPEG_VIDEO_H264_PROFILE_HIGH;
+	if (encoder->level == UINT_MAX)
+		encoder->level = V4L2_MPEG_VIDEO_H264_LEVEL_4_0;
+}
+
+static void validate_h265_profile_level(struct encoder_test_t *encoder)
+{
+	if (encoder->profile == UINT_MAX)
+		encoder->profile = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN;
+	if (encoder->level == UINT_MAX)
+		encoder->level = V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1;
+}
+
 static int set_encoder_parameters(struct encoder_test_t *encoder)
 {
 	int fd;
+	int profile_id;
+	int level_id;
 	int ret;
 
 	if (!encoder || encoder->fd < 0)
 		return -RET_E_INVAL;
 
 	fd = encoder->fd;
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_PROFILE, encoder->profile);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_LEVEL, encoder->level);
+
+	switch (encoder->capture.pixelformat) {
+	case V4L2_PIX_FMT_H264:
+		profile_id = V4L2_CID_MPEG_VIDEO_H264_PROFILE;
+		level_id = V4L2_CID_MPEG_VIDEO_H264_LEVEL;
+		validate_h264_profile_level(encoder);
+		break;
+	case V4L2_PIX_FMT_HEVC:
+		profile_id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+		level_id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
+		validate_h265_profile_level(encoder);
+		break;
+	default:
+		return -RET_E_INVAL;
+	}
+	set_ctrl(fd, profile_id, encoder->profile);
+	set_ctrl(fd, level_id, encoder->level);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->target_bitrate);
 	if (encoder->peak_bitrate)
@@ -1034,8 +1068,8 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->node.init_node = init_encoder_node;
 	encoder->node.free_node = free_encoder_node;
 	encoder->bitrate_mode = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR;
-	encoder->profile = V4L2_MPEG_VIDEO_H264_PROFILE_HIGH;
-	encoder->level = V4L2_MPEG_VIDEO_H264_LEVEL_5_0;
+	encoder->profile = UINT_MAX;
+	encoder->level = UINT_MAX;
 	encoder->gop = 30;
 	encoder->bframes = 2;
 	encoder->qp = 25;

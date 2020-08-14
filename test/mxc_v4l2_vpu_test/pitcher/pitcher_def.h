@@ -47,6 +47,14 @@ enum {
 	RET_E_NOT_SUPPORT,
 };
 
+#ifndef max
+#define max(a,b)        (((a) < (b)) ? (b) : (a))
+#endif
+
+#ifndef min
+#define min(a,b)        (((a) > (b)) ? (b) : (a))
+#endif
+
 #ifndef SAFE_RELEASE
 #define SAFE_RELEASE(p, func)	\
 	do {\
