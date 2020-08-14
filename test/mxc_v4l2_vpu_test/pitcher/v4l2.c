@@ -1127,6 +1127,7 @@ uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 	switch (fmt) {
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_YUV420:
+	case V4L2_PIX_FMT_NV21:
 		size = ((width * 12) >> 3) * height;
 		break;
 	case V4L2_PIX_FMT_YUYV:
