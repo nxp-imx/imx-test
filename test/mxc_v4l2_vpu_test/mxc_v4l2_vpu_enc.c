@@ -80,7 +80,6 @@ struct encoder_test_t {
 	uint32_t target_bitrate;
 	uint32_t peak_bitrate;
 	uint32_t qp;
-	uint32_t low_latency_mode;
 	struct v4l2_rect crop;
 	uint32_t bframes;
 
@@ -548,7 +547,6 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
 	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is b"},
 	{"peak", 1, "--peak <br>\n\t\t\tset encoder peak bitrate, the unit is b"},
-	{"lowlatency", 1, "--lowlatency <mode>\n\t\t\tenable low latency mode, it will disable the display re-ordering"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265"},
@@ -894,7 +892,6 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, encoder->qp);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_ASO, encoder->low_latency_mode);
 
 	if (encoder->crop.width && encoder->crop.height) {
 		struct v4l2_crop crop;
@@ -1071,10 +1068,9 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->profile = UINT_MAX;
 	encoder->level = UINT_MAX;
 	encoder->gop = 30;
-	encoder->bframes = 2;
+	encoder->bframes = 0;
 	encoder->qp = 25;
 	encoder->target_bitrate = 2 * 1024 * 1024;
-	encoder->low_latency_mode = 1;
 	encoder->output.chnno = -1;
 	encoder->capture.chnno = -1;
 
@@ -1127,8 +1123,6 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->target_bitrate = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "peak")) {
 		encoder->peak_bitrate = strtol(argv[0], NULL, 0);
-	} else if (!strcasecmp(option->name, "lowlatency")) {
-		encoder->low_latency_mode = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
 		encoder->crop.left = strtol(argv[0], NULL, 0);
 		encoder->crop.top = strtol(argv[1], NULL, 0);
