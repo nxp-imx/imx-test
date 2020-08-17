@@ -672,7 +672,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	mem = aligned_vaddr + (g_paddr - aligned_paddr);
+	mem = (char *)aligned_vaddr + (g_paddr - aligned_paddr);
 
 	if (g_is_write) {
 		write_mem(mem, g_value, g_size);
