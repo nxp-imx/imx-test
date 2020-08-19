@@ -256,9 +256,9 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
 {
 	struct pitcher_parser *parser;
 	char *current = NULL;
-	char scode[] = {0x0, 0x0, 0x0, 0x1};
-	int64_t next[] = {0x0, 0x0, 0x0, 0x1};
-	const int64_t scode_size = ARRAY_SIZE(scode);
+	char scode[] = {0x0, 0x0, 0x1};
+	int64_t next[] = {0x0, 0x0, 0x1};
+	int64_t scode_size = ARRAY_SIZE(scode);
 	int64_t start = -1;
 	int64_t offset = 0;
 	int64_t end = 0;
@@ -276,11 +276,16 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
 
 	PITCHER_LOG("total file size: 0x%lx\n", left_bytes);
 	while (left_bytes > 0) {
+		scode_size = ARRAY_SIZE(scode);
 		offset = kmp_search(current,
 					left_bytes,
 					scode, scode_size, next);
 		if (offset < 0)
 			break;
+		if (offset > 0 && current[offset - 1] == 0x0) {
+			offset--;
+			scode_size++;
+		}
 		if (start < 0)
 			start = offset;
 
