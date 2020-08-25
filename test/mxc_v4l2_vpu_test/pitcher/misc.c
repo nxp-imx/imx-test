@@ -83,3 +83,4 @@ long pitcher_get_file_size(const char *filename)
 
 	return length;
 }
+

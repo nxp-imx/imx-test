@@ -14,7 +14,7 @@ extern "C"
 
 #include <linux/videodev2.h>
 
-#define MAX_BUFFER_COUNT	16
+#define MAX_BUFFER_COUNT	32
 
 struct v4l2_component_t {
 	int chnno;

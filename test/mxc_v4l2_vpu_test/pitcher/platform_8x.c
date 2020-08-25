@@ -33,3 +33,4 @@ int set_decoder_parameter_8x(void *arg)
 
 	return ret;
 }
+

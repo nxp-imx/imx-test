@@ -323,3 +323,4 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
 
 	return RET_OK;
 }
+

@@ -315,3 +315,4 @@ void convert_frame(struct pitcher_buffer *src,
 		break;
 	}
 }
+

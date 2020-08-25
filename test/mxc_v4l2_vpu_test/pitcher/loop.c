@@ -437,4 +437,3 @@ int pitcher_loop_del_task(Loop l, struct pitcher_timer_task *task)
 
 	return RET_OK;
 }
-

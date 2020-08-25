@@ -33,4 +33,3 @@ int h264_parse(Parser p, void *arg)
 {
 	return pitcher_parse_h26x(p, h264_check_frame_nal);
 }
-

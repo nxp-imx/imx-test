@@ -1152,3 +1152,4 @@ uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 
 	return size;
 }
+

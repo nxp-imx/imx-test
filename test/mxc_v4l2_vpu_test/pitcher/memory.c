@@ -53,3 +53,4 @@ long pitcher_memory_count(void)
 {
 	return total_count;
 }
+

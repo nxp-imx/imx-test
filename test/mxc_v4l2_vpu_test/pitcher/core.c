@@ -793,3 +793,4 @@ int pitcher_set_skip(unsigned int src, unsigned int dst,
 			ct.src->name, ct.dst->name, numerator, denominator);
 	return pitcher_set_pipe_skip((Pipe)ct.priv, numerator, denominator);
 }
+

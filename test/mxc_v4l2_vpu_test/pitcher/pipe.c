@@ -220,3 +220,4 @@ int pitcher_set_pipe_notify(Pipe p, notify_callback notify)
 
 	return RET_OK;
 }
+

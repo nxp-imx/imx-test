@@ -146,3 +146,4 @@ unsigned int pitcher_get_buffer_refcount(struct pitcher_buffer *buffer)
 	exb = container_of(buffer, struct ext_buffer, buffer);
 	return pitcher_get_obj_refcount(&exb->obj);
 }
+

@@ -97,3 +97,4 @@ unsigned int pitcher_get_obj_refcount(struct pitcher_obj *obj)
 
 	return obj->refcount;
 }
+
