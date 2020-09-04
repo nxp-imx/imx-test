@@ -16,6 +16,7 @@
 #include "parse.h"
 #include "h264_parse.h"
 #include "h265_parse.h"
+#include "jpeg_parse.h"
 
 struct parse_handler {
 	unsigned int format;
@@ -195,6 +196,10 @@ struct parse_handler parse_handler_table[] = {
 	{.format = V4L2_PIX_FMT_HEVC,
 	 .handle_parse = h265_parse,
 	},
+	{.format = V4L2_PIX_FMT_JPEG,
+	 .handle_parse = jpeg_parse,
+	},
+	{0, 0},
 };
 
 struct parse_handler *find_handler(unsigned int fmt)
@@ -307,7 +312,6 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
 							0);
 			start = end;
 		}
-
 	}
 
 	end = parser->size;

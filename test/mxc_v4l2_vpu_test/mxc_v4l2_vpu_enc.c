@@ -2729,12 +2729,6 @@ static int check_ctrl_ready(void *arg, int *is_end)
 				end = true;
 				force_exit();
 			}
-			ret = pitcher_start_chn(dchn);
-			if (ret < 0) {
-				PITCHER_ERR("start %d fail\n", dst->key);
-				end = true;
-				force_exit();
-			}
 		}
 	}
 
