@@ -46,7 +46,7 @@
 /* Helper Macro */
 #define NUM_PLANES				3
 #define TEST_BUFFER_NUM			3
-#define NUM_SENSORS				8
+#define NUM_SENSORS				16
 #define NUM_CARDS				8
 #define DEFAULT					4
 #define WIDTH					1280
@@ -55,6 +55,7 @@
 #define INFO_LEVEL				4
 #define DBG_LEVEL				5
 #define ERR_LEVEL				6
+#define CAM_MASK				0x0001
 
 #define v4l2_printf(LEVEL, fmt, args...)  \
 do {                                      \
@@ -511,7 +512,7 @@ static void v4l2_device_init(struct v4l2_device *v4l2)
 	get_fmt_name(g_cap_fmt);
 
 	for (i = 0; i < NUM_SENSORS; i++) {
-		if ((g_cam >> i) & 0x01) {
+		if ((g_cam >> i) & CAM_MASK) {
 			init_video_channel(i, video_ch);
 			++g_cam_num;
 		}
@@ -562,7 +563,7 @@ static int open_save_file(struct video_channel *video_ch)
 		return 0;
 
 	for (i = 0; i < NUM_SENSORS; i++) {
-		if ((g_cam >> i) & 0x01) {
+		if ((g_cam >> i) & CAM_MASK) {
 			fd = open(video_ch[i].save_file_name, O_RDWR | O_CREAT, 0660);
 			if (fd < 0) {
 				 v4l2_err("Channel[%d] unable to create recording file\n", i);
@@ -615,7 +616,7 @@ static int open_v4l2_device(struct v4l2_device *v4l2)
 	int fd, i, ret;
 
 	for (i = 0; i < NUM_SENSORS; i++) {
-		if ((g_cam >> i) & 0x01) {
+		if ((g_cam >> i) & CAM_MASK) {
 			fd = open(video_ch[i].v4l_dev_name, O_RDWR, 0);
 			if (fd < 0) {
 				v4l2_err("unable to open v4l2 %s for capture device.\n",
@@ -653,7 +654,7 @@ static void close_save_file(struct video_channel *video_ch)
 		return;
 
 	for (i = 0; i < NUM_SENSORS; i++)
-		if (((g_cam >> i) & 0x1) && (video_ch[i].saved_file_fd > 0))
+		if (((g_cam >> i) & CAM_MASK) && (video_ch[i].saved_file_fd > 0))
 			close(video_ch[i].saved_file_fd);
 }
 
@@ -982,7 +983,7 @@ static int config_video_channel(struct video_channel *video_ch,
 	}
 
 	cam_num = 0;
-	for (i = 0; i < 8; i++) {
+	for (i = 0; i < NUM_SENSORS; i++) {
 		if (video_ch[i].init) {
 			video_ch[i].out_height = y_out;
 			video_ch[i].out_width = x_out;
@@ -1385,7 +1386,7 @@ static int v4l2_device_prepare(struct v4l2_device *v4l2,
 	}
 
 	for (i = 0; i < NUM_SENSORS; i++) {
-		if ((g_cam >> i) & 0x01) {
+		if ((g_cam >> i) & CAM_MASK) {
 			ret = v4l2_setup_dev(i, video_ch);
 			if (ret < 0) {
 				v4l2_err("video_ch[%d] setup fail\n", i);
@@ -1705,7 +1706,7 @@ static void close_v4l2_device(struct v4l2_device *v4l2)
 	int i;
 
 	for (i = 0; i < NUM_SENSORS; i++) {
-		if (((g_cam >> i) & 0x1) && (video_ch[i].v4l_fd > 0))
+		if (((g_cam >> i) & CAM_MASK) && (video_ch[i].v4l_fd > 0))
 			close(video_ch[i].v4l_fd);
 	}
 }
