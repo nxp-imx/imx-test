@@ -538,6 +538,6 @@ int main(int argc, char *argv[])
 
 	return 0;
 usage:
-	printf(usage);
+	printf("%s", usage);
 	return -1;
 }
