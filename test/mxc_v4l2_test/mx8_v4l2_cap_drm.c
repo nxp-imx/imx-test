@@ -957,8 +957,8 @@ static int config_video_channel(struct video_channel *video_ch,
 		y_offset[3] = y_out;
 		x_offset[4] = x_out;
 		y_offset[4] = y_out;
-		x_offset[4] = x_out * 2;
-		y_offset[4] = y_out;
+		x_offset[5] = x_out * 2;
+		y_offset[5] = y_out;
 	} else if ((g_cam_num == 7) || (g_cam_num == 8)) {
 		x_out = x_res / 4;
 		y_out = y_res / 2;
