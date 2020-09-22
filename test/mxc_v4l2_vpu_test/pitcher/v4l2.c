@@ -164,6 +164,35 @@ static int __get_v4l2_min_buffers(int fd, uint32_t type)
 	return ctrl.value;
 }
 
+static int __set_crop(struct v4l2_component_t *component)
+{
+
+	struct v4l2_crop crop;
+	int ret;
+
+	assert(component && component->fd >= 0);
+
+	if (!component->crop.width || !component->crop.height)
+		return 0;
+
+	crop.type = component->type;
+	crop.c.left = component->crop.left;
+	crop.c.top = component->crop.top;
+	crop.c.width = component->crop.width;
+	crop.c.height = component->crop.height;
+	ret = ioctl(component->fd, VIDIOC_S_CROP, &crop);
+	if (ret < 0) {
+		PITCHER_ERR("fail to set crop (%d, %d) %d x %d\n",
+					component->crop.left,
+					component->crop.top,
+					component->crop.width,
+					component->crop.height);
+		return -RET_E_INVAL;
+	}
+
+	return 0;
+}
+
 static int __req_v4l2_buffer(struct v4l2_component_t *component)
 {
 	int fd;
@@ -176,6 +205,9 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 
 	min_buffer_count = __get_v4l2_min_buffers(component->fd,
 							component->type);
+	PITCHER_LOG("%s min buffers : %d\n",
+		V4L2_TYPE_IS_OUTPUT(component->type) ? "output" : "capture",
+		min_buffer_count);
 	if (component->buffer_count < min_buffer_count)
 		component->buffer_count = min_buffer_count;
 	if (component->buffer_count > MAX_BUFFER_COUNT)
@@ -190,6 +222,12 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 		PITCHER_ERR("VIDIOC_REQBUFS fail, error : %s\n",
 				strerror(errno));
 		return -RET_E_INVAL;
+	}
+	if (req_bufs.count > MAX_BUFFER_COUNT) {
+		PITCHER_ERR("v4l2 buffer count(%d) is out of range(%d)\n",
+				req_bufs.count, MAX_BUFFER_COUNT);
+		req_bufs.count = 0;
+		ioctl(fd, VIDIOC_REQBUFS, &req_bufs);
 	}
 	component->buffer_count = req_bufs.count;
 
@@ -258,9 +296,11 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 
 		if (v4lbuf.flags & V4L2_BUF_FLAG_LAST
 			|| buffer->planes[0].bytesused == 0) {
+			PITCHER_LOG("LAST BUFFER, flags = 0x%x, bytesused = %ld\n", v4lbuf.flags, buffer->planes[0].bytesused);
 			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
 		}
-		component->frame_count++;
+		if (buffer->planes[0].bytesused)
+			component->frame_count++;
 	}
 
 	return pitcher_get_buffer(buffer);
@@ -621,6 +661,8 @@ static int __init_v4l2(struct v4l2_component_t *component)
 		PITCHER_ERR("set fmt fail\n");
 		return ret;
 	}
+
+	__set_crop(component);
 
 	ret = __set_v4l2_fps(component);
 	if (ret < 0) {
@@ -1101,7 +1143,7 @@ int set_ctrl(int fd, int id, int value)
 	qctrl.id = id;
 	ret = ioctl(fd, VIDIOC_QUERYCTRL, &qctrl);
 	if (ret < 0) {
-		PITCHER_ERR("query ctrl(%d) fail\n", id);
+		PITCHER_ERR("query ctrl(%d) fail, %s, %d\n", id, strerror(errno), errno);
 		return -RET_E_INVAL;
 	}
 

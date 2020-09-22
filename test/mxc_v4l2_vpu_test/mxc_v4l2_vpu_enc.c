@@ -80,7 +80,6 @@ struct encoder_test_t {
 	uint32_t target_bitrate;
 	uint32_t peak_bitrate;
 	uint32_t qp;
-	struct v4l2_rect crop;
 	uint32_t bframes;
 
 	const char *devnode;
@@ -386,8 +385,9 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 		}
 
 		sync_decoder_node_info(decoder);
-		PITCHER_LOG("decoder capture : %d x %d\n",
-			decoder->capture.width, decoder->capture.height);
+		PITCHER_LOG("decoder capture : %d x %d, count = %ld\n",
+			decoder->capture.width, decoder->capture.height,
+			decoder->capture.frame_count);
 		decoder->capture.resolution_change = false;
 
 		return RET_OK;
@@ -862,7 +862,6 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	int fd;
 	int profile_id;
 	int level_id;
-	int ret;
 
 	if (!encoder || encoder->fd < 0)
 		return -RET_E_INVAL;
@@ -892,25 +891,6 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, encoder->qp);
-
-	if (encoder->crop.width && encoder->crop.height) {
-		struct v4l2_crop crop;
-
-		crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		crop.c.left = encoder->crop.left;
-		crop.c.top = encoder->crop.top;
-		crop.c.width = encoder->crop.width;
-		crop.c.height = encoder->crop.height;
-		ret = ioctl(fd, VIDIOC_S_CROP, &crop);
-		if (ret < 0) {
-			PITCHER_ERR("fail to set crop (%d, %d) %d x %d\n",
-					encoder->crop.left,
-					encoder->crop.top,
-					encoder->crop.width,
-					encoder->crop.height);
-			return -RET_E_INVAL;
-		}
-	}
 
 	return RET_OK;
 }
@@ -993,17 +973,21 @@ static int init_encoder_node(struct test_node *node)
 	snprintf(encoder->output.desc.name, sizeof(encoder->output.desc.name),
 			"encoder output.%d", encoder->node.key);
 
-	if (encoder->crop.left + encoder->crop.width > encoder->output.width) {
+	if (encoder->output.crop.left + encoder->output.crop.width > encoder->output.width) {
 		PITCHER_LOG("invalid crop (%d, %d) %d x %d\n",
-				encoder->crop.left, encoder->crop.top,
-				encoder->crop.width, encoder->crop.height);
+				encoder->output.crop.left,
+				encoder->output.crop.top,
+				encoder->output.crop.width,
+				encoder->output.crop.height);
 		SAFE_CLOSE(encoder->fd, close);
 		return -RET_E_INVAL;
 	}
-	if (encoder->crop.top + encoder->crop.height > encoder->output.height) {
+	if (encoder->output.crop.top + encoder->output.crop.height > encoder->output.height) {
 		PITCHER_LOG("invalid crop (%d, %d) %d x %d\n",
-				encoder->crop.left, encoder->crop.top,
-				encoder->crop.width, encoder->crop.height);
+				encoder->output.crop.left,
+				encoder->output.crop.top,
+				encoder->output.crop.width,
+				encoder->output.crop.height);
 		SAFE_CLOSE(encoder->fd, close);
 		return -RET_E_INVAL;
 	}
@@ -1012,11 +996,11 @@ static int init_encoder_node(struct test_node *node)
 		encoder->capture.width = encoder->output.width;
 	if (encoder->capture.height > encoder->output.height)
 		encoder->capture.height = encoder->output.height;
-	if (encoder->crop.width && encoder->capture.width > encoder->crop.width)
-		encoder->capture.width = encoder->crop.width;
-	if (encoder->crop.height &&
-			encoder->capture.height > encoder->crop.height)
-		encoder->capture.height = encoder->crop.height;
+	if (encoder->output.crop.width && encoder->capture.width > encoder->output.crop.width)
+		encoder->capture.width = encoder->output.crop.width;
+	if (encoder->output.crop.height &&
+			encoder->capture.height > encoder->output.crop.height)
+		encoder->capture.height = encoder->output.crop.height;
 
 	ret = pitcher_register_chn(encoder->node.context,
 				&encoder->capture.desc,
@@ -1124,10 +1108,10 @@ static int parse_encoder_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "peak")) {
 		encoder->peak_bitrate = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
-		encoder->crop.left = strtol(argv[0], NULL, 0);
-		encoder->crop.top = strtol(argv[1], NULL, 0);
-		encoder->crop.width = strtol(argv[2], NULL, 0);
-		encoder->crop.height = strtol(argv[3], NULL, 0);
+		encoder->output.crop.left = strtol(argv[0], NULL, 0);
+		encoder->output.crop.top = strtol(argv[1], NULL, 0);
+		encoder->output.crop.width = strtol(argv[2], NULL, 0);
+		encoder->output.crop.height = strtol(argv[3], NULL, 0);
 	} else if (!strcasecmp(option->name, "fmt")) {
 		int fmt = get_pixelfmt_from_str(argv[0]);
 
@@ -1237,7 +1221,8 @@ static int init_decoder_platform(struct decoder_test_t *decoder)
 	struct v4l2_capability cap;
 
 	ioctl(decoder->fd, VIDIOC_QUERYCAP, &cap);
-	if (!strcasecmp((const char*)cap.driver, "vpu B0")) {
+	if (!strcasecmp((const char*)cap.driver, "vpu B0") ||
+	    !strcasecmp((const char*)cap.driver, "imx vpu decoder")) {
 		decoder->platform.type = IMX_8X;
 		decoder->platform.set_decoder_parameter = set_decoder_parameter_8x;
 	} else if (!strcasecmp((const char*)cap.driver, "vsi_v4l2")) {
@@ -1265,6 +1250,11 @@ static int init_decoder_node(struct test_node *node)
 
 	decoder = container_of(node, struct decoder_test_t, node);
 	decoder->capture.pixelformat = decoder->node.pixelformat;
+	PITCHER_LOG("decode capture format: %c%c%c%c\n",
+			decoder->capture.pixelformat,
+			decoder->capture.pixelformat >> 8,
+			decoder->capture.pixelformat >> 16,
+			decoder->capture.pixelformat >> 24);
 	if (decoder->devnode) {
 		decoder->fd = open(decoder->devnode, O_RDWR | O_NONBLOCK);
 		if (decoder->fd >= 0 &&
@@ -1912,6 +1902,10 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 	if (!cvrt || !pbuf)
 		return -RET_E_INVAL;
 
+	if (pbuf->planes[0].bytesused == 0) {
+		SAFE_RELEASE(pbuf, pitcher_put_buffer);
+		return 0;
+	}
 
 	if (cvrt->ifmt != cvrt->node.pixelformat) {
 		struct pitcher_buffer *buffer;

@@ -25,6 +25,7 @@ struct v4l2_component_t {
 	uint32_t pixelformat;
 	uint32_t width;
 	uint32_t height;
+	struct v4l2_rect crop;
 	uint32_t framerate;
 	uint32_t bytesperline;
 	uint32_t sizeimage;
