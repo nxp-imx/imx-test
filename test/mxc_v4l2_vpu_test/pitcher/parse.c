@@ -17,6 +17,9 @@
 #include "h264_parse.h"
 #include "h265_parse.h"
 #include "jpeg_parse.h"
+#ifdef VSI_PARSE
+#include "vsi_parse.h"
+#endif
 
 struct parse_handler {
 	unsigned int format;
@@ -190,6 +193,24 @@ void pitcher_parser_show(Parser p)
 }
 
 struct parse_handler parse_handler_table[] = {
+#ifdef VSI_PARSE
+	{.format = V4L2_PIX_FMT_H264,
+	 .handle_parse = vsi_parse,
+	},
+	{.format = V4L2_PIX_FMT_HEVC,
+	 .handle_parse = vsi_parse,
+	},
+	{.format = V4L2_PIX_FMT_VP8,
+	 .handle_parse = vsi_parse,
+	},
+	{.format = V4L2_PIX_FMT_VP9,
+	 .handle_parse = vsi_parse,
+	},
+	{.format = V4L2_PIX_FMT_MPEG2,
+	 .handle_parse = vsi_parse,
+	},
+	{0, 0},
+#else
 	{.format = V4L2_PIX_FMT_H264,
 	 .handle_parse = h264_parse,
 	},
@@ -200,6 +221,7 @@ struct parse_handler parse_handler_table[] = {
 	 .handle_parse = jpeg_parse,
 	},
 	{0, 0},
+#endif
 };
 
 struct parse_handler *find_handler(unsigned int fmt)

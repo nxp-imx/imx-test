@@ -7,6 +7,7 @@
  */
 #ifndef _INCLUDE_PARSE_H
 #define _INCLUDE_PARSE_H
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -16,7 +17,9 @@ extern "C"
 #include "list.h"
 
 typedef void *Parser;
-
+#ifdef VSI_PARSE
+typedef void *vsi_parser;
+#endif
 struct pitcher_frame {
 	struct list_head list;
 	unsigned int idx;
@@ -32,6 +35,9 @@ struct pitcher_parser {
 	unsigned long number;
 	char *virt;
 	unsigned long size;
+#ifdef VSI_PARSE
+	vsi_parser *h;
+#endif
 };
 
 struct pitcher_parser *pitcher_new_parser(void);

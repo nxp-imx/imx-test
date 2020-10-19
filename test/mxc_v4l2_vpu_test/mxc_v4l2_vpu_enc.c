@@ -26,7 +26,9 @@
 #include "pitcher/platform.h"
 #include "pitcher/platform_8x.h"
 #include "pitcher/convert.h"
-
+#ifdef VSI_PARSE
+#include "pitcher/vsi_parse.h"
+#endif
 #define VERSION_MAJOR		2
 #define VERSION_MINOR		0
 
@@ -152,6 +154,9 @@ struct parser_test_t {
 	int show;
 
 	Parser p;
+#ifdef VSI_PARSE
+	vsi_parser h;
+#endif
 };
 
 struct mxc_vpu_test_option
@@ -616,6 +621,8 @@ static int get_pixelfmt_from_str(const char *str)
 		return V4L2_PIX_FMT_VC1_ANNEX_G;
 	if (!strcasecmp(str, "xvid"))
 		return V4L2_PIX_FMT_XVID;
+	if (!strcasecmp(str, "vp9"))
+		return V4L2_PIX_FMT_VP9;
 	if (!strcasecmp(str, "vp8"))
 		return V4L2_PIX_FMT_VP8;
 	if (!strcasecmp(str, "vp6"))
@@ -1167,6 +1174,7 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 	case V4L2_PIX_FMT_VC1_ANNEX_G:
 	case V4L2_PIX_FMT_XVID:
 	case V4L2_PIX_FMT_VP8:
+	case V4L2_PIX_FMT_VP9:
 	case VPU_PIX_FMT_VP6:
 	case VPU_PIX_FMT_AVS:
 	case VPU_PIX_FMT_RV:
@@ -2242,6 +2250,10 @@ static int init_parser_node(struct test_node *node)
 	p.number = parser->frame_num;
 	p.virt = parser->virt;
 	p.size = parser->size;
+#ifdef VSI_PARSE
+	parser->h = (vsi_parser)ByteStreamParserOpen(parser->filename, 0);
+	p.h = parser->h;
+#endif
 
 	pitcher_init_parser(&p, parser->p);
 
@@ -2292,6 +2304,9 @@ static void free_parser_node(struct test_node *node)
 	}
 	SAFE_CLOSE(parser->fd, close);
 	SAFE_RELEASE(parser->p, pitcher_del_parser);
+#ifdef VSI_PARSE
+	SAFE_RELEASE(parser->h, ByteStreamParserClose);
+#endif
 	SAFE_RELEASE(parser, pitcher_free);
 }
 
@@ -2329,7 +2344,6 @@ static int parse_parser_option(struct test_node *node,
 		return -RET_E_INVAL;
 
 	parser = container_of(node, struct parser_test_t, node);
-
 	if (!strcasecmp(option->name, "key")) {
 		parser->node.key = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "name")) {
