@@ -235,7 +235,7 @@ int main(int argc, const char **argv)
 
 	double in_clock, out_clock;
 
-	int clock_diff;
+	double clock_diff;
 
 	char *p_kdiv;
 	int kdiv, kdiv_new, delta_kdiv;
@@ -663,20 +663,20 @@ int main(int argc, const char **argv)
 		}
 
 		if (count > 0) {
-			clock_diff = (int)out_clock  - (int)(in_clock * conf.out_rate / conf.in_rate);
-			printf("in_clock %f, out_clock %f, diff %d\n", in_clock, out_clock, clock_diff);
+			clock_diff = (double)out_clock  - (double)(in_clock * conf.out_rate / conf.in_rate);
+			printf("in_clock %f, out_clock %f, diff %f\n", in_clock, out_clock, clock_diff);
 			if (clock_diff > 1000) {
 				printf("there may be wrong setting for rate & ratio\n");
 				goto fail;
 			}
 
-			if (clock_diff > 0) {
+			if (clock_diff > 0.01) {
 				memset(buf, 0, sizeof(buf));
 				lseek(fd_pll_k, 0, SEEK_SET);
 				snprintf(buf, sizeof(buf)-1, "%d", (0 - conf.step));
 				write(fd_pll_k, buf, sizeof(buf)-1);
 				stable_count = 0;
-			} else if (clock_diff < 0){
+			} else if (clock_diff < -0.01){
 				memset(buf, 0, sizeof(buf));
 				lseek(fd_pll_k, 0, SEEK_SET);
 				snprintf(buf, sizeof(buf)-1, "%d", conf.step);
