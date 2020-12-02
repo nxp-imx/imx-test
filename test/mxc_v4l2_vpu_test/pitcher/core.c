@@ -46,6 +46,7 @@ struct pitcher_chn {
 	struct list_head list;
 	char name[64];
 	unsigned int chnno;
+	unsigned int error;
 	Unit unit;
 	unsigned int state;
 	struct pitcher_poll_fd pfd;
@@ -443,6 +444,8 @@ static int __poll_func(struct pitcher_poll_fd *pfd,
 		else
 			PITCHER_ERR("[%s] want event: 0x%x, but 0x%x\n",
 					chn->name, chn->pfd.events, events);
+		if (events & POLLERR)
+			chn->error = 1;
 	}
 
 	if (chn->state == PITCHER_STATE_STOPPED)
@@ -695,6 +698,17 @@ unsigned int pitcher_is_active(unsigned int chnno)
 		return false;
 
 	return chn->state == PITCHER_STATE_ACTIVE;
+}
+
+unsigned int pitcher_is_error(unsigned int chnno)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return 1;
+
+	return chn->error;
 }
 
 int pitcher_get_source(unsigned int chnno)

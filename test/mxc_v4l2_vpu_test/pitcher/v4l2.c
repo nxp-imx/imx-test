@@ -47,6 +47,10 @@ static int __is_v4l2_end(struct v4l2_component_t *component)
 		component->end = true;
 		return true;
 	}
+	if (pitcher_is_error(component->chnno)) {
+		component->end = true;
+		return true;
+	}
 
 	return false;
 }
