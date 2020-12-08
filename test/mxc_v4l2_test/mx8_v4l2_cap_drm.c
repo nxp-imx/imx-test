@@ -264,6 +264,7 @@ static void print_help(const char *name)
 	       " -l <device support list>\n"
 	       " -log <log level, 6 will show all message>\n"
 	       " -cam <device index> 0bxxxx,xxxx\n"
+	       " -crop <left top width height>, left: left corner coordinate, top: Upper corner coordinate, width: crop width, height: crop height\n"
 	       " -d \"/dev/videoX\" if user use this option, -cam should be 1\n"
 		   " -p test performance, need to combine with \"-of\" option\n"
 		   " -m <mode> specify camera sensor capture mode(mode:0, 1, 2, 3, 4)\n"
@@ -281,6 +282,7 @@ static void print_help(const char *name)
 	       "./mx8_cap -cam 255 -of  capture data from video0~7 and save to 0~7.BX24\n"
 	       "./mx8_cap -cam 0xff -of capture data from video0~7 and save to 0~7.BX24\n"
 	       "./mx8_cap -cam 1 -fmt NV12 -of capture data from video0 and save to 0.NV12\n"
+	       "./mx8_cap -cam 1 -ow 1920 -oh 1080 -crop 0 0 640 480"
 	       "./mx8_cap -cam 1 -of -p test video0 performace\n", name);
 }
 
