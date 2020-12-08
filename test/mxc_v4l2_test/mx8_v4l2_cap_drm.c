@@ -189,7 +189,12 @@ static char g_fmt_name[10];
 
 static bool g_cap_hfilp;
 static bool g_cap_vfilp;
+static bool g_crop_en;
 static int32_t g_cap_alpha;
+static int32_t g_crop_left;
+static int32_t g_crop_top;
+static int32_t g_crop_width;
+static int32_t g_crop_height;
 
 /*
  *
@@ -242,6 +247,12 @@ static void global_vars_init(void)
 	g_cap_hfilp = false;
 	g_cap_vfilp = false;
 	g_cap_alpha = 0;
+
+	g_crop_en = false;
+	g_crop_left = 0;
+	g_crop_top = 0;
+	g_crop_width  = WIDTH;
+	g_crop_height = HEIGHT;
 }
 
 static void print_help(const char *name)
@@ -427,6 +438,12 @@ static int parse_cmdline(int argc, const char *argv[])
 			g_cap_vfilp = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-alpha") == 0) {
 			g_cap_alpha = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-crop") == 0) {
+			g_crop_en = true;
+			g_crop_left = atoi(argv[++i]);
+			g_crop_top  = atoi(argv[++i]);
+			g_crop_width = atoi(argv[++i]);
+			g_crop_height = atoi(argv[++i]);
 		} else {
 			print_help(argv[0]);
 			return -1;
@@ -1059,6 +1076,7 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	struct v4l2_format fmt;
 	struct v4l2_streamparm parm;
 	struct v4l2_control ctrl;
+	struct v4l2_selection sel;
 	int fd = video_ch[ch_id].v4l_fd;
 	int ret;
 
@@ -1148,6 +1166,32 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 	if (ret < 0) {
 		v4l2_err("channel[%d] VIDIOC_S_CTRL set alpha failed\n", ch_id);
 		return ret;
+	}
+
+	if (g_crop_en) {
+		memset(&sel, 0, sizeof(sel));
+		sel.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		sel.target = V4L2_SEL_TGT_COMPOSE;
+		sel.r.left = g_crop_left;
+		sel.r.top  = g_crop_top;
+		sel.r.width  = g_crop_width;
+		sel.r.height = g_crop_height;
+		ret = ioctl(fd, VIDIOC_S_SELECTION, &sel);
+		if (ret < 0) {
+			v4l2_err("channel[%d] VIDIOC_S_SELECTION failed\n", ch_id);
+			return ret;
+		}
+
+		memset(&sel, 0, sizeof(sel));
+		sel.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		sel.target = V4L2_SEL_TGT_COMPOSE;
+		ret = ioctl(fd, VIDIOC_G_SELECTION, &sel);
+		if (ret < 0) {
+			v4l2_err("channel[%d] VIDIOC_G_SELECTION failed\n", ch_id);
+			return ret;
+		}
+		v4l2_info("\tcrop region is: (%d, %d, %d, %d)\n",
+			  sel.r.left, sel.r.top, sel.r.width, sel.r.height);
 	}
 
 	fill_video_channel(&video_ch[ch_id], &fmt);
