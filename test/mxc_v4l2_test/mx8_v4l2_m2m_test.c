@@ -174,6 +174,7 @@ static void print_usage(char *name)
 		   " -hflip <num> enable horizontal flip, num: 0->disable or 1->enable\n"
 		   " -vflip <num> enable vertical flip, num: 0->disable or 1->enable\n"
 		   " -alpha <num> enable and set global alpha for camera, num equal to 0~255\n"
+		   " -crop <left top width height> left: left corner coordinates, top: Upper corner coordinates, width: crop width, height: crop height\n"
 		   "examples:\n"
 		   "\t %s\n"
 		   "\t %s -i 0.rgb32 -iw 1280 -ih 800 -ifmt \"XR24\" "
