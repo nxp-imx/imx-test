@@ -123,6 +123,11 @@ static bool g_cap_hfilp;
 static bool g_cap_vfilp;
 static bool g_performance_test = false;
 static int32_t g_cap_alpha;
+static bool g_crop_en = false;
+static int32_t g_crop_left = 0;
+static int32_t g_crop_top = 0;
+static int32_t g_crop_width = TEST_WIDTH;
+static int32_t g_crop_height = TEST_HEIGHT;
 
 /*
  *
@@ -318,6 +323,12 @@ static int parse_cmdline(int argc, char *argv[])
 			g_cap_alpha = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-p") == 0) {
 			g_performance_test = true;
+		} else if (strcmp(argv[i], "-crop") == 0) {
+			g_crop_en = true;
+			g_crop_left = atoi(argv[++i]);
+			g_crop_top  = atoi(argv[++i]);
+			g_crop_width = atoi(argv[++i]);
+			g_crop_height = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "-h") == 0) {
 			print_usage(argv[0]);
 			return -1;
@@ -515,6 +526,7 @@ static int mxc_m2m_prepare(struct mxc_m2m_device *m2m_dev)
 	struct v4l2_format in_fmt;
 	struct v4l2_format out_fmt;
 	struct v4l2_control ctrl;
+	struct v4l2_selection sel;
 	int i, fd = m2m_dev->fd;
 	int ret;
 
@@ -604,6 +616,32 @@ static int mxc_m2m_prepare(struct mxc_m2m_device *m2m_dev)
 	if (ret < 0) {
 		v4l2_err("VIDIOC_S_CTRL set alpha failed\n");
 		return ret;
+	}
+
+	if (g_crop_en) {
+		memset(&sel, 0, sizeof(sel));
+		sel.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		sel.target = V4L2_SEL_TGT_COMPOSE;
+		sel.r.left = g_crop_left;
+		sel.r.top  = g_crop_top;
+		sel.r.width  = g_crop_width;
+		sel.r.height = g_crop_height;
+		ret = ioctl(fd, VIDIOC_S_SELECTION, &sel);
+		if (ret < 0) {
+			v4l2_err("VIDIOC_S_SELECTION failed\n");
+			return ret;
+		}
+
+		memset(&sel, 0, sizeof(sel));
+		sel.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		sel.target = V4L2_SEL_TGT_COMPOSE;
+		ret = ioctl(fd, VIDIOC_G_SELECTION, &sel);
+		if (ret < 0) {
+			v4l2_err("VIDIOC_G_SELECTION failed\n");
+			return ret;
+		}
+		v4l2_info("\tcrop region is: (%d, %d, %d, %d)\n",
+			  sel.r.left, sel.r.top, sel.r.width, sel.r.height);
 	}
 
 	return 0;
