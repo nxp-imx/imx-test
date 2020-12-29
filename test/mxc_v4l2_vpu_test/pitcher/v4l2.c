@@ -166,8 +166,7 @@ static int __get_v4l2_min_buffers(int fd, uint32_t type)
 
 static int __set_crop(struct v4l2_component_t *component)
 {
-
-	struct v4l2_crop crop;
+	struct v4l2_selection s;
 	int ret;
 
 	assert(component && component->fd >= 0);
@@ -175,12 +174,17 @@ static int __set_crop(struct v4l2_component_t *component)
 	if (!component->crop.width || !component->crop.height)
 		return 0;
 
-	crop.type = component->type;
-	crop.c.left = component->crop.left;
-	crop.c.top = component->crop.top;
-	crop.c.width = component->crop.width;
-	crop.c.height = component->crop.height;
-	ret = ioctl(component->fd, VIDIOC_S_CROP, &crop);
+	if (!V4L2_TYPE_IS_OUTPUT(component->type))
+		return -RET_E_INVAL;
+
+	s.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	s.target = V4L2_SEL_TGT_CROP;
+	s.r.left = component->crop.left;
+	s.r.top = component->crop.top;
+	s.r.width = component->crop.width;
+	s.r.height = component->crop.height;
+
+	ret = ioctl(component->fd, VIDIOC_S_SELECTION, &s);
 	if (ret < 0) {
 		PITCHER_ERR("fail to set crop (%d, %d) %d x %d\n",
 					component->crop.left,
