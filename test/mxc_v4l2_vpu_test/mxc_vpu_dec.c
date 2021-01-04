@@ -1538,7 +1538,7 @@ STREAMOUT_START:
 					pComponent->res_change_flag = 1;
 					break;
 				}
-				else if(evt.type == V4L2_EVENT_DECODE_ERROR)
+				else if(evt.type == V4L2_EVENT_CODEC_ERROR)
 				{
 					g_unCtrlCReceived = 1;
 					goto FUNC_END;
@@ -2435,18 +2435,21 @@ Or reference the usage manual.\n\
 		goto FUNC_END;
 	}
 	memset(&sub, 0, sizeof(struct v4l2_event_subscription));
-	sub.type = V4L2_EVENT_DECODE_ERROR;
+	sub.type = V4L2_EVENT_CODEC_ERROR;
 	lErr = ioctl(pComponent->hDev, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	if (lErr)
 	{
-		printf("%s() VIDIOC_SUBSCRIBE_EVENT(V4L2_EVENT_DECODE_ERROR) ioctl failed %d %s\n",
+		printf("%s() VIDIOC_SUBSCRIBE_EVENT(V4L2_EVENT_CODEC_ERROR) ioctl failed %d %s\n",
 			__FUNCTION__, errno, strerror(errno));
 		ret_err = 7;
 		goto FUNC_END;
 	}
 
-	set_ctrl(pComponent->hDev, V4L2_CID_USER_RAW_BASE, 1);
-	set_ctrl(pComponent->hDev, V4L2_CID_USER_STREAM_INPUT_MODE, NON_FRAME_LVL);
+	if (set_ctrl(pComponent->hDev, V4L2_CID_NON_FRAME, 1)) {
+		/*To be compatible with previous versions*/
+		set_ctrl(pComponent->hDev, V4L2_CID_USER_BASE + 0x1100, 1);
+		set_ctrl(pComponent->hDev, V4L2_CID_USER_BASE + 0x1109, 2);
+	}
 
 	lErr = pthread_create(&pComponent->ports[STREAM_DIR_IN].threadId,
 			NULL,
@@ -2535,8 +2538,8 @@ Or reference the usage manual.\n\
             case V4L2_EVENT_EOS:
 		        printf("%s() VIDIOC_DQEVENT V4L2_EVENT_EOS pending(%d) seq(%d)\n", __FUNCTION__, evt.pending, evt.sequence);
                 break;
-            case V4L2_EVENT_DECODE_ERROR:
-		        printf("%s() VIDIOC_DQEVENT V4L2_EVENT_DECODE_ERROR pending(%d) seq(%d)\n", __FUNCTION__, evt.pending, evt.sequence);
+            case V4L2_EVENT_CODEC_ERROR:
+		        printf("%s() VIDIOC_DQEVENT V4L2_EVENT_CODEC_ERROR pending(%d) seq(%d)\n", __FUNCTION__, evt.pending, evt.sequence);
 			g_unCtrlCReceived = 1;
 			goto FUNC_END;
                 break;

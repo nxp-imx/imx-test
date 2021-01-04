@@ -38,10 +38,8 @@ int set_decoder_parameter_8x(void *arg)
 
 	platform = (struct platform_t *)arg;
 
-	if (platform->frame_mode != INPUT_MODE_INVALID) {
-		ret = set_ctrl(platform->fd, V4L2_CID_USER_RAW_BASE, 1);
-		ret |= set_ctrl(platform->fd, V4L2_CID_USER_STREAM_INPUT_MODE, platform->frame_mode);
-	}
+	if (platform->frame_mode == INPUT_MODE_NON_FRM_LEVEL)
+		ret = set_ctrl(platform->fd, V4L2_CID_NON_FRAME, 1);
 
 	return ret;
 }

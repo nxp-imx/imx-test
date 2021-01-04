@@ -575,7 +575,7 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"source", 1, "--source <key no>\n\t\t\tset h264 encoder input key number"},
 	{"device", 1, "--device <devnode>\n\t\t\tassign encoder video device node"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
-	{"framemode", 1, "--framemode <level>\n\t\t\tSpecify input frame mode, 1: frame level, 2: non-frame level"},
+	{"framemode", 1, "--framemode <level>\n\t\t\tSpecify input frame mode, 0: frame level, 1: non-frame level"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21, i420"},
 	{NULL, 0, NULL},
 };

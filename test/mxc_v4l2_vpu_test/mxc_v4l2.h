@@ -40,8 +40,8 @@ typedef unsigned int zoe_bool_t;
 
 #define VPU_PIX_FMT_DIVX        v4l2_fourcc('D', 'I', 'V', 'X')
 
-#define V4L2_CID_USER_RAW_BASE  (V4L2_CID_USER_BASE + 0x1100)
-#define V4L2_CID_USER_STREAM_INPUT_MODE                (V4L2_CID_USER_BASE + 0x1109)
+#define V4L2_CID_NON_FRAME              (V4L2_CID_USER_IMX_BASE)
+#define V4L2_CID_DIS_REORDER            (V4L2_CID_USER_IMX_BASE + 1)
 
 #define ZV_YUV_DATA_TYPE_NV12   1
 #define ZV_YUV_DATA_TYPE_NV21   2
@@ -52,7 +52,7 @@ typedef unsigned int zoe_bool_t;
 #define SIZEOF_ARRAY(ar)    (sizeof(ar) / sizeof((ar)[0]))
 #endif
 
-#define V4L2_EVENT_DECODE_ERROR		(V4L2_EVENT_PRIVATE_START + 1)
+#define V4L2_EVENT_CODEC_ERROR          (V4L2_EVENT_PRIVATE_START + 1)
 
 #define V4L2_NXP_FRAME_VERTICAL_ALIGN		512
 #define V4L2_NXP_FRAME_HORIZONTAL_ALIGN		512
