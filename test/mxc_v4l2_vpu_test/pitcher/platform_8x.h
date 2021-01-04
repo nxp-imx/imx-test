@@ -27,8 +27,8 @@ extern "C"
 #include <linux/videodev2.h>
 
 
-#define V4L2_CID_USER_RAW_BASE                  (V4L2_CID_USER_BASE + 0x1100)
-#define V4L2_CID_USER_STREAM_INPUT_MODE         (V4L2_CID_USER_BASE + 0x1109)
+#define V4L2_CID_NON_FRAME              (V4L2_CID_USER_IMX_BASE)
+#define V4L2_CID_DIS_REORDER            (V4L2_CID_USER_IMX_BASE + 1)
 
 #define VPU_PIX_FMT_AVS				v4l2_fourcc('A', 'V', 'S', '0')
 #define VPU_PIX_FMT_ASP				v4l2_fourcc('A', 'S', 'P', '0')

@@ -35,8 +35,7 @@ enum PLATFORM_TYPE {
 };
 
 enum INPUT_FRAME_MODE {
-        INPUT_MODE_INVALID = 0x0,
-        INPUT_MODE_FRM_LEVEL,
+        INPUT_MODE_FRM_LEVEL = 0,
         INPUT_MODE_NON_FRM_LEVEL,
 };
 
