@@ -23,16 +23,19 @@
 #include <stdint.h>
 #include "pitcher_def.h"
 #include "pitcher.h"
-#include "h265_parse.h"
+#include "parse.h"
 
-static int h265_check_frame_nal(int type)
+#define HEVC_SCODE       {0x0, 0x0, 0x0, 0x1}
+#define HEVC_NAL_TYPE   {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,\
+                         0x8, 0x9, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15}
+
+static int h265_check_frame_nal(char *p)
 {
 	int i;
 	char nal_type[] = HEVC_NAL_TYPE;
 
-	type = (type & 0x7E) >> 1;
 	for (i = 0; i < ARRAY_SIZE(nal_type); i++) {
-		if (type == nal_type[i])
+		if (((p[0] & 0x7E) >> 1) == nal_type[i] && (p[2] & 0x80))
 			return TRUE;
 	}
 
