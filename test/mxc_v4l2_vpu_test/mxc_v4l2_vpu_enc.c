@@ -38,9 +38,7 @@
 #include "pitcher/platform.h"
 #include "pitcher/platform_8x.h"
 #include "pitcher/convert.h"
-#ifdef VSI_PARSE
-#include "pitcher/vsi_parse.h"
-#endif
+
 #define VERSION_MAJOR		2
 #define VERSION_MINOR		0
 
@@ -166,9 +164,6 @@ struct parser_test_t {
 	int show;
 
 	Parser p;
-#ifdef VSI_PARSE
-	vsi_parser h;
-#endif
 };
 
 struct mxc_vpu_test_option
@@ -2262,10 +2257,6 @@ static int init_parser_node(struct test_node *node)
 	p.number = parser->frame_num;
 	p.virt = parser->virt;
 	p.size = parser->size;
-#ifdef VSI_PARSE
-	parser->h = (vsi_parser)ByteStreamParserOpen(parser->filename, 0);
-	p.h = parser->h;
-#endif
 
 	pitcher_init_parser(&p, parser->p);
 
@@ -2316,9 +2307,6 @@ static void free_parser_node(struct test_node *node)
 	}
 	SAFE_CLOSE(parser->fd, close);
 	SAFE_RELEASE(parser->p, pitcher_del_parser);
-#ifdef VSI_PARSE
-	SAFE_RELEASE(parser->h, ByteStreamParserClose);
-#endif
 	SAFE_RELEASE(parser, pitcher_free);
 }
 

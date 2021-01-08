@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2021 NXP
+ * Copyright 2021 NXP
  *
  */
 
@@ -13,7 +13,9 @@
  */
 
 /*
- * jpeg_parse.c
+ * mpegx_parse.c
+ *
+ * for mpeg4 / mpeg2 / xivd / avs
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
@@ -25,12 +27,41 @@
 #include "pitcher.h"
 #include "parse.h"
 
-int jpeg_parse(Parser p, void *arg)
+
+#define MPEG4_FRAME_TYPE                0xB6
+#define MPEG2_FRAME_TYPE                0x0
+#define AVS_FRAME_TYPE			{0xB3, 0xB6}
+
+
+static int mpeg4_check_is_frame(int type)
+{
+	return (type == MPEG4_FRAME_TYPE);
+}
+
+static int mpeg2_check_is_frame(int type)
+{
+	return (type == MPEG2_FRAME_TYPE);
+}
+
+static int avs_check_is_frame(int type)
+{
+	int i;
+	char frame_type[] = AVS_FRAME_TYPE;
+
+	for (i = 0; i < ARRAY_SIZE(frame_type); i++) {
+		if (type == frame_type[i])
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static int mpegx_parse(Parser p, int (*check_is_frame)(int))
 {
 	struct pitcher_parser *parser;
 	char *current = NULL;
-	char scode[] = {0xFF, 0xD8};
-	int64_t next[] = {0, 0};
+	char scode[] = {0x0, 0x0, 0x1};
+	int64_t next[] = {0x0, 0x0, 0x1};
 	int64_t scode_size = ARRAY_SIZE(scode);
 	int64_t start = -1;
 	int64_t offset = 0;
@@ -49,8 +80,9 @@ int jpeg_parse(Parser p, void *arg)
 
 	PITCHER_LOG("total file size: 0x%lx\n", left_bytes);
 	while (left_bytes > 0) {
-		offset = kmp_search(current, left_bytes, scode, scode_size,
-					next);
+		offset = kmp_search(current,
+					left_bytes,
+					scode, scode_size, next);
 		if (offset < 0)
 			break;
 		if (start < 0)
@@ -61,8 +93,10 @@ int jpeg_parse(Parser p, void *arg)
 		if (left_bytes <= 0)
 			break;
 
-		end = (current - parser->virt - scode_size);
-		frame_count++;
+		if (check_is_frame(current[0])) {
+			end = (current - parser->virt - scode_size);
+			frame_count++;
+		}
 
 		if (frame_count > 1) {
 			frame_count--;
@@ -81,4 +115,24 @@ int jpeg_parse(Parser p, void *arg)
 	}
 
 	return RET_OK;
+}
+
+int mpeg4_parse(Parser p, void *arg)
+{
+	return mpegx_parse(p, mpeg4_check_is_frame);
+}
+
+int mpeg2_parse(Parser p, void *arg)
+{
+	return mpegx_parse(p, mpeg2_check_is_frame);
+}
+
+int xvid_parse(Parser p, void *arg)
+{
+	return mpegx_parse(p, mpeg4_check_is_frame);
+}
+
+int avs_parse(Parser p, void *arg)
+{
+	return mpegx_parse(p, avs_check_is_frame);
 }

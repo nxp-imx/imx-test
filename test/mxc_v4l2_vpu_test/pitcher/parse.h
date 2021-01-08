@@ -29,9 +29,7 @@ extern "C"
 #include "list.h"
 
 typedef void *Parser;
-#ifdef VSI_PARSE
-typedef void *vsi_parser;
-#endif
+
 struct pitcher_frame {
 	struct list_head list;
 	unsigned int idx;
@@ -47,9 +45,6 @@ struct pitcher_parser {
 	unsigned long number;
 	char *virt;
 	unsigned long size;
-#ifdef VSI_PARSE
-	vsi_parser *h;
-#endif
 };
 
 struct pitcher_parser *pitcher_new_parser(void);
@@ -71,7 +66,20 @@ int64_t kmp_search(char *s, int64_t s_len, const char *p, int64_t p_len, int64_t
 int pitcher_parser_push_new_frame(Parser p, int64_t offset, int64_t size,
 		int idx, int end_flag);
 
-int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int));
+int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(char *));
+int h264_parse(Parser p, void *arg);
+int h265_parse(Parser p, void *arg);
+int h263_parse(Parser p, void *arg);
+int jpeg_parse(Parser p, void *arg);
+int spk_parse(Parser p, void *arg);
+int mpeg4_parse(Parser p, void *arg);
+int mpeg2_parse(Parser p, void *arg);
+int xvid_parse(Parser p, void *arg);
+int avs_parse(Parser p, void *arg);
+int vp8_parse(Parser p, void *arg);
+int vp9_parse(Parser p, void *arg);
+int vc1l_parse(Parser p, void *arg);
+int vc1g_parse(Parser p, void *arg);
 
 #ifdef __cplusplus
 }

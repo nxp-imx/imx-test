@@ -25,13 +25,8 @@
 #include "pitcher_def.h"
 #include "pitcher.h"
 #include "pitcher_v4l2.h"
+#include "platform_8x.h"
 #include "parse.h"
-#include "h264_parse.h"
-#include "h265_parse.h"
-#include "jpeg_parse.h"
-#ifdef VSI_PARSE
-#include "vsi_parse.h"
-#endif
 
 struct parse_handler {
 	unsigned int format;
@@ -205,24 +200,6 @@ void pitcher_parser_show(Parser p)
 }
 
 struct parse_handler parse_handler_table[] = {
-#ifdef VSI_PARSE
-	{.format = V4L2_PIX_FMT_H264,
-	 .handle_parse = vsi_parse,
-	},
-	{.format = V4L2_PIX_FMT_HEVC,
-	 .handle_parse = vsi_parse,
-	},
-	{.format = V4L2_PIX_FMT_VP8,
-	 .handle_parse = vsi_parse,
-	},
-	{.format = V4L2_PIX_FMT_VP9,
-	 .handle_parse = vsi_parse,
-	},
-	{.format = V4L2_PIX_FMT_MPEG2,
-	 .handle_parse = vsi_parse,
-	},
-	{0, 0},
-#else
 	{.format = V4L2_PIX_FMT_H264,
 	 .handle_parse = h264_parse,
 	},
@@ -232,8 +209,37 @@ struct parse_handler parse_handler_table[] = {
 	{.format = V4L2_PIX_FMT_JPEG,
 	 .handle_parse = jpeg_parse,
 	},
+	{.format = V4L2_PIX_FMT_H263,
+	 .handle_parse = h263_parse,
+	},
+	{.format = VPU_PIX_FMT_SPK,
+	 .handle_parse = spk_parse,
+	},
+	{.format = V4L2_PIX_FMT_MPEG4,
+	 .handle_parse = mpeg4_parse,
+	},
+	{.format = V4L2_PIX_FMT_MPEG2,
+	 .handle_parse = mpeg2_parse,
+	},
+	{.format = V4L2_PIX_FMT_XVID,
+	 .handle_parse = xvid_parse,
+	},
+	{.format = VPU_PIX_FMT_AVS,
+	 .handle_parse = avs_parse,
+	},
+	{.format = V4L2_PIX_FMT_VP8,
+	 .handle_parse = vp8_parse,
+	},
+	{.format = V4L2_PIX_FMT_VP9,
+	 .handle_parse = vp9_parse,
+	},
+	{.format = V4L2_PIX_FMT_VC1_ANNEX_L,
+	 .handle_parse = vc1l_parse,
+	},
+	{.format = V4L2_PIX_FMT_VC1_ANNEX_G,
+	 .handle_parse = vc1g_parse,
+	},
 	{0, 0},
-#endif
 };
 
 struct parse_handler *find_handler(unsigned int fmt)
@@ -291,7 +297,7 @@ int pitcher_parser_push_new_frame(Parser p, int64_t offset, int64_t size,
 	return RET_OK;
 }
 
-int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
+int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(char *))
 {
 	struct pitcher_parser *parser;
 	char *current = NULL;
@@ -332,7 +338,7 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(int))
 		left_bytes -= (offset + scode_size);
 		if (left_bytes <= 0)
 			break;
-		if (check_nal_is_frame(current[0])) {
+		if (check_nal_is_frame(current)) {
 			end = (current - parser->virt - scode_size);
 			frame_count++;
 		}

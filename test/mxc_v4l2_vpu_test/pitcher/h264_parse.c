@@ -24,17 +24,19 @@
 #include <stdint.h>
 #include "pitcher_def.h"
 #include "pitcher.h"
-#include "h264_parse.h"
+#include "parse.h"
 
-static int h264_check_frame_nal(int type)
+#define AVC_SCODE       {0x0, 0x0, 0x0, 0x1}
+#define AVC_NAL_TYPE    {0X5, 0X1}
+
+static int h264_check_frame_nal(char *p)
 {
 	int i;
 	char nal_type[] = AVC_NAL_TYPE;
 
-	type = type & 0x1f;
 
 	for (i = 0; i < ARRAY_SIZE(nal_type); i++) {
-		if (type == nal_type[i])
+		if ((p[0] & 0x1f) == nal_type[i])
 			return TRUE;
 	}
 
