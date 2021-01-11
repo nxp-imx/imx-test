@@ -29,6 +29,9 @@
 #include "pitcher_v4l2.h"
 #include "parse.h"
 
+#define VP8_IVF_SEQ_HEADER_LEN		32
+#define VP8_IVF_FRAME_HEADER_LEN	12
+
 
 struct ivf_header_t {
   unsigned char signature[4];
@@ -119,4 +122,71 @@ int vp8_parse(Parser p, void *arg)
 int vp9_parse(Parser p, void *arg)
 {
 	return vpx_parse(p, arg);
+}
+
+void vp8_insert_ivf_seqhdr(FILE *file, uint32_t width, uint32_t height,
+			   uint32_t frame_rate)
+{
+	char data[VP8_IVF_SEQ_HEADER_LEN] = {0};
+
+	if (!file)
+		return;
+
+	/* 0-3 signature "DKIF" */
+	data[0] = 0x44;
+	data[1] = 0x4b;
+	data[2] = 0x49;
+	data[3] = 0x46;
+	/* 4-5 version: should be 0*/
+	data[4] = 0x00;
+	data[5] = 0x00;
+	/* 6-7 header length */
+	data[6] = VP8_IVF_SEQ_HEADER_LEN;
+	data[7] = VP8_IVF_SEQ_HEADER_LEN >> 8;
+	/* 8-11 VP80 fourcc */
+	data[8] = 0x56;
+	data[9] = 0x50;
+	data[10] = 0x38;
+	data[11] = 0x30;
+	/* 12-13 width in pixels */
+	data[12] = width;
+	data[13] = width >> 8;
+	/* 14-15 height in pixels */
+	data[14] = height;
+	data[15] = height >> 8;
+	/* 16-19 frame rate */
+	data[16] = frame_rate;
+	data[17] = frame_rate >> 8;
+	data[18] = frame_rate >> 16;
+	data[19] = frame_rate >> 24;
+	/* 20-23 time scale */
+	data[20] = 0x01;
+	data[21] = 0x00;
+	data[22] = 0x00;
+	data[23] = 0x00;
+	/* 24-27 frames count */
+	data[24] = 0xff;
+	data[25] = 0xff;
+	data[26] = 0xff;
+	data[27] = 0xff;
+	/* 28-31 reserved */
+
+	fwrite(data, 1, VP8_IVF_SEQ_HEADER_LEN, file);
+}
+
+void vp8_insert_ivf_pichdr(FILE *file, unsigned long frame_size)
+{
+	char data[VP8_IVF_FRAME_HEADER_LEN] = {0};
+
+	if (!file)
+		return;
+
+	/* 0-3 frame size */
+	data[0] = frame_size;
+	data[1] = frame_size >> 8;
+	data[2] = frame_size >> 16;
+	data[3] = frame_size >> 24;
+	/* 4-11 timestamp */
+
+	fwrite(data, 1, VP8_IVF_FRAME_HEADER_LEN, file);
 }

@@ -81,6 +81,10 @@ int vp9_parse(Parser p, void *arg);
 int vc1l_parse(Parser p, void *arg);
 int vc1g_parse(Parser p, void *arg);
 
+void vp8_insert_ivf_seqhdr(FILE *file, uint32_t width, uint32_t height,
+			   uint32_t frame_rate);
+void vp8_insert_ivf_pichdr(FILE *file, unsigned long frame_size);
+
 #ifdef __cplusplus
 }
 #endif
