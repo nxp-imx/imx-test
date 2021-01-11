@@ -871,11 +871,17 @@ static void validate_h265_profile_level(struct encoder_test_t *encoder)
 		encoder->level = V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1;
 }
 
+static void validate_vpx_profile_level(struct encoder_test_t *encoder)
+{
+	if (encoder->profile == UINT_MAX)
+		encoder->profile = V4L2_MPEG_VIDEO_VP8_PROFILE_0;
+}
+
 static int set_encoder_parameters(struct encoder_test_t *encoder)
 {
 	int fd;
-	int profile_id;
-	int level_id;
+	int profile_id = 0;
+	int level_id = 0;
 
 	if (!encoder || encoder->fd < 0)
 		return -RET_E_INVAL;
@@ -893,11 +899,16 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		level_id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
 		validate_h265_profile_level(encoder);
 		break;
+	case V4L2_PIX_FMT_VP8:
+		profile_id = V4L2_CID_MPEG_VIDEO_VP8_PROFILE;
+		validate_vpx_profile_level(encoder);
+		break;
 	default:
 		return -RET_E_INVAL;
 	}
 	set_ctrl(fd, profile_id, encoder->profile);
-	set_ctrl(fd, level_id, encoder->level);
+	if (level_id)
+		set_ctrl(fd, level_id, encoder->level);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->target_bitrate);
 	if (encoder->peak_bitrate)
@@ -1699,6 +1710,27 @@ static int ofile_checkready(void *arg, int *is_end)
 	return true;
 }
 
+static void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
+{
+	struct test_file_t *file = arg;
+	unsigned long data_len = 0;
+	int i;
+
+	switch (file->node.pixelformat) {
+	case V4L2_PIX_FMT_VP8:
+		for (i = 0; i < buffer->count; i++)
+			data_len += buffer->planes[i].bytesused;
+
+		if (file->frame_count == 0)
+			vp8_insert_ivf_seqhdr(file->filp, file->node.width,
+				file->node.height, file->node.framerate);
+		vp8_insert_ivf_pichdr(file->filp, data_len);
+		break;
+	default:
+		break;
+	}
+}
+
 static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 {
 	struct test_file_t *file = arg;
@@ -1708,6 +1740,8 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 		return -RET_E_INVAL;
 	if (!buffer)
 		return -RET_E_NOT_READY;
+
+	ofile_insert_header(file, buffer);
 
 	for (i = 0; i < buffer->count; i++)
 		fwrite(buffer->planes[i].virt, 1, buffer->planes[i].bytesused,
@@ -1756,6 +1790,22 @@ static int init_ofile_node(struct test_node *node)
 	return RET_OK;
 }
 
+static int set_ofile_source(struct test_node *node, struct test_node *src)
+{
+	struct test_file_t *file = NULL;
+
+	if (!node || !src)
+		return -RET_E_INVAL;
+
+	file = container_of(node, struct test_file_t, node);
+	file->node.width = src->width;
+	file->node.height = src->height;
+	file->node.pixelformat = src->pixelformat;
+	file->node.framerate = src->framerate;
+
+	return RET_OK;
+}
+
 static struct test_node *alloc_ofile_node(void)
 {
 	struct test_file_t *file;
@@ -1771,6 +1821,7 @@ static struct test_node *alloc_ofile_node(void)
 	file->node.init_node = init_ofile_node;
 	file->node.get_sink_chnno = get_file_chnno;
 	file->node.free_node = free_file_node;
+	file->node.set_source = set_ofile_source;
 	file->mode = "wb";
 	file->chnno = -1;
 	file->fd = -1;
