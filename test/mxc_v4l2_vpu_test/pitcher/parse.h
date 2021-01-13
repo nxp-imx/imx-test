@@ -66,7 +66,6 @@ int64_t kmp_search(char *s, int64_t s_len, const char *p, int64_t p_len, int64_t
 int pitcher_parser_push_new_frame(Parser p, int64_t offset, int64_t size,
 		int idx, int end_flag);
 
-int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(char *));
 int h264_parse(Parser p, void *arg);
 int h265_parse(Parser p, void *arg);
 int h263_parse(Parser p, void *arg);
@@ -84,6 +83,25 @@ int vc1g_parse(Parser p, void *arg);
 void vp8_insert_ivf_seqhdr(FILE *file, uint32_t width, uint32_t height,
 			   uint32_t frame_rate);
 void vp8_insert_ivf_pichdr(FILE *file, unsigned long frame_size);
+
+enum {
+	PARSER_TYPE_UNKNOWN,
+	PARSER_TYPE_CONFIG,
+	PARSER_TYPE_FRAME
+};
+struct pitcher_parser_scode {
+	uint32_t scode;
+	uint32_t mask;
+	uint32_t num;
+
+	uint32_t extra_num;
+	uint32_t extra_code;
+	uint32_t extra_mask;
+	uint32_t force_extra_on_first;
+
+	int (*check_frame)(uint8_t *, uint32_t);
+};
+int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc);
 
 #ifdef __cplusplus
 }

@@ -26,24 +26,42 @@
 #include "pitcher.h"
 #include "parse.h"
 
-#define AVC_SCODE       {0x0, 0x0, 0x0, 0x1}
-#define AVC_NAL_TYPE    {0X5, 0X1}
-
-static int h264_check_frame_nal(char *p)
+static int h264_check_frame(uint8_t *p, uint32_t size)
 {
-	int i;
-	char nal_type[] = AVC_NAL_TYPE;
+	uint8_t type;
 
+	if (size < 2)
+		return PARSER_TYPE_UNKNOWN;
 
-	for (i = 0; i < ARRAY_SIZE(nal_type); i++) {
-		if ((p[0] & 0x1f) == nal_type[i])
-			return TRUE;
+	type = p[0] & 0x1f;
+	switch (type) {
+	case 1: //Non-IDR
+	case 5: //IDR
+		if (p[1] & 0x80)
+			return PARSER_TYPE_FRAME;
+		else
+			return PARSER_TYPE_UNKNOWN;
+	case 7: //SPS
+	case 8: //PPS
+	case 6: //SEI
+		return PARSER_TYPE_CONFIG;
+	default:
+		return PARSER_TYPE_UNKNOWN;
 	}
-
-	return FALSE;
 }
+
+static struct pitcher_parser_scode h264_scode = {
+	.scode = 0x000001,
+	.mask = 0xffffff,
+	.num = 3,
+	.extra_num = 4,
+	.extra_code = 0x00000001,
+	.extra_mask = 0xffffffff,
+	.force_extra_on_first = 1,
+	.check_frame = h264_check_frame
+};
 
 int h264_parse(Parser p, void *arg)
 {
-	return pitcher_parse_h26x(p, h264_check_frame_nal);
+	return pitcher_parse_startcode(p, &h264_scode);
 }
