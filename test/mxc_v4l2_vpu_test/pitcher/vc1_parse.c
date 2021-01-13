@@ -27,10 +27,6 @@
 #include "pitcher.h"
 #include "parse.h"
 
-
-#define VC1_G_FRAME_TYPE        0x0D
-
-
 static int byte_to_int(char *p, int n)
 {
 	int dst = 0;
@@ -108,52 +104,32 @@ int vc1l_parse(Parser p, void *arg)
 	return RET_OK;
 }
 
+static int vc1g_check_frame(uint8_t *p, uint32_t size)
+{
+	uint8_t type;
+
+	if (!p || !size)
+		return PARSER_TYPE_UNKNOWN;
+
+	type = p[0];
+	switch (type) {
+	case 0x0D: //Frame
+		return PARSER_TYPE_FRAME;
+	case 0x0F: //Sequence Header
+		return PARSER_TYPE_FRAME;
+	default:
+		return PARSER_TYPE_UNKNOWN;
+	}
+}
+
+static struct pitcher_parser_scode vc1g_scode = {
+	.scode = 0x000001,
+	.mask = 0xffffff,
+	.num = 3,
+	.check_frame = vc1g_check_frame,
+};
+
 int vc1g_parse(Parser p, void *arg)
 {
-	struct pitcher_parser *parser;
-	char *current = NULL;
-	char scode[] = {0x0, 0x0, 0x1};
-	int64_t next[] = {0x0, 0x0, 0x1};
-	int64_t scode_size = ARRAY_SIZE(scode);
-	int64_t start = -1;
-	int64_t offset = 0;
-	int64_t end = 0;
-	long left_bytes;
-	int index = 0;
-
-	if (!p)
-		return -RET_E_INVAL;
-
-	parser = (struct pitcher_parser *)p;
-	current = parser->virt;
-	left_bytes = parser->size;
-	get_kmp_next(scode, next, scode_size);
-
-	PITCHER_LOG("total file size: 0x%lx\n", left_bytes);
-	while (left_bytes > 0) {
-		offset = kmp_search(current, left_bytes, scode, scode_size, next);
-		if (offset < 0)
-			break;
-		if (start < 0)
-			start = offset;
-
-		current += offset + scode_size;
-		left_bytes -= (offset + scode_size);
-		if (left_bytes <= 0)
-			break;
-
-		/* first input containing codec data only */
-		if (current[0] == VC1_G_FRAME_TYPE) {
-			end = (current - parser->virt - scode_size);
-			pitcher_parser_push_new_frame(parser, start, end - start,
-						      index++, 0);
-			start = end;
-		}
-	}
-
-	end = parser->size;
-	pitcher_parser_push_new_frame(parser, start, end - start,
-				      index++, 1);
-
-	return RET_OK;
+	return pitcher_parse_startcode(p, &vc1g_scode);
 }

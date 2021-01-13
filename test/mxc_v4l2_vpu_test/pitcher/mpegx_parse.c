@@ -27,112 +27,103 @@
 #include "pitcher.h"
 #include "parse.h"
 
-
-#define MPEG4_FRAME_TYPE                0xB6
-#define MPEG2_FRAME_TYPE                0x0
-#define AVS_FRAME_TYPE			{0xB3, 0xB6}
-
-
-static int mpeg4_check_is_frame(int type)
+static int mpeg4_check_frame(uint8_t *p, uint32_t size)
 {
-	return (type == MPEG4_FRAME_TYPE);
-}
+	uint8_t type;
 
-static int mpeg2_check_is_frame(int type)
-{
-	return (type == MPEG2_FRAME_TYPE);
-}
+	if (!p || !size)
+		return PARSER_TYPE_UNKNOWN;
 
-static int avs_check_is_frame(int type)
-{
-	int i;
-	char frame_type[] = AVS_FRAME_TYPE;
-
-	for (i = 0; i < ARRAY_SIZE(frame_type); i++) {
-		if (type == frame_type[i])
-			return TRUE;
+	type = p[0];
+	switch (type) {
+	case 0xB6: //vop
+		return PARSER_TYPE_FRAME;
+	case 0xB0: //vos
+		return PARSER_TYPE_CONFIG;
+	default:
+		return PARSER_TYPE_UNKNOWN;
 	}
-
-	return FALSE;
 }
 
-static int mpegx_parse(Parser p, int (*check_is_frame)(int))
+static int mpeg2_check_frame(uint8_t *p, uint32_t size)
 {
-	struct pitcher_parser *parser;
-	char *current = NULL;
-	char scode[] = {0x0, 0x0, 0x1};
-	int64_t next[] = {0x0, 0x0, 0x1};
-	int64_t scode_size = ARRAY_SIZE(scode);
-	int64_t start = -1;
-	int64_t offset = 0;
-	int64_t end = 0;
-	long left_bytes;
-	int frame_count = 0;
-	int index = 0;
+	uint8_t type;
 
-	if (!p)
-		return -RET_E_INVAL;
+	if (!p || !size)
+		return PARSER_TYPE_UNKNOWN;
 
-	parser = (struct pitcher_parser *)p;
-	current = parser->virt;
-	left_bytes = parser->size;
-	get_kmp_next(scode, next, scode_size);
-
-	PITCHER_LOG("total file size: 0x%lx\n", left_bytes);
-	while (left_bytes > 0) {
-		offset = kmp_search(current,
-					left_bytes,
-					scode, scode_size, next);
-		if (offset < 0)
-			break;
-		if (start < 0)
-			start = offset;
-
-		current += offset + scode_size;
-		left_bytes -= (offset + scode_size);
-		if (left_bytes <= 0)
-			break;
-
-		if (check_is_frame(current[0])) {
-			end = (current - parser->virt - scode_size);
-			frame_count++;
-		}
-
-		if (frame_count > 1) {
-			frame_count--;
-			pitcher_parser_push_new_frame(parser, start, end - start,
-						      index++, 0);
-			start = end;
-		}
+	type = p[0];
+	switch (type) {
+	case 0x00: //Picture
+		return PARSER_TYPE_FRAME;
+	case 0xB2: //User Data
+	case 0xB3: //Sequence
+	case 0xB5: //Extension
+	case 0xB8: //GOP
+		return PARSER_TYPE_CONFIG;
+	default:
+		return PARSER_TYPE_UNKNOWN;
 	}
-
-	end = parser->size;
-	if (frame_count) {
-		frame_count--;
-		pitcher_parser_push_new_frame(parser, start, end - start,
-					      index++, 1);
-		start = end;
-	}
-
-	return RET_OK;
 }
+
+static int avs_check_frame(uint8_t *p, uint32_t size)
+{
+	uint8_t type;
+
+	if (!p || !size)
+		return PARSER_TYPE_UNKNOWN;
+
+	type = p[0];
+	switch (type) {
+	case 0xB3: //I-Picture
+	case 0xB6: //PB-Picture
+		return PARSER_TYPE_FRAME;
+	case 0xB0: //Sequence Header
+	case 0xB2: //User Data
+	case 0xB5: //Extension
+		return PARSER_TYPE_CONFIG;
+	default:
+		return PARSER_TYPE_UNKNOWN;
+	}
+}
+
+static struct pitcher_parser_scode mpeg2_scode = {
+	.scode = 0x000001,
+	.mask = 0xffffff,
+	.num = 3,
+	.check_frame = mpeg2_check_frame,
+};
+
+static struct pitcher_parser_scode mpeg4_scode = {
+	.scode = 0x000001,
+	.mask = 0xffffff,
+	.num = 3,
+	.check_frame = mpeg4_check_frame,
+};
+
+static struct pitcher_parser_scode avs_scode = {
+	.scode = 0x000001,
+	.mask = 0xffffff,
+	.num = 3,
+	.check_frame = avs_check_frame,
+};
 
 int mpeg4_parse(Parser p, void *arg)
 {
-	return mpegx_parse(p, mpeg4_check_is_frame);
+	return pitcher_parse_startcode(p, &mpeg4_scode);
 }
 
 int mpeg2_parse(Parser p, void *arg)
 {
-	return mpegx_parse(p, mpeg2_check_is_frame);
+	return pitcher_parse_startcode(p, &mpeg2_scode);
 }
 
 int xvid_parse(Parser p, void *arg)
 {
-	return mpegx_parse(p, mpeg4_check_is_frame);
+	return pitcher_parse_startcode(p, &mpeg4_scode);
 }
 
 int avs_parse(Parser p, void *arg)
 {
-	return mpegx_parse(p, avs_check_is_frame);
+	return pitcher_parse_startcode(p, &avs_scode);
 }

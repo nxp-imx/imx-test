@@ -77,6 +77,7 @@ void pitcher_parser_push(Parser p, struct pitcher_frame *frame)
 		return;
 
 	list_add_tail(&frame->list, &parser->queue);
+	parser->number++;
 }
 
 struct pitcher_frame *pitcher_parser_cur_frame(Parser p)
@@ -297,52 +298,74 @@ int pitcher_parser_push_new_frame(Parser p, int64_t offset, int64_t size,
 	return RET_OK;
 }
 
-int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(char *))
+int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 {
 	struct pitcher_parser *parser;
-	char *current = NULL;
-	char scode[] = {0x0, 0x0, 0x1};
-	int64_t next[] = {0x0, 0x0, 0x1};
-	int64_t scode_size = ARRAY_SIZE(scode);
+	struct pitcher_parser_scode sc;
+	uint8_t *buf = NULL;
+	uint8_t *current = NULL;
+	uint32_t state = 0;
 	int64_t start = -1;
+	int64_t end = -1;
 	int64_t offset = 0;
-	int64_t end = 0;
-	long left_bytes;
-	int frame_count = 0;
+	int type = PARSER_TYPE_FRAME;
+	long i;
 	int index = 0;
+	int frame_count = 0;
 
-	if (!p || !check_nal_is_frame)
+	if (!p || !psc || !psc->num)
 		return -RET_E_INVAL;
 
-	parser = (struct pitcher_parser *)p;
-	current = parser->virt;
-	left_bytes = parser->size;
-	get_kmp_next(scode, next, scode_size);
-
-	PITCHER_LOG("total file size: 0x%lx\n", left_bytes);
-	while (left_bytes > 0) {
-		scode_size = ARRAY_SIZE(scode);
-		offset = kmp_search(current,
-					left_bytes,
-					scode, scode_size, next);
-		if (offset < 0)
-			break;
-		if (offset > 0 && current[offset - 1] == 0x0) {
-			offset--;
-			scode_size++;
+	sc = *psc;
+	if (sc.extra_num > sc.num) {
+		if ((sc.extra_code & sc.mask) != sc.scode) {
+			PITCHER_ERR("invalid extra_code : 0x%x for 0x%x\n",
+					sc.extra_code, sc.scode);
+			return -RET_E_INVAL;
 		}
+	} else {
+		sc.extra_num = sc.num;
+		sc.extra_code = sc.scode;
+		sc.extra_mask = sc.mask;
+		sc.force_extra_on_first = 0;
+	}
+
+	parser = (struct pitcher_parser *)p;
+	buf = (uint8_t *)parser->virt;
+	PITCHER_LOG("total file size: 0x%lx\n", parser->size);
+
+	for (i = 0; i < parser->size; i++) {
+		state = (state << 8) | buf[i];
+
+		if (sc.force_extra_on_first && i < sc.extra_num - 1)
+			continue;
+		else if (i < sc.num - 1)
+			continue;
+
+		if (sc.force_extra_on_first) {
+			if ((state & sc.extra_mask) != sc.extra_code)
+				continue;
+		} else {
+			if ((state & sc.mask) != sc.scode)
+				continue;
+		}
+
+		current = buf + i + 1;
+		if (sc.check_frame) {
+			type = sc.check_frame(current, parser->size - i - 1);
+			if (type == PARSER_TYPE_UNKNOWN)
+				continue;
+		}
+		if ((state & sc.extra_mask) == sc.extra_code)
+			offset = i + 1 - sc.extra_num;
+		else
+			offset = i + 1 - sc.num;
 		if (start < 0)
 			start = offset;
-
-		current += offset + scode_size;
-		left_bytes -= (offset + scode_size);
-		if (left_bytes <= 0)
-			break;
-		if (check_nal_is_frame(current)) {
-			end = (current - parser->virt - scode_size);
+		if (frame_count > 0 && end < 0)
+			end = offset;
+		if (type == PARSER_TYPE_FRAME)
 			frame_count++;
-		}
-
 		if (frame_count > 1) {
 			frame_count--;
 			pitcher_parser_push_new_frame(parser,
@@ -351,6 +374,7 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(char *))
 							index++,
 							0);
 			start = end;
+			end = -1;
 		}
 	}
 
@@ -365,6 +389,7 @@ int pitcher_parse_h26x(Parser p, int (*check_nal_is_frame)(char *))
 		start = end;
 	}
 
-	return RET_OK;
+	PITCHER_LOG("total frame number : %d\n", index);
+	return 0;
 }
 
