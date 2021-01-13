@@ -356,6 +356,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 			if (type == PARSER_TYPE_UNKNOWN)
 				continue;
 		}
+		sc.force_extra_on_first = 0;
 		if ((state & sc.extra_mask) == sc.extra_code)
 			offset = i + 1 - sc.extra_num;
 		else
