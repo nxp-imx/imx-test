@@ -25,13 +25,15 @@
 #include "pitcher.h"
 #include "parse.h"
 
-#define HEVC_SCODE       {0x0, 0x0, 0x0, 0x1}
-#define HEVC_NAL_TYPE   {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,\
-                         0x8, 0x9, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15}
+struct h265_parse_t {
+	uint32_t header_cnt;
+	uint32_t config_found;
+};
 
-static int h265_check_frame(uint8_t *p, uint32_t size)
+static int h265_check_frame(uint8_t *p, uint32_t size, void *priv)
 {
 	uint8_t type;
+	struct h265_parse_t *info = priv;
 
 	if (size < 3)
 		return PARSER_TYPE_UNKNOWN;
@@ -54,15 +56,23 @@ static int h265_check_frame(uint8_t *p, uint32_t size)
 	case 19:
 	case 20:
 	case 21:
+		if (!info->header_cnt)
+			return PARSER_TYPE_UNKNOWN;
+		if (info->config_found) {
+			info->config_found = 0;
+			return PARSER_TYPE_FRAME;
+		}
 		if (p[2] & 0x80)
 			return PARSER_TYPE_FRAME;
 		else
 			return PARSER_TYPE_UNKNOWN;
-	case 32: //VPS
 	case 33: //SPS
+		info->header_cnt++;
 	case 34: //PPS
+	case 32: //VPS
 	case 39: //Prefix SEI
 	case 40: //Suffix SEI
+		info->config_found = 1;
 		return PARSER_TYPE_CONFIG;
 	default:
 		return PARSER_TYPE_UNKNOWN;
@@ -78,7 +88,8 @@ static struct pitcher_parser_scode h265_scode = {
 	.extra_code = 0x00000001,
 	.extra_mask = 0xffffffff,
 	.force_extra_on_first = 1,
-	.check_frame = h265_check_frame
+	.check_frame = h265_check_frame,
+	.priv_data_size = sizeof(struct h265_parse_t),
 };
 
 int h265_parse(Parser p, void *arg)

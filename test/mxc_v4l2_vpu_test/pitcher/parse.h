@@ -99,7 +99,8 @@ struct pitcher_parser_scode {
 	uint32_t extra_mask;
 	uint32_t force_extra_on_first;
 
-	int (*check_frame)(uint8_t *, uint32_t);
+	int (*check_frame)(uint8_t *, uint32_t, void *priv);
+	uint32_t priv_data_size;
 };
 int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc);
 

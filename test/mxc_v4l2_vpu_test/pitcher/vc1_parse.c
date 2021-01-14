@@ -104,7 +104,7 @@ int vc1l_parse(Parser p, void *arg)
 	return RET_OK;
 }
 
-static int vc1g_check_frame(uint8_t *p, uint32_t size)
+static int vc1g_check_frame(uint8_t *p, uint32_t size, void *priv)
 {
 	uint8_t type;
 

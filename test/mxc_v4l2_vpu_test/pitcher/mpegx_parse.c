@@ -27,7 +27,7 @@
 #include "pitcher.h"
 #include "parse.h"
 
-static int mpeg4_check_frame(uint8_t *p, uint32_t size)
+static int mpeg4_check_frame(uint8_t *p, uint32_t size, void *priv)
 {
 	uint8_t type;
 
@@ -45,7 +45,7 @@ static int mpeg4_check_frame(uint8_t *p, uint32_t size)
 	}
 }
 
-static int mpeg2_check_frame(uint8_t *p, uint32_t size)
+static int mpeg2_check_frame(uint8_t *p, uint32_t size, void *priv)
 {
 	uint8_t type;
 
@@ -66,7 +66,7 @@ static int mpeg2_check_frame(uint8_t *p, uint32_t size)
 	}
 }
 
-static int avs_check_frame(uint8_t *p, uint32_t size)
+static int avs_check_frame(uint8_t *p, uint32_t size, void *priv)
 {
 	uint8_t type;
 
