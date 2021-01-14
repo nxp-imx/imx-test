@@ -188,13 +188,16 @@ void pitcher_parser_show(Parser p)
 		return;
 
 	list_for_each_entry_safe(frame, tmp, &parser->queue, list) {
-		PITCHER_LOG("[%d] size:0x%lx, offset:0x%x\n", frame->idx, frame->size, frame->offset);
-		 PITCHER_LOG("0x%x, 0x%x, 0x%x, 0x%x, 0x%x\n",
+		PITCHER_LOG("[%d] size:%ld, offset:0x%x\n", frame->idx, frame->size, frame->offset);
+		 PITCHER_LOG("0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
 						parser->virt[frame->offset],
 						parser->virt[frame->offset+1],
 						parser->virt[frame->offset+2],
 						parser->virt[frame->offset+3],
-						parser->virt[frame->offset+4]);
+						parser->virt[frame->offset+4],
+						parser->virt[frame->offset+5],
+						parser->virt[frame->offset+6],
+						parser->virt[frame->offset+7]);
 		 size += frame->size;
 	}
 	PITCHER_LOG("total size: 0x%x\n", size);
@@ -312,6 +315,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 	long i;
 	int index = 0;
 	int frame_count = 0;
+	void *priv = NULL;
 
 	if (!p || !psc || !psc->num)
 		return -RET_E_INVAL;
@@ -328,6 +332,14 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 		sc.extra_code = sc.scode;
 		sc.extra_mask = sc.mask;
 		sc.force_extra_on_first = 0;
+	}
+
+	if (sc.check_frame && sc.priv_data_size) {
+		priv = pitcher_calloc(1, sc.priv_data_size);
+		if (!priv) {
+			PITCHER_ERR("alloc priv data fail\n");
+			return -RET_E_NO_MEMORY;
+		}
 	}
 
 	parser = (struct pitcher_parser *)p;
@@ -352,7 +364,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 
 		current = buf + i + 1;
 		if (sc.check_frame) {
-			type = sc.check_frame(current, parser->size - i - 1);
+			type = sc.check_frame(current, parser->size - i - 1, priv);
 			if (type == PARSER_TYPE_UNKNOWN)
 				continue;
 		}
@@ -388,6 +400,11 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 						index++,
 						1);
 		start = end;
+	}
+
+	if (priv) {
+		pitcher_free(priv);
+		priv = NULL;
 	}
 
 	PITCHER_LOG("total frame number : %d\n", index);
