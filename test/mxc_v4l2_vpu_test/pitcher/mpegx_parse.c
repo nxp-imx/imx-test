@@ -15,7 +15,7 @@
 /*
  * mpegx_parse.c
  *
- * for mpeg4 / mpeg2 / xivd / avs
+ * for mpeg4 / mpeg2 / xivd / avs / Divx4/5/6(unsupport Divx3)
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
@@ -126,4 +126,9 @@ int xvid_parse(Parser p, void *arg)
 int avs_parse(Parser p, void *arg)
 {
 	return pitcher_parse_startcode(p, &avs_scode);
+}
+
+int divx_parse(Parser p, void *arg)
+{
+	return pitcher_parse_startcode(p, &mpeg4_scode);
 }
