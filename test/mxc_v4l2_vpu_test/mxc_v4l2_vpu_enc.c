@@ -156,6 +156,7 @@ struct parser_test_t {
 	char *filename;
 	char *mode;
 	int fd;
+	int mem_type;
 	void *virt;
 	unsigned long size;
 	unsigned long offset;
@@ -2260,6 +2261,50 @@ static struct pitcher_buffer *parser_alloc_buffer(void *arg)
 	return pitcher_new_buffer(&desc);
 }
 
+static int init_parser_memory(struct parser_test_t *parser)
+{
+	if (parser->node.pixelformat == VPU_PIX_FMT_RV) {
+		FILE *fp = NULL;
+		size_t size = 0;
+
+		parser->mem_type = MEM_ALLOC;
+		parser->virt = (uint8_t *)malloc(parser->size + 0x1000);
+		if (!parser->virt)
+			return -RET_E_NO_MEMORY;
+
+		fp = fopen(parser->filename, "rb");
+		fseek(fp, 0, SEEK_SET);
+		size = fread(parser->virt, 1, parser->size, fp);
+		fclose(fp);
+		if (size != parser->size)
+			return -RET_E_INVAL;
+	} else {
+		parser->mem_type = MEM_MMAP;
+		parser->virt = mmap(NULL, parser->size, PROT_READ, MAP_SHARED,
+					parser->fd, 0);
+		if (!parser->virt) {
+			PITCHER_ERR("mmap input file %s fail\n", parser->filename);
+			return -RET_E_MMAP;
+		}
+	}
+
+	return RET_OK;
+}
+
+static void free_parser_memory(struct parser_test_t *parser)
+{
+	if (!parser->virt)
+		return;
+
+	if (parser->mem_type == MEM_MMAP)
+		munmap(parser->virt, parser->size);
+	else
+		free(parser->virt);
+
+	parser->virt = NULL;
+	parser->size = 0;
+}
+
 static int init_parser_node(struct test_node *node)
 {
 	struct parser_test_t *parser;
@@ -2294,11 +2339,11 @@ static int init_parser_node(struct test_node *node)
 		SAFE_CLOSE(parser->fd, close);
 		return -RET_E_OPEN;
 	}
-	parser->virt = mmap(NULL, parser->size, PROT_READ, MAP_SHARED, parser->fd, 0);
-	if (!parser->virt) {
-		PITCHER_ERR("mmap input file %s fail\n", parser->filename);
+
+	ret = init_parser_memory(parser);
+	if (ret != RET_OK) {
 		SAFE_CLOSE(parser->fd, close);
-		return -RET_E_MMAP;
+		return ret;
 	}
 
 	parser->p = pitcher_new_parser();
@@ -2351,11 +2396,7 @@ static void free_parser_node(struct test_node *node)
 	parser = container_of(node, struct parser_test_t, node);
 
 	SAFE_CLOSE(parser->chnno, pitcher_unregister_chn);
-	if (parser->virt && parser->size) {
-		munmap(parser->virt, parser->size);
-		parser->virt = NULL;
-		parser->size = 0;
-	}
+	free_parser_memory(parser);
 	SAFE_CLOSE(parser->fd, close);
 	SAFE_RELEASE(parser->p, pitcher_del_parser);
 	SAFE_RELEASE(parser, pitcher_free);

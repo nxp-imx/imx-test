@@ -44,6 +44,11 @@ enum {
 	BUFFER_TYPE_BFRAME,
 };
 
+enum {
+	MEM_MMAP = 0,
+	MEM_ALLOC
+};
+
 #define BUFFER_TYPE_MASK	0x3
 #define BUFFER_TYPE_OFFSET	16
 #define SET_BUFFER_TYPE(flags, type)	\
