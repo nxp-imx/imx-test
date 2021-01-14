@@ -243,6 +243,17 @@ struct parse_handler parse_handler_table[] = {
 	{.format = V4L2_PIX_FMT_VC1_ANNEX_G,
 	 .handle_parse = vc1g_parse,
 	},
+	{.format = VPU_PIX_FMT_VP6,
+	 .handle_parse = vp6_parse,
+	},
+	{.format = VPU_PIX_FMT_DIVX,
+	 .handle_parse = divx_parse,
+	},
+#ifdef RV_PARSE
+	{.format = VPU_PIX_FMT_RV,
+	 .handle_parse = rv_parse,
+	},
+#endif
 	{0, 0},
 };
 

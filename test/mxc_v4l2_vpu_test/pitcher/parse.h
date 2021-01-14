@@ -39,12 +39,15 @@ struct pitcher_frame {
 };
 
 struct pitcher_parser {
+	char *filename;
 	struct list_head queue;
 	unsigned int format;
 	struct pitcher_frame *cur_frame;
 	unsigned long number;
 	char *virt;
 	unsigned long size;
+	unsigned long offset;
+	unsigned int idx;
 };
 
 struct pitcher_parser *pitcher_new_parser(void);
@@ -79,6 +82,9 @@ int vp8_parse(Parser p, void *arg);
 int vp9_parse(Parser p, void *arg);
 int vc1l_parse(Parser p, void *arg);
 int vc1g_parse(Parser p, void *arg);
+int vp6_parse(Parser p, void *arg);
+int divx_parse(Parser p, void *arg);
+int rv_parse(Parser p, void *arg);
 
 void vp8_insert_ivf_seqhdr(FILE *file, uint32_t width, uint32_t height,
 			   uint32_t frame_rate);

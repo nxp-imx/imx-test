@@ -2349,6 +2349,8 @@ static int init_parser_node(struct test_node *node)
 	parser->p = pitcher_new_parser();
 	if (parser->p == NULL)
 		return -RET_E_INVAL;
+	memset(&p, 0, sizeof(p));
+	p.filename = parser->filename;
 	p.format = parser->node.pixelformat;
 	p.number = parser->frame_num;
 	p.virt = parser->virt;
