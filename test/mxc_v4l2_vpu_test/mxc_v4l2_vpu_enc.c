@@ -2201,7 +2201,8 @@ static int parser_run(void *arg, struct pitcher_buffer *pbuf)
 	if (parser->end)
 		buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
 
-	pitcher_push_back_output(parser->chnno, buffer);
+	if (buffer->planes[0].bytesused > 0)
+		pitcher_push_back_output(parser->chnno, buffer);
 
 	SAFE_RELEASE(buffer, pitcher_put_buffer);
 

@@ -380,7 +380,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 				continue;
 		}
 		sc.force_extra_on_first = 0;
-		if ((state & sc.extra_mask) == sc.extra_code)
+		if ((i + 1 >= sc.extra_num) && ((state & sc.extra_mask) == sc.extra_code))
 			offset = i + 1 - sc.extra_num;
 		else
 			offset = i + 1 - sc.num;
