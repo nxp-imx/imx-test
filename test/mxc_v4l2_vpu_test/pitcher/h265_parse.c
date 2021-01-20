@@ -87,7 +87,7 @@ static struct pitcher_parser_scode h265_scode = {
 	.extra_num = 4,
 	.extra_code = 0x00000001,
 	.extra_mask = 0xffffffff,
-	.force_extra_on_first = 1,
+	.force_extra_on_first = 0,
 	.check_frame = h265_check_frame,
 	.priv_data_size = sizeof(struct h265_parse_t),
 };
