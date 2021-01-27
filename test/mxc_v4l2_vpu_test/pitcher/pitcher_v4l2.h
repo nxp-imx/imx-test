@@ -95,6 +95,7 @@ struct v4l2_component_t {
 	int (*start)(struct v4l2_component_t *component);
 	int (*stop)(struct v4l2_component_t *component);
 	int (*is_end)(struct v4l2_component_t *component);
+	int (*run_hook)(struct v4l2_component_t *component);
 	void *priv;
 	uint64_t ts_b;
 	uint64_t ts_e;

@@ -1046,6 +1046,9 @@ static int run_v4l2(void *arg, struct pitcher_buffer *pbuf)
 			pbuf = NULL;
 	}
 
+	if (component->run_hook)
+		component->run_hook(component);
+
 	return ret;
 }
 

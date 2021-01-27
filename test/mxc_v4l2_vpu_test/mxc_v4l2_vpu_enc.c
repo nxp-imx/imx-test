@@ -97,6 +97,8 @@ struct encoder_test_t {
 	struct v4l2_enc_roi_param roi;
 	struct v4l2_enc_ipcm_param ipcm;
 
+	uint32_t force_key;
+
 	const char *devnode;
 };
 
@@ -316,6 +318,21 @@ static int is_camera_finish(struct v4l2_component_t *component)
 	if (is_end)
 		PITCHER_LOG("stop camera\n");
 	return is_end;
+}
+
+static int change_encoder_dynamically(struct v4l2_component_t *component)
+{
+	struct encoder_test_t *encoder;
+
+	if (!component)
+		return 0;
+
+	encoder = container_of(component, struct encoder_test_t, output);
+
+	if (encoder->force_key && component->frame_count == encoder->force_key)
+		set_ctrl(component->fd, V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME, 1);
+
+	return 0;
 }
 
 static int is_encoder_output_finish(struct v4l2_component_t *component)
@@ -581,6 +598,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265"},
 	{"roi", 5, "--roi <left> <top> <width> <height> <qp_delta>\n\t\t\tenable roi"},
 	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
+	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
 	{NULL, 0, NULL},
 };
 
@@ -1142,6 +1160,7 @@ static int init_encoder_node(struct test_node *node)
 	encoder->output.framerate = encoder->node.framerate;
 	encoder->output.sizeimage = 0;
 	encoder->output.is_end = is_encoder_output_finish;
+	encoder->output.run_hook = change_encoder_dynamically;
 	encoder->output.buffer_count = 4;
 	snprintf(encoder->output.desc.name, sizeof(encoder->output.desc.name),
 			"encoder output.%d", encoder->node.key);
@@ -1303,6 +1322,8 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->ipcm.rect.top = strtol(argv[1], NULL, 0);
 		encoder->ipcm.rect.width = strtol(argv[2], NULL, 0);
 		encoder->ipcm.rect.height = strtol(argv[3], NULL, 0);
+	} else if (!strcasecmp(option->name, "force")) {
+		encoder->force_key = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
