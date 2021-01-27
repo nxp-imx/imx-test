@@ -98,6 +98,8 @@ struct encoder_test_t {
 	struct v4l2_enc_ipcm_param ipcm;
 
 	uint32_t force_key;
+	uint32_t new_bitrate;
+	uint32_t nbr_no;
 
 	const char *devnode;
 };
@@ -323,14 +325,21 @@ static int is_camera_finish(struct v4l2_component_t *component)
 static int change_encoder_dynamically(struct v4l2_component_t *component)
 {
 	struct encoder_test_t *encoder;
+	int fd;
+	unsigned long frame_count;
 
 	if (!component)
 		return 0;
 
 	encoder = container_of(component, struct encoder_test_t, output);
+	fd = component->fd;
+	frame_count = component->frame_count;
 
-	if (encoder->force_key && component->frame_count == encoder->force_key)
-		set_ctrl(component->fd, V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME, 1);
+	if (encoder->force_key && frame_count == encoder->force_key)
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME, 1);
+
+	if (encoder->bitrate_mode && encoder->new_bitrate && frame_count == encoder->nbr_no)
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->new_bitrate);
 
 	return 0;
 }
@@ -599,6 +608,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"roi", 5, "--roi <left> <top> <width> <height> <qp_delta>\n\t\t\tenable roi"},
 	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
 	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
+	{"nbr", 2, "--nbr <br> <no>\n\t\t\tset encoder new target bitrate since frame <no>, the unit is b"},
 	{NULL, 0, NULL},
 };
 
@@ -1041,6 +1051,13 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 
 	fd = encoder->fd;
 
+	if (encoder->new_bitrate == encoder->target_bitrate) {
+		encoder->new_bitrate = 0;
+		encoder->nbr_no = 0;
+	}
+	if (!encoder->nbr_no)
+		encoder->new_bitrate = 0;
+
 	switch (encoder->capture.pixelformat) {
 	case V4L2_PIX_FMT_H264:
 		profile_id = V4L2_CID_MPEG_VIDEO_H264_PROFILE;
@@ -1324,6 +1341,9 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->ipcm.rect.height = strtol(argv[3], NULL, 0);
 	} else if (!strcasecmp(option->name, "force")) {
 		encoder->force_key = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "nbr")) {
+		encoder->new_bitrate = strtol(argv[0], NULL, 0);
+		encoder->nbr_no = strtol(argv[1], NULL, 0);
 	}
 
 	return RET_OK;
