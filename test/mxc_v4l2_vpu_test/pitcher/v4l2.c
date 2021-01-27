@@ -65,6 +65,19 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 	assert(component && component->fd >= 0);
 	fd = component->fd;
 
+	if (component->pixelformat) {
+		ret = check_v4l2_support_fmt(component->fd,
+				component->type, component->pixelformat);
+		if (ret == FALSE) {
+			PITCHER_ERR("set fmt %c%c%c%c fail, not supported \n",
+					component->pixelformat,
+					component->pixelformat >> 8,
+					component->pixelformat >> 16,
+					component->pixelformat >> 24);
+			return -RET_E_INVAL;
+		}
+	}
+
 	memset(&format, 0, sizeof(format));
 	format.type = component->type;
 	ioctl(fd, VIDIOC_G_FMT, &format);
@@ -428,7 +441,7 @@ static int __streamoff_v4l2(struct v4l2_component_t *component)
 	type = component->type;
 	ret = ioctl(fd, VIDIOC_STREAMOFF, &type);
 	if (ret) {
-		PITCHER_LOG("streamon fail, error : %s\n", strerror(errno));
+		PITCHER_LOG("streamoff fail, error : %s\n", strerror(errno));
 		return -RET_E_INVAL;
 	}
 
@@ -827,6 +840,13 @@ static void __check_v4l2_events(struct v4l2_component_t *component)
 		PITCHER_LOG("Receive Source Change, fd = %d\n", component->fd);
 		component->resolution_change = true;
 		break;
+	case V4L2_EVENT_CODEC_ERROR:
+		PITCHER_LOG("Receive Codec Error, fd = %d\n", component->fd);
+		pitcher_set_error(component->chnno);
+		break;
+	case V4L2_EVENT_SKIP:
+		PITCHER_LOG("Receive Skip, fd = %d\n", component->fd);
+		break;
 	default:
 		break;
 	}
@@ -1085,7 +1105,7 @@ int is_v4l2_splane(struct v4l2_capability *cap)
     return FALSE;
 }
 
-static int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
+int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
 {
 	struct v4l2_fmtdesc fmt_desc;
 
@@ -1093,8 +1113,15 @@ static int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
 	fmt_desc.index = 0;
 
 	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
-		if (fmt_desc.pixelformat == pixelformat)
+		if (fmt_desc.pixelformat == pixelformat) {
+			PITCHER_LOG("%c%c%c%c %s is found\n",
+					pixelformat,
+					pixelformat >> 8,
+					pixelformat >> 16,
+					pixelformat >> 24,
+					fmt_desc.description);
 			return TRUE;
+		}
 		fmt_desc.index++;
 	}
 
@@ -1183,6 +1210,30 @@ int set_ctrl(int fd, int id, int value)
 	PITCHER_LOG("[S]%s : %d (%d)\n", qctrl.name, ctrl.value, value);
 
 	return ret;
+}
+
+int get_ctrl(int fd, int id, int *value)
+{
+	struct v4l2_queryctrl qctrl;
+	struct v4l2_control ctrl;
+	int ret;
+
+	memset(&qctrl, 0, sizeof(qctrl));
+	qctrl.id = id;
+	ret = ioctl(fd, VIDIOC_QUERYCTRL, &qctrl);
+	if (ret < 0)
+		return -RET_E_INVAL;
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	ctrl.id = id;
+	ret = ioctl(fd, VIDIOC_G_CTRL, &ctrl);
+	if (ret < 0)
+		return -RET_E_INVAL;
+
+	if (value)
+		*value = ctrl.value;
+
+	return 0;
 }
 
 uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)

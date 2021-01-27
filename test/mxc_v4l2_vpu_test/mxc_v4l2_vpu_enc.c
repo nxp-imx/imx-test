@@ -238,11 +238,19 @@ static int subscribe_event(int fd)
 	struct v4l2_event_subscription sub;
 
 	memset(&sub, 0, sizeof(sub));
-
 	sub.type = V4L2_EVENT_SOURCE_CHANGE;
 	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 
+	memset(&sub, 0, sizeof(sub));
 	sub.type = V4L2_EVENT_EOS;
+	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+
+	memset(&sub, 0, sizeof(sub));
+	sub.type = V4L2_EVENT_CODEC_ERROR;
+	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+
+	memset(&sub, 0, sizeof(sub));
+	sub.type = V4L2_EVENT_SKIP;
 	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 
 	return 0;
@@ -2832,6 +2840,11 @@ static int check_ctrl_ready(void *arg, int *is_end)
 				end = true;
 				force_exit();
 			}
+		}
+		if (pitcher_is_error(schn) || pitcher_is_error(dchn)) {
+			PITCHER_ERR("some error occurs\n");
+			end = true;
+			force_exit();
 		}
 	}
 

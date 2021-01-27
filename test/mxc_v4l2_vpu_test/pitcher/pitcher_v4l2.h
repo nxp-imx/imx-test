@@ -26,6 +26,13 @@ extern "C"
 
 #include <linux/videodev2.h>
 
+#ifndef V4L2_EVENT_CODEC_ERROR
+#define V4L2_EVENT_CODEC_ERROR	(V4L2_EVENT_PRIVATE_START + 1)
+#endif
+#ifndef V4L2_EVENT_SKIP
+#define V4L2_EVENT_SKIP		(V4L2_EVENT_PRIVATE_START + 2)
+#endif
+
 #define MAX_BUFFER_COUNT	32
 
 struct v4l2_component_t {
@@ -67,7 +74,9 @@ int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt);
 int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt);
 int is_v4l2_mplane(struct v4l2_capability *cap);
 int is_v4l2_splane(struct v4l2_capability *cap);
+int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat);
 int set_ctrl(int fd, int id, int value);
+int get_ctrl(int fd, int id, int *value);
 uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height);
 #ifdef __cplusplus
 }

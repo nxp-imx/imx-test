@@ -711,6 +711,17 @@ unsigned int pitcher_is_error(unsigned int chnno)
 	return chn->error;
 }
 
+void pitcher_set_error(unsigned int chnno)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return;
+
+	chn->error = 1;
+}
+
 int pitcher_get_source(unsigned int chnno)
 {
 	struct pitcher_chn *chn;

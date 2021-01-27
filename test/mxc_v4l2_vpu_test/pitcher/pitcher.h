@@ -127,6 +127,7 @@ int pitcher_get_sink(unsigned int chnno);
 unsigned int pitcher_get_status(unsigned int chnno);
 unsigned int pitcher_is_active(unsigned int chnno);
 unsigned int pitcher_is_error(unsigned int chnno);
+void pitcher_set_error(unsigned int chnno);
 int pitcher_poll_idle_buffer(unsigned int chnno);
 struct pitcher_buffer *pitcher_get_idle_buffer(unsigned int chnno);
 void pitcher_put_buffer_idle(unsigned int chnno, struct pitcher_buffer *buffer);
