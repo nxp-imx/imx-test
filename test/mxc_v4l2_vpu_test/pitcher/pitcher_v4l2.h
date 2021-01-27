@@ -26,11 +26,46 @@ extern "C"
 
 #include <linux/videodev2.h>
 
+#ifndef _UAPI__LINUX_IMX_VPU_H
+
 #ifndef V4L2_EVENT_CODEC_ERROR
 #define V4L2_EVENT_CODEC_ERROR	(V4L2_EVENT_PRIVATE_START + 1)
 #endif
 #ifndef V4L2_EVENT_SKIP
 #define V4L2_EVENT_SKIP		(V4L2_EVENT_PRIVATE_START + 2)
+#endif
+
+#define V4L2_MAX_ROI_REGIONS            8
+struct v4l2_enc_roi_param {
+	struct v4l2_rect rect;
+	__u32 enable;
+	__s32 qp_delta;
+	__u32 reserved[2];
+};
+struct v4l2_enc_roi_params {
+	__u32 num_roi_regions;
+	struct v4l2_enc_roi_param roi_params[V4L2_MAX_ROI_REGIONS];
+	__u32 config_store;
+	__u32 reserved[2];
+};
+#define V4L2_CID_ROI_COUNT              (V4L2_CID_USER_IMX_BASE + 2)
+#define V4L2_CID_ROI                    (V4L2_CID_USER_IMX_BASE + 3)
+
+#define V4L2_MAX_IPCM_REGIONS		2
+struct v4l2_enc_ipcm_param {
+	struct v4l2_rect rect;
+	__u32 enable;
+	__u32 reserved[2];
+};
+struct v4l2_enc_ipcm_params {
+	__u32 num_ipcm_regions;
+	struct v4l2_enc_ipcm_param ipcm_params[V4L2_MAX_IPCM_REGIONS];
+	__u32 config_store;
+	__u32 reserved[2];
+};
+#define V4L2_CID_IPCM_COUNT		(V4L2_CID_USER_IMX_BASE + 4)
+#define V4L2_CID_IPCM			(V4L2_CID_USER_IMX_BASE + 5)
+
 #endif
 
 #define MAX_BUFFER_COUNT	32

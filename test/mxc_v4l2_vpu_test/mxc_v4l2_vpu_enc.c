@@ -94,6 +94,9 @@ struct encoder_test_t {
 	uint32_t qp;
 	uint32_t bframes;
 
+	struct v4l2_enc_roi_param roi;
+	struct v4l2_enc_ipcm_param ipcm;
+
 	const char *devnode;
 };
 
@@ -399,6 +402,11 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 	if (pitcher_get_status(chnno) == PITCHER_STATE_STOPPED) {
 		decoder->capture.width = 0;
 		decoder->capture.height = 0;
+		PITCHER_LOG("decoder fmt : %c%c%c%c\n",
+				decoder->capture.pixelformat,
+				decoder->capture.pixelformat >> 8,
+				decoder->capture.pixelformat >> 16,
+				decoder->capture.pixelformat >> 24);
 		ret = pitcher_start_chn(chnno);
 		if (ret < 0) {
 			force_exit();
@@ -571,6 +579,8 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265"},
+	{"roi", 5, "--roi <left> <top> <width> <height> <qp_delta>\n\t\t\tenable roi"},
+	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
 	{NULL, 0, NULL},
 };
 
@@ -651,6 +661,12 @@ static int get_pixelfmt_from_str(const char *str)
 		return VPU_PIX_FMT_SPK;
 	if (!strcasecmp(str, "divx"))
 		return VPU_PIX_FMT_DIVX;
+	if (!strcasecmp(str, "dtrc"))
+		return v4l2_fourcc('D', 'T', 'R', 'C');
+	if (!strcasecmp(str, "P010"))
+		return v4l2_fourcc('P', '0', '1', '0');
+	if (!strcasecmp(str, "nvx2"))
+		return v4l2_fourcc('N', 'V', 'X', '2');
 
 	PITCHER_ERR("unsupport pixelformat : %s\n", str);
 	return -RET_E_INVAL;
@@ -886,6 +902,116 @@ static void validate_vpx_profile_level(struct encoder_test_t *encoder)
 		encoder->profile = V4L2_MPEG_VIDEO_VP8_PROFILE_0;
 }
 
+static int set_encoder_roi(int fd, struct v4l2_enc_roi_param *param)
+{
+	struct v4l2_ext_control ctrl;
+	struct v4l2_ext_controls ctrls;
+	struct v4l2_enc_roi_params roi;
+	int roi_count = 0;
+	int ret;
+
+	if (!param || !param->enable)
+		return -RET_E_INVAL;
+
+	ret = get_ctrl(fd, V4L2_CID_ROI_COUNT, &roi_count);
+	if (ret < 0) {
+		PITCHER_ERR("get roi count fail\n");
+		return ret;
+	}
+
+	memset(&ctrls, 0, sizeof(ctrls));
+	memset(&ctrl, 0, sizeof(ctrl));
+	memset(&roi, 0, sizeof(roi));
+
+	ctrls.controls = &ctrl;
+	ctrls.count = 1;
+
+	ctrl.id = V4L2_CID_ROI;
+	/*ctrl.string = (char *)&roi;*/
+	ctrl.ptr = (void *)&roi;
+	ctrl.size = sizeof(roi);
+
+	roi.num_roi_regions = roi_count;
+	roi.roi_params[0] = *param;
+
+	ret = ioctl(fd, VIDIOC_S_EXT_CTRLS, &ctrls);
+	if (ret < 0) {
+		PITCHER_ERR("set roi fail\n");
+		return -RET_E_INVAL;
+	}
+
+	memset(&roi, 0, sizeof(roi));
+	ret = ioctl(fd, VIDIOC_G_EXT_CTRLS, &ctrls);
+	if (ret < 0) {
+		PITCHER_ERR("set roi fail\n");
+		return -RET_E_INVAL;
+	}
+
+	PITCHER_LOG("%d [0]%d %d,%d %dx%d %d\n",
+			roi.num_roi_regions,
+			roi.roi_params[0].enable,
+			roi.roi_params[0].rect.left,
+			roi.roi_params[0].rect.top,
+			roi.roi_params[0].rect.width,
+			roi.roi_params[0].rect.height,
+			roi.roi_params[0].qp_delta);
+
+	return 0;
+}
+
+static int set_encoder_ipcm(int fd, struct v4l2_enc_ipcm_param *param)
+{
+	struct v4l2_ext_control ctrl;
+	struct v4l2_ext_controls ctrls;
+	struct v4l2_enc_ipcm_params ipcm;
+	int ipcm_count = 0;
+	int ret;
+
+	if (!param || !param->enable)
+		return -RET_E_INVAL;
+
+	ret = get_ctrl(fd, V4L2_CID_IPCM_COUNT, &ipcm_count);
+	if (ret < 0) {
+		PITCHER_ERR("get ipcm count fail\n");
+		return ret;
+	}
+	memset(&ctrls, 0, sizeof(ctrls));
+	memset(&ctrl, 0, sizeof(ctrl));
+	memset(&ipcm, 0, sizeof(ipcm));
+
+	ctrls.controls = &ctrl;
+	ctrls.count = 1;
+
+	ctrl.id = V4L2_CID_IPCM;
+	ctrl.ptr = (void *)&ipcm;
+	ctrl.size = sizeof(struct v4l2_enc_ipcm_params);
+
+	ipcm.num_ipcm_regions = ipcm_count;
+	ipcm.ipcm_params[0] = *param;
+
+	ret = ioctl(fd, VIDIOC_S_EXT_CTRLS, &ctrls);
+	if (ret < 0) {
+		PITCHER_ERR("set ipcm fail\n");
+		return -RET_E_INVAL;
+	}
+
+	memset(&ipcm, 0, sizeof(ipcm));
+	ret = ioctl(fd, VIDIOC_G_EXT_CTRLS, &ctrls);
+	if (ret < 0) {
+		PITCHER_ERR("set ipcm fail\n");
+		return -RET_E_INVAL;
+	}
+
+	PITCHER_LOG("%d [0]%d %d,%d %dx%d\n",
+			ipcm.num_ipcm_regions,
+			ipcm.ipcm_params[0].enable,
+			ipcm.ipcm_params[0].rect.left,
+			ipcm.ipcm_params[0].rect.top,
+			ipcm.ipcm_params[0].rect.width,
+			ipcm.ipcm_params[0].rect.height);
+	return 0;
+}
+
 static int set_encoder_parameters(struct encoder_test_t *encoder)
 {
 	int fd;
@@ -919,12 +1045,25 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	if (level_id)
 		set_ctrl(fd, level_id, encoder->level);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
+	if (encoder->bitrate_mode) {
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE, 1);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 1);
+	} else {
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE, 0);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 0);
+	}
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->target_bitrate);
 	if (encoder->peak_bitrate)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK, encoder->peak_bitrate);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, encoder->qp);
+	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP, encoder->qp);
+	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP, encoder->qp);
+	if (encoder->roi.enable)
+		set_encoder_roi(fd, &encoder->roi);
+	if (encoder->ipcm.enable)
+		set_encoder_ipcm(fd, &encoder->ipcm);
 
 	return RET_OK;
 }
@@ -1151,6 +1290,19 @@ static int parse_encoder_option(struct test_node *node,
 
 		if (fmt > 0)
 			encoder->node.pixelformat = fmt;
+	} else if (!strcasecmp(option->name, "roi")) {
+		encoder->roi.enable = 1;
+		encoder->roi.rect.left = strtol(argv[0], NULL, 0);
+		encoder->roi.rect.top = strtol(argv[1], NULL, 0);
+		encoder->roi.rect.width = strtol(argv[2], NULL, 0);
+		encoder->roi.rect.height = strtol(argv[3], NULL, 0);
+		encoder->roi.qp_delta = strtol(argv[4], NULL, 0);
+	} else if (!strcasecmp(option->name, "ipcm")) {
+		encoder->ipcm.enable = 1;
+		encoder->ipcm.rect.left = strtol(argv[0], NULL, 0);
+		encoder->ipcm.rect.top = strtol(argv[1], NULL, 0);
+		encoder->ipcm.rect.width = strtol(argv[2], NULL, 0);
+		encoder->ipcm.rect.height = strtol(argv[3], NULL, 0);
 	}
 
 	return RET_OK;
