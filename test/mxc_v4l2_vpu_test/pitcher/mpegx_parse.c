@@ -35,14 +35,15 @@ static int mpeg4_check_frame(uint8_t *p, uint32_t size, void *priv)
 		return PARSER_TYPE_UNKNOWN;
 
 	type = p[0];
-	switch (type) {
-	case 0xB6: //vop
+
+	if (type == 0xB6)	//VOP
 		return PARSER_TYPE_FRAME;
-	case 0xB0: //vos
+	else if (type == 0xB0)	//VOS
 		return PARSER_TYPE_CONFIG;
-	default:
+	else if (type >= 0 && type <= 0x2F)	//object/object layer start code
+		return PARSER_TYPE_CONFIG;
+	else
 		return PARSER_TYPE_UNKNOWN;
-	}
 }
 
 static int mpeg2_check_frame(uint8_t *p, uint32_t size, void *priv)

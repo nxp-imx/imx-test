@@ -38,26 +38,36 @@ static int byte_to_int(char *p, int n)
 	return dst;
 }
 
-static int rcv_parse_header(char *src, int *rcv_version, int *meta_size)
+static int rcv_parse_header(Parser p, int *rcv_version, int *meta_size)
 {
+	struct pitcher_parser *parser;
 	int data = 0;
-	char *p = src;
+	char *src = NULL;
 	int size = 0;
 
+	parser = (struct pitcher_parser *)p;
+	src = parser->virt;
+
 	/* number of frames */
-	data = byte_to_int(p, 3);
-	p += 3;
+	data = byte_to_int(src, 3);
+	src += 3;
 	/* extension bit, rcv codec version */
-	data = byte_to_int(p, 1);
-	p += 1;
+	data = byte_to_int(src, 1);
+	src += 1;
 	if (data & 0x40)
 		*rcv_version = 1;
 	else
 		*rcv_version = 0;
 	/* meta data size */
-	*meta_size = byte_to_int(p, 4);
-	p += 4;
+	*meta_size = byte_to_int(src, 4);
+	src += 4 + (*meta_size);
 	size = (4 + 4 * (*rcv_version)) * 4 + (*meta_size);
+
+	parser->height = byte_to_int(src, 4);
+	src += 4;
+	parser->width = byte_to_int(src, 4);
+	src += 4;
+	PITCHER_LOG("resolution: <%d x %d>\n", parser->width, parser->height);
 
 	return size;
 }
@@ -85,7 +95,7 @@ int vc1l_parse(Parser p, void *arg)
 
 	PITCHER_LOG("total file size: 0x%lx\n", parser->size);
 
-	size = rcv_parse_header(current, &rcv_version, &meta_size);
+	size = rcv_parse_header(parser, &rcv_version, &meta_size);
 	/* Input meta data only */
 	pitcher_parser_push_new_frame(parser, 8, meta_size, index++, 0);
 	offset += size + (4 + 4 * rcv_version);

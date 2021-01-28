@@ -48,10 +48,12 @@ struct pitcher_parser {
 	unsigned long size;
 	unsigned long offset;
 	unsigned int idx;
+	uint32_t width;
+	uint32_t height;
 };
 
 struct pitcher_parser *pitcher_new_parser(void);
-void pitcher_init_parser(Parser src, Parser dst);
+void pitcher_init_parser(Parser p);
 void pitcher_del_parser(Parser p);
 struct pitcher_frame *pitcher_parser_cur_frame(Parser p);
 void pitcher_parser_push(Parser p, struct pitcher_frame *frame);

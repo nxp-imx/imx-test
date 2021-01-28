@@ -2510,7 +2510,7 @@ static void free_parser_memory(struct parser_test_t *parser)
 static int init_parser_node(struct test_node *node)
 {
 	struct parser_test_t *parser;
-	struct pitcher_parser p;
+	struct pitcher_parser *p;
 	int ret;
 
 	if (!node)
@@ -2551,20 +2551,25 @@ static int init_parser_node(struct test_node *node)
 	parser->p = pitcher_new_parser();
 	if (parser->p == NULL)
 		return -RET_E_INVAL;
-	memset(&p, 0, sizeof(p));
-	p.filename = parser->filename;
-	p.format = parser->node.pixelformat;
-	p.number = parser->frame_num;
-	p.virt = parser->virt;
-	p.size = parser->size;
+	p = parser->p;
+	p->filename = parser->filename;
+	p->format = parser->node.pixelformat;
+	p->number = parser->frame_num;
+	p->virt = parser->virt;
+	p->size = parser->size;
 
-	pitcher_init_parser(&p, parser->p);
+	pitcher_init_parser(parser->p);
 
 	if (pitcher_parse(parser->p) != RET_OK) {
 		SAFE_RELEASE(parser->p, pitcher_del_parser);
 		return -RET_E_INVAL;
 	}
 	pitcher_parser_seek_to_begin(parser->p);
+
+	if (p->width != 0) {
+		parser->node.width = p->width;
+		parser->node.height = p->height;
+	}
 
 	if (parser->show)
 		pitcher_parser_show((void *)parser->p);

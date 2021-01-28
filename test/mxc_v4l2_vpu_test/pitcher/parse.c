@@ -144,18 +144,15 @@ struct pitcher_parser *pitcher_new_parser(void)
 	return parser;
 }
 
-void pitcher_init_parser(Parser src, Parser dst)
+void pitcher_init_parser(Parser p)
 {
-	struct pitcher_parser *p_dst = NULL;
+	struct pitcher_parser *parser = NULL;
 
-	if (!src || !dst)
+	if (!p)
 		return;
 
-	p_dst = (struct pitcher_parser *)dst;
-
-	memcpy(p_dst, src, sizeof(*p_dst));
-
-	INIT_LIST_HEAD(&p_dst->queue);
+	parser = (struct pitcher_parser *)p;
+	INIT_LIST_HEAD(&parser->queue);
 }
 
 void pitcher_del_parser(Parser p)

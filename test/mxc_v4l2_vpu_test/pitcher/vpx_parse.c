@@ -87,6 +87,10 @@ static int vpx_parse(Parser p, void *arg)
 		return -RET_E_INVAL;
 	}
 
+	parser->width = current[12] | (current[13] << 8);
+	parser->height = current[14] | (current[15] << 8);
+	PITCHER_LOG("resolution: <%d x %d>\n", parser->width, parser->height);
+
 	current += ivf_hdr_size;
 	left_bytes -= ivf_hdr_size;
 
