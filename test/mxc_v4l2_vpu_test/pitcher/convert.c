@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 #include "pitcher.h"
 #include "pitcher_def.h"
 #include "pitcher_v4l2.h"
@@ -29,16 +30,26 @@
 #include "convert.h"
 
 
-static void convert_i420_to_nv12(struct pitcher_buffer *src,
-				struct pitcher_buffer *dst,
-				uint32_t width, uint32_t height)
+static void convert_i420_to_nv12(struct convert_ctx *cvrt_ctx)
 {
+	struct pitcher_buffer *src;
+	struct pitcher_buffer *dst;
+	uint32_t width;
+	uint32_t height;
 	uint8_t *u_start;
 	uint8_t *v_start;
 	uint8_t *uv_temp;
-	uint32_t uv_size = width * height / 2;
+	uint32_t uv_size;
 	int i;
 	int j;
+
+	assert(cvrt_ctx);
+
+	src = cvrt_ctx->src_buf;
+	dst = cvrt_ctx->dst_buf;
+	width = max(cvrt_ctx->width, cvrt_ctx->bytesperline);
+	height = cvrt_ctx->height;
+	uv_size = width * height / 2;
 
 	switch (src->count) {
 	case 1:
@@ -80,7 +91,7 @@ static void convert_i420_to_nv12(struct pitcher_buffer *src,
 }
 
 static void __convert_nv12_tiled_to_linear(uint8_t *src, uint8_t *dst,
-					   uint32_t width, uint32_t height)
+			uint32_t width, uint32_t height, uint32_t stride)
 {
 	uint32_t h_cnt;
 	uint32_t v_cnt;
@@ -95,7 +106,6 @@ static void __convert_nv12_tiled_to_linear(uint8_t *src, uint8_t *dst,
 	uint32_t i;
 	uint32_t j;
 	uint32_t n;
-	uint32_t stride;
 
 	inter_buf = pitcher_calloc(1, 8 * 128);
 	if (!inter_buf)	{
@@ -106,8 +116,6 @@ static void __convert_nv12_tiled_to_linear(uint8_t *src, uint8_t *dst,
 	h_cnt = width / 8;
 	v_cnt = (height + 127) / 128;
 	v_remain = height % 128;
-
-	stride = ALIGN(width, IMX8X_HORIZONTAL_STRIDE);
 
 	for (v_num = 0; v_num < v_cnt; v_num++)	{
 		v_base_offset = stride * 128 * v_num;
@@ -133,21 +141,30 @@ static void __convert_nv12_tiled_to_linear(uint8_t *src, uint8_t *dst,
 	SAFE_RELEASE(inter_buf, pitcher_free);
 }
 
-static void convert_nv12_tiled_to_linear(struct pitcher_buffer *src,
-					 struct pitcher_buffer *dst,
-					 uint32_t width, uint32_t height)
+static void convert_nv12_tiled_to_linear(struct convert_ctx *cvrt_ctx)
 {
+	struct pitcher_buffer *src;
+	struct pitcher_buffer *dst;
+	uint32_t width;
+	uint32_t height;
+	uint32_t stride;
 	uint8_t *y_src_start;
 	uint8_t *uv_src_start;
 	uint8_t *y_dst_start;
 	uint8_t *uv_dst_start;
-	uint32_t align_width = ALIGN(width, IMX8X_HORIZONTAL_STRIDE);
-	uint32_t align_height = ALIGN(height, IMX8X_VERTICAL_STRIDE);
+
+	assert(cvrt_ctx);
+
+	src = cvrt_ctx->src_buf;
+	dst = cvrt_ctx->dst_buf;
+	width = ALIGN(cvrt_ctx->width, MALONE_ALIGN_W);
+	height = ALIGN(cvrt_ctx->height, MALONE_ALIGN_H);
+	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(width, MALONE_ALIGN_LINE);
 
 	switch (src->count) {
 	case 1:
 		y_src_start = src->planes[0].virt;
-		uv_src_start = src->planes[0].virt + align_width * align_height;
+		uv_src_start = src->planes[0].virt + stride * height;
 		break;
 	case 2:
 		y_src_start = src->planes[0].virt;
@@ -160,26 +177,26 @@ static void convert_nv12_tiled_to_linear(struct pitcher_buffer *src,
 	switch (dst->count) {
 	case 1:
 		y_dst_start = dst->planes[0].virt;
-		uv_dst_start = dst->planes[0].virt + width * height;
+		uv_dst_start = dst->planes[0].virt + cvrt_ctx->width * cvrt_ctx->height;
 		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-								width, height);
+						cvrt_ctx->width, cvrt_ctx->height);
 		break;
 	case 2:
 		y_dst_start = dst->planes[0].virt;
 		uv_dst_start = dst->planes[1].virt;
-		dst->planes[0].bytesused = width * height;
-		dst->planes[1].bytesused = width * height / 2;
+		dst->planes[0].bytesused = cvrt_ctx->width * cvrt_ctx->height;
+		dst->planes[1].bytesused = cvrt_ctx->width * cvrt_ctx->height / 2;
 		break;
 	default:
 		return;
 	}
 
-	__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, width, height);
-	__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, width, height / 2);
+	__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height, stride);
+	__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
 }
 
 static void __convert_nv12_tiled_to_linear_10bit(uint8_t *src, uint8_t *dst,
-					         uint32_t width, uint32_t height)
+			uint32_t width, uint32_t height, uint32_t stride)
 {
 	int h_num, v_num, h_cnt, v_cnt, v_remain;
 	int sx, sy, dx, dy;
@@ -190,13 +207,10 @@ static void __convert_nv12_tiled_to_linear_10bit(uint8_t *src, uint8_t *dst,
 	uint8_t first_byte, second_byte;
 	uint16_t byte_16;
 	int start_pos = 0;
-	uint32_t stride;
 
 	h_cnt = (width * 10 / 8) / 8;
 	v_cnt = (height + 127) / 128;
 	v_remain = height % 128;
-
-	stride = ALIGN((width * 10 / 8), IMX8X_HORIZONTAL_STRIDE);
 
 	for (v_num = 0; v_num < v_cnt; v_num++)	{
 		for (h_num = 0; h_num < h_cnt; h_num++) {
@@ -245,24 +259,30 @@ static void __convert_nv12_tiled_to_linear_10bit(uint8_t *src, uint8_t *dst,
 	}
 }
 
-static void convert_nv12_tiled_to_linear_10bit(struct pitcher_buffer *src,
-					       struct pitcher_buffer *dst,
-					       uint32_t width, uint32_t height)
+static void convert_nv12_tiled_to_linear_10bit(struct convert_ctx *cvrt_ctx)
 {
+	struct pitcher_buffer *src;
+	struct pitcher_buffer *dst;
+	uint32_t width;
+	uint32_t height;
+	uint32_t stride;
 	uint8_t *y_src_start;
 	uint8_t *uv_src_start;
 	uint8_t *y_dst_start;
 	uint8_t *uv_dst_start;
-	uint32_t align_width;
-	uint32_t align_height;
+
+	assert(cvrt_ctx);
+
+	src = cvrt_ctx->src_buf;
+	dst = cvrt_ctx->dst_buf;
+	width = ALIGN(cvrt_ctx->width, MALONE_ALIGN_W);
+	height = ALIGN(cvrt_ctx->height, MALONE_ALIGN_H);
+	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(width * 10 / 8, MALONE_ALIGN_LINE);
 
 	switch (src->count) {
 	case 1:
-		align_width = width * 10 / 8;
-		align_width = ALIGN(align_width, IMX8X_HORIZONTAL_STRIDE);
-		align_height = ALIGN(height, IMX8X_VERTICAL_STRIDE);
 		y_src_start = src->planes[0].virt;
-		uv_src_start = src->planes[0].virt + align_width * align_height;
+		uv_src_start = src->planes[0].virt + stride * height;
 		break;
 	case 2:
 		y_src_start = src->planes[0].virt;
@@ -275,53 +295,48 @@ static void convert_nv12_tiled_to_linear_10bit(struct pitcher_buffer *src,
 	switch (dst->count) {
 	case 1:
 		y_dst_start = dst->planes[0].virt;
-		uv_dst_start = dst->planes[0].virt + width * height;
+		uv_dst_start = dst->planes[0].virt + cvrt_ctx->width * cvrt_ctx->height;
 		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-								width, height);
+						cvrt_ctx->width, cvrt_ctx->height);
 		break;
 	case 2:
 		y_dst_start = dst->planes[0].virt;
 		uv_dst_start = dst->planes[1].virt;
-		dst->planes[0].bytesused = width * height;
-		dst->planes[1].bytesused = width * height / 2;
+		dst->planes[0].bytesused = cvrt_ctx->width * cvrt_ctx->height;
+		dst->planes[1].bytesused = cvrt_ctx->width * cvrt_ctx->height / 2;
 		break;
 	default:
 		return;
 	}
 
 	__convert_nv12_tiled_to_linear_10bit(y_src_start, y_dst_start,
-					     width, height);
+					     cvrt_ctx->width, cvrt_ctx->height, stride);
 	__convert_nv12_tiled_to_linear_10bit(uv_src_start, uv_dst_start,
-					     width, height / 2);
+					     cvrt_ctx->width, cvrt_ctx->height / 2, stride);
 }
 
-static void convert_frame_to_nv12(struct pitcher_buffer *src,
-				struct pitcher_buffer *dst,
-				uint32_t fmt, uint32_t width, uint32_t height)
+static void convert_frame_to_nv12(struct convert_ctx *cvrt_ctx)
 {
-	switch (fmt) {
+	switch (cvrt_ctx->src_fmt) {
 	case V4L2_PIX_FMT_YUV420:
-		convert_i420_to_nv12(src, dst, width, height);
+		convert_i420_to_nv12(cvrt_ctx);
 		break;
         case V4L2_PIX_FMT_NV12_TILE:
-                convert_nv12_tiled_to_linear(src, dst, width, height);
+                convert_nv12_tiled_to_linear(cvrt_ctx);
                 break;
 	case V4L2_PIX_FMT_NV12_TILE_10BIT:
-		convert_nv12_tiled_to_linear_10bit(src, dst, width, height);
+		convert_nv12_tiled_to_linear_10bit(cvrt_ctx);
 		break;
 	default:
 		break;
 	}
 }
 
-void convert_frame(struct pitcher_buffer *src,
-		   struct pitcher_buffer *dst,
-		   uint32_t src_fmt, uint32_t dst_fmt,
-		   uint32_t width, uint32_t height)
+void convert_frame(struct convert_ctx *cvrt_ctx)
 {
-	switch (dst_fmt) {
+	switch (cvrt_ctx->dst_fmt) {
 	case V4L2_PIX_FMT_NV12:
-		convert_frame_to_nv12(src, dst, src_fmt, width, height);
+		convert_frame_to_nv12(cvrt_ctx);
 		break;
 	default:
 		break;

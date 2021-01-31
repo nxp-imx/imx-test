@@ -67,6 +67,7 @@ struct test_node {
 	uint32_t pixelformat;
 	uint32_t width;
 	uint32_t height;
+	uint32_t bytesperline;
 	uint32_t framerate;
 	int (*set_source)(struct test_node *node, struct test_node *src);
 	int (*init_node)(struct test_node *node);
@@ -400,6 +401,7 @@ static void sync_decoder_node_info(struct decoder_test_t *decoder)
 	decoder->node.width = decoder->capture.width;
 	decoder->node.height = decoder->capture.height;
 	decoder->node.pixelformat = decoder->capture.pixelformat;
+	decoder->node.bytesperline = decoder->capture.bytesperline;
 	if (decoder->platform.type == IMX_8X)
 		switch_fmt_to_tile(&decoder->node.pixelformat);
 }
@@ -2067,6 +2069,7 @@ static int set_convert_source(struct test_node *node,
 	cvrt = container_of(node, struct convert_test_t, node);
 	cvrt->node.width = src->width;
 	cvrt->node.height = src->height;
+	cvrt->node.bytesperline = src->bytesperline;
 	cvrt->ifmt = src->pixelformat;
 
 	return RET_OK;
@@ -2180,14 +2183,21 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 
 	if (cvrt->ifmt != cvrt->node.pixelformat) {
 		struct pitcher_buffer *buffer;
+		struct convert_ctx cvrt_ctx;
 
 		buffer = pitcher_get_idle_buffer(cvrt->chnno);
 		if (!buffer)
 			return -RET_E_NOT_READY;
 
-		convert_frame(pbuf, buffer,
-			      cvrt->ifmt, cvrt->node.pixelformat,
-			      cvrt->node.width, cvrt->node.height);
+		cvrt_ctx.src_buf = pbuf;
+		cvrt_ctx.dst_buf = buffer;
+		cvrt_ctx.src_fmt = cvrt->ifmt;
+		cvrt_ctx.dst_fmt = cvrt->node.pixelformat;
+		cvrt_ctx.width = cvrt->node.width;
+		cvrt_ctx.height = cvrt->node.height;
+		cvrt_ctx.bytesperline = cvrt->node.bytesperline;
+
+		convert_frame(&cvrt_ctx);
 		pitcher_push_back_output(cvrt->chnno, buffer);
 		SAFE_RELEASE(buffer, pitcher_put_buffer);
 		SAFE_RELEASE(pbuf, pitcher_put_buffer);

@@ -40,8 +40,11 @@ extern "C"
 #define V4L2_PIX_FMT_NV12_TILE                  v4l2_fourcc('N', 'A', '1', '2')  /* Y/CbCr 4:2:0 for i.MX8X 8bit */
 #define V4L2_PIX_FMT_NV12_TILE_10BIT            v4l2_fourcc('N', 'T', '1', '2')  /* Y/CbCr 4:2:0 for i.MX8X 10bit */
 
-#define IMX8X_HORIZONTAL_STRIDE			512
-#define IMX8X_VERTICAL_STRIDE			512
+#define MALONE_TILE_W			8
+#define MALONE_TILE_H			128
+#define MALONE_ALIGN_W			(MALONE_TILE_W * 1)
+#define MALONE_ALIGN_H			(MALONE_TILE_H * 2)
+#define MALONE_ALIGN_LINE		(256)
 
 int set_decoder_parameter_8x(void *arg);
 

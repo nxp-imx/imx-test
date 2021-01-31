@@ -1242,25 +1242,28 @@ int get_ctrl(int fd, int id, int *value)
 uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 {
 	uint32_t size = width * height;
+	uint32_t stride;
 
 	switch (fmt) {
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_YUV420:
 	case V4L2_PIX_FMT_NV21:
-		size = ((width * 12) >> 3) * height;
+		size = ((width * 3) >> 1) * height;
 		break;
 	case V4L2_PIX_FMT_YUYV:
 		size = width * height * 2;
 		break;
 	case V4L2_PIX_FMT_NV12_TILE:
-		width = ALIGN(width, IMX8X_HORIZONTAL_STRIDE);
-		height = ALIGN(height, IMX8X_VERTICAL_STRIDE);
-		size = ((width * 12) >> 3) * height;
+		width = ALIGN(width, MALONE_ALIGN_W);
+		height = ALIGN(height, MALONE_ALIGN_H);
+		stride = ALIGN(width, MALONE_ALIGN_LINE);
+		size = ((stride * 3) >> 1) * height;
 		break;
 	case V4L2_PIX_FMT_NV12_TILE_10BIT:
-		width = ALIGN(((width * 10) >> 3), IMX8X_HORIZONTAL_STRIDE);
-		height = ALIGN(height, IMX8X_VERTICAL_STRIDE);
-		size = ((width * 12) >> 3) * height;
+		width = ALIGN(width, MALONE_ALIGN_W);
+		height = ALIGN(height, MALONE_ALIGN_H);
+		stride = ALIGN(width * 10 / 8, MALONE_ALIGN_LINE);
+		size = ((stride * 3) >> 1) * height;
 		break;
 	default:
 		break;

@@ -26,9 +26,17 @@ extern "C"
 
 #include "pitcher.h"
 
-void convert_frame(struct pitcher_buffer *src, struct pitcher_buffer *dst,
-		   uint32_t src_fmt, uint32_t dst_fmt,
-		   uint32_t width, uint32_t height);
+struct convert_ctx {
+	struct pitcher_buffer *src_buf;
+	struct pitcher_buffer *dst_buf;
+	uint32_t src_fmt;
+	uint32_t dst_fmt;
+	uint32_t width;
+	uint32_t height;
+	uint32_t bytesperline;
+};
+
+void convert_frame(struct convert_ctx *cvrt_ctx);
 
 #ifdef __cplusplus
 }
