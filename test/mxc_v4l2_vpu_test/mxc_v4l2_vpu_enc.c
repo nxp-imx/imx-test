@@ -471,7 +471,10 @@ static int is_decoder_output_finish(struct v4l2_component_t *component)
 		stop_dec(component);
 
 	if (component->eos_received) {
-		decoder->capture.eos_received = true;
+		if (decoder->capture.chnno >= 0)
+			decoder->capture.eos_received = true;
+		else
+			decoder->capture.end = true;
 		component->eos_received = false;
 	}
 	if (component->resolution_change) {

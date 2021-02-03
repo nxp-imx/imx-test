@@ -94,6 +94,9 @@ struct pitcher_frame *pitcher_parser_first_frame(Parser p)
 {
 	struct pitcher_parser *parser = (struct pitcher_parser *)p;
 
+	if (list_empty(&parser->queue))
+		return NULL;
+
 	return list_first_entry(&parser->queue, struct pitcher_frame, list);
 }
 
