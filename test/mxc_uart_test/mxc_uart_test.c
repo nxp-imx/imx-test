@@ -23,7 +23,7 @@
 #include "../../include/test_utils.h"
 
 #define LOOPBACK	0x8000
-#define MESSAGE		"Test\0"
+#define MESSAGE		"Test"
 #define MESSAGE_SIZE	sizeof(MESSAGE)
 
 int main(int argc, char **argv)
