@@ -696,6 +696,8 @@ static int get_pixelfmt_from_str(const char *str)
 		return VPU_PIX_FMT_DIVX;
 	if (!strcasecmp(str, "dtrc"))
 		return v4l2_fourcc('D', 'T', 'R', 'C');
+	if (!strcasecmp(str, "dtrc10"))
+		return v4l2_fourcc('D', 'T', 'R', 'X');
 	if (!strcasecmp(str, "P010"))
 		return v4l2_fourcc('P', '0', '1', '0');
 	if (!strcasecmp(str, "nvx2"))
