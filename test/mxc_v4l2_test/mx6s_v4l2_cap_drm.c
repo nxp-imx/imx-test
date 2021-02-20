@@ -159,7 +159,6 @@ static void drm_cleanup(struct drm_kms *kms)
 	drmIoctl(kms->buf_id, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
 
 	drmModeRmFB(kms->drm_fd, kms->buf_id);
-	drmModeFreeEncoder(kms->encoder);
 	drmModeFreeConnector(kms->connector);
 }
 
