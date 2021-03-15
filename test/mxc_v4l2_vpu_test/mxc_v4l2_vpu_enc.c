@@ -702,6 +702,12 @@ static int get_pixelfmt_from_str(const char *str)
 		return v4l2_fourcc('P', '0', '1', '0');
 	if (!strcasecmp(str, "nvx2"))
 		return v4l2_fourcc('N', 'V', 'X', '2');
+	if (!strcasecmp(str, "rfc"))
+		return v4l2_fourcc('R', 'F', 'C', '0');
+	if (!strcasecmp(str, "rfcx"))
+		return v4l2_fourcc('R', 'F', 'C', 'X');
+	if (!strcasecmp(str, "nv16"))
+		return V4L2_PIX_FMT_NV16;
 
 	PITCHER_ERR("unsupport pixelformat : %s\n", str);
 	return -RET_E_INVAL;
@@ -2178,10 +2184,8 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 	if (!cvrt || !pbuf)
 		return -RET_E_INVAL;
 
-	if (pbuf->planes[0].bytesused == 0) {
-		SAFE_RELEASE(pbuf, pitcher_put_buffer);
+	if (pbuf->planes[0].bytesused == 0)
 		return 0;
-	}
 
 	if (cvrt->ifmt != cvrt->node.pixelformat) {
 		struct pitcher_buffer *buffer;
