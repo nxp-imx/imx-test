@@ -186,87 +186,31 @@ int kbhit(void)
 int check_video_device(uint32_t devInstance,
 					   uint32_t *p_busType,
                        uint32_t *p_devType,
-					   char *pszDeviceName
+					   char *devName
 					  )
 
 {
-	int			            hDev;
-	int			            lErr;
+	int fd;
+	int lErr;
 	struct v4l2_capability  cap;
-    char                    card[64];
-	uint32_t                busType = -1;
-    uint32_t                devType = -1;
 
+	fd = open(devName, O_RDWR);
+	if (fd < 0)
+		return -1;
+	lErr = ioctl(fd, VIDIOC_QUERYCAP, &cap);
+	close(fd);
 
-	hDev = open(pszDeviceName, O_RDWR);
-    if (hDev >= 0) 
+	if (lErr)
+		return -1;
+
+	if (strstr((const char*)cap.bus_info, "platform") &&
+		(strstr((const char*)cap.driver, "vpu B0") || strstr((const char*)cap.driver, "vpu decoder")))
 	{
-		// query capability
-		lErr = ioctl(hDev, 
-					 VIDIOC_QUERYCAP, 
-					 &cap
-					 );
-        // close the driver now
-		close(hDev);
-        if (0 == lErr)
-        {
-            if (0 == strcmp((const char*)cap.bus_info, "PCIe:"))
-            {
-                busType = 0;
-            }
-            if (0 == strcmp((const char*)cap.bus_info, "platform:"))
-            {
-                busType = 1;
-            }
-
-            if (0 == strcmp((const char*)cap.driver, "MX8 codec"))
-            {
-                devType = COMPONENT_TYPE_CODEC;
-            }
-            if (0 == strcmp((const char*)cap.driver, "vpu B0"))
-            {
-                devType = COMPONENT_TYPE_DECODER;
-            }
-            if (0 == strcmp((const char*)cap.driver, "vpu encoder"))
-            {
-                devType = COMPONENT_TYPE_ENCODER;
-            }
-
-            // find the matching device
-			if (-1 != (int)*p_busType)
-			{
-				if (*p_busType != busType)
-				{
-					return -1;
-				}
-			}
-
-            if (-1 != (int)*p_devType)
-            {
-                if (*p_devType != devType)
-                {
-					return -1;
-                }
-            }
-
-            // instance
-            snprintf(card, sizeof(cap.card) - 1, "%s", cap.driver);
-            if (0 == strcmp((const char*)cap.card, card))
-            {
-                *p_busType = busType;
-                *p_devType = devType;
-				return 0;
-            }
-        }
-        else
-        {
-		return -1;
-        }
+		*p_busType = 1;
+		*p_devType = COMPONENT_TYPE_DECODER;
+		return 0;
 	}
-	else
-    {
-		return -1;
-    }
+
 	return -1;
 }
 
@@ -278,24 +222,18 @@ int lookup_video_device_node(uint32_t devInstance,
 {
    	int			            nCnt = 0;
     ZVDEV_INFO	            devInfo;
-   
-    printf("%s()-> Requesting %d:%d\n", __FUNCTION__, devInstance, *p_busType);
+	int                     i;
 
 	memset(&devInfo, 
            0xAA, 
            sizeof(ZVDEV_INFO)
            );
 
-    while (nCnt < 64) 
+	for (i = 0; i < 64; i++)
 	{
-		sprintf(pszDeviceName, 
-				"/dev/video%d", 
-				nCnt
-				);
+		sprintf(pszDeviceName, "/dev/video%d", i);
 		if (!check_video_device(devInstance, p_busType, p_devType, pszDeviceName))
 			break;
-		else
-			nCnt++;
 	}
 
 	if (64 == nCnt) 
@@ -1014,21 +952,6 @@ int check_fmt(component_t *pComponent, struct v4l2_format *format)
 	return ret;
 }
 
-int get_crop(component_t *pComponent)
-{
-	int lErr;
-
-	lErr = ioctl(pComponent->hDev, VIDIOC_G_CROP, &pComponent->crop);
-	if (lErr)
-	{
-		printf("%s() VIDIOC_G_CROP ioctl failed %d %s\n", __FUNCTION__, errno, strerror(errno));
-		return -1;
-	}
-	printf("%s() VIDIOC_G_CROP left(%d) top(%d) w(%d) h(%d)\n", __FUNCTION__, pComponent->crop.c.left, pComponent->crop.c.top, pComponent->crop.c.width, pComponent->crop.c.height);
-
-	return 0;
-}
-
 int get_mini_cap_buffer(component_t *pComponent)
 {
 	struct v4l2_control		ctl;
@@ -1365,15 +1288,6 @@ STREAMOUT_INFO:
 	if (lErr < 0)
 	{
 		ret_err = 41;
-		g_unCtrlCReceived = 1;
-		goto FUNC_EXIT;
-	}
-
-	pComponent->crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	lErr = get_crop(pComponent);
-	if (lErr < 0)
-	{
-		ret_err = 42;
 		g_unCtrlCReceived = 1;
 		goto FUNC_EXIT;
 	}
@@ -2362,13 +2276,10 @@ Or reference the usage manual.\n\
 
 	if (strstr(component[nCmdIdx].szDevName, "/dev/video"))
 	{
-		printf("=====  select device =====\n");
-		// check the select device 
 		lErr = check_video_device(component[nCmdIdx].devInstance,
-				           &component[nCmdIdx].busType,
-				           &type,
-				           component[nCmdIdx].szDevName
-				          );
+								  &component[nCmdIdx].busType,
+								  &type,
+								  component[nCmdIdx].szDevName);
 		if (lErr)
 		{
 			printf("%s(): error: The selected device(%s) does not match VPU decoder!\nplease select: /dev/video12\n", 
