@@ -1775,7 +1775,7 @@ static void media_device_close(struct media_dev *media)
 int main(int argc, const char *argv[])
 {
 	struct media_dev media;
-	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", "i.MX8MN", "i.MX8MP" };
+	char *soc_list[] = { "i.MX8QM", "i.MX8QXP", "i.MX8MN", "i.MX8MP", "i.MX8ULP" };
 	int ret;
 
 	ret = soc_version_check(soc_list);
