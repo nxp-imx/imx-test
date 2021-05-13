@@ -35,6 +35,7 @@ enum {
 
 enum {
 	PITCHER_BUFFER_FLAG_LAST = (1 << 0),
+	PITCHER_BUFFER_FLAG_SEEK = (1 << 1),
 };
 
 enum {

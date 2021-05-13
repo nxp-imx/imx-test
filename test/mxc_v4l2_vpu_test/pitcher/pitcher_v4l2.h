@@ -92,6 +92,7 @@ struct v4l2_component_t {
 	int enable;
 	unsigned long frame_count;
 	int end;
+	int seek;
 	int (*start)(struct v4l2_component_t *component);
 	int (*stop)(struct v4l2_component_t *component);
 	int (*is_end)(struct v4l2_component_t *component);

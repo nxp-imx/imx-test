@@ -75,6 +75,7 @@ struct test_node {
 	int (*get_source_chnno)(struct test_node *node);
 	int (*get_sink_chnno)(struct test_node *node);
 	int frame_skip;
+	unsigned int seek_thd;
 	PitcherContext context;
 };
 
@@ -172,6 +173,13 @@ struct parser_test_t {
 	int loop;
 	int show;
 
+	unsigned int skip;
+	struct {
+		unsigned int enable;
+		unsigned int pos_seek;
+		unsigned int pos_new;
+	} seek;
+
 	Parser p;
 };
 
@@ -192,8 +200,8 @@ struct mxc_vpu_test_subcmd {
 	struct test_node *(*alloc_node)(void);
 };
 
-static int stop_enc(struct v4l2_component_t *component);
-static int stop_dec(struct v4l2_component_t *component);
+static int flush_enc(struct v4l2_component_t *component);
+static int flush_dec(struct v4l2_component_t *component);
 
 static uint32_t bitmask;
 static struct test_node *nodes[MAX_NODE_COUNT];
@@ -356,7 +364,7 @@ static int is_encoder_output_finish(struct v4l2_component_t *component)
 	encoder = container_of(component, struct encoder_test_t, output);
 
 	if (is_source_end(encoder->output.chnno))
-		stop_enc(component);
+		flush_enc(component);
 
 	if (component->eos_received) {
 		encoder->capture.eos_received = true;
@@ -458,6 +466,27 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 	return RET_OK;
 }
 
+static int seek_decoder(struct decoder_test_t *decoder)
+{
+	if (!decoder->output.seek)
+		return RET_OK;
+
+	if (pitcher_get_status(decoder->capture.chnno) != PITCHER_STATE_ACTIVE)
+		return RET_OK;
+	if (decoder->capture.frame_count < decoder->node.seek_thd)
+		return RET_OK;
+
+	decoder->output.seek = false;
+	PITCHER_LOG("seek at %ld frames decoded\n", decoder->capture.frame_count);
+
+	decoder->output.desc.stop(&decoder->output);
+	decoder->capture.desc.stop(&decoder->capture);
+	decoder->capture.desc.start(&decoder->capture);
+	decoder->output.desc.start(&decoder->output);
+
+	return RET_OK;
+}
+
 static int is_decoder_output_finish(struct v4l2_component_t *component)
 {
 	struct decoder_test_t *decoder;
@@ -470,7 +499,7 @@ static int is_decoder_output_finish(struct v4l2_component_t *component)
 	decoder = container_of(component, struct decoder_test_t, output);
 
 	if (is_source_end(decoder->output.chnno))
-		stop_dec(component);
+		flush_dec(component);
 
 	if (component->eos_received) {
 		if (decoder->capture.chnno >= 0)
@@ -488,6 +517,8 @@ static int is_decoder_output_finish(struct v4l2_component_t *component)
 		if (ret < 0)
 			is_end = true;
 	}
+	if (component->seek)
+		seek_decoder(decoder);
 
 	if (is_force_exit() ||
 	    (decoder->capture.end && !decoder->capture.resolution_change)) {
@@ -516,14 +547,7 @@ static int is_decoder_capture_finish(struct v4l2_component_t *component)
 	return is_force_exit();
 }
 
-static int start_enc(struct v4l2_component_t *component)
-{
-	PITCHER_LOG("start encoder\n");
-
-	return RET_OK;
-}
-
-static int stop_enc(struct v4l2_component_t *component)
+static int flush_enc(struct v4l2_component_t *component)
 {
 	struct v4l2_encoder_cmd cmd;
 	int ret;
@@ -532,7 +556,7 @@ static int stop_enc(struct v4l2_component_t *component)
 	if (!component || component->fd < 0 || !component->enable)
 		return -RET_E_INVAL;
 
-	PITCHER_LOG("stop encoder\n");
+	PITCHER_LOG("flush encoder\n");
 
 	cmd.cmd = V4L2_ENC_CMD_STOP;
 	ret = ioctl(component->fd, VIDIOC_ENCODER_CMD, &cmd);
@@ -543,13 +567,7 @@ static int stop_enc(struct v4l2_component_t *component)
 	return RET_OK;
 }
 
-static int start_dec(struct v4l2_component_t *component)
-{
-	PITCHER_LOG("start decoder\n");
-	return RET_OK;
-}
-
-static int stop_dec(struct v4l2_component_t *component)
+static int flush_dec(struct v4l2_component_t *component)
 {
 	struct v4l2_decoder_cmd cmd;
 	int ret;
@@ -557,7 +575,7 @@ static int stop_dec(struct v4l2_component_t *component)
 	if (!component || component->fd < 0 || !component->enable)
 		return -RET_E_INVAL;
 
-	PITCHER_LOG("stop decoder\n");
+	PITCHER_LOG("flush decoder\n");
 	cmd.cmd = V4L2_DEC_CMD_STOP;
 	ret = ioctl(component->fd, VIDIOC_DECODER_CMD, &cmd);
 	if (ret < 0)
@@ -641,6 +659,8 @@ struct mxc_vpu_test_option parser_options[] = {
 	{"size", 2, "--size <width> <height>\n\t\t\tset size"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset input/parse frame number"},
 	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
+	{"skip", 1, "--skip <number>\n\t\t\tset skip frame number"},
+	{"seek", 3, "--seek <input number> <decode number> <new position>\n\t\t\tseek"},
 	{"show", 0, "--show\n\t\t\tshow size and offset of per frame"},
 	{NULL, 0, NULL},
 };
@@ -1166,8 +1186,6 @@ static int init_encoder_node(struct test_node *node)
 	encoder->capture.desc.fd = encoder->fd;
 	encoder->output.desc.events |= encoder->capture.desc.events;
 	encoder->capture.desc.events = 0;
-	encoder->output.start = start_enc;
-	/*encoder->output.stop = stop_enc;*/
 
 	encoder->capture.pixelformat = encoder->node.pixelformat;
 	encoder->capture.width = encoder->node.width;
@@ -1421,6 +1439,7 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 	decoder->output.pixelformat = src->pixelformat;
 	decoder->output.width = src->width;
 	decoder->output.height = src->height;
+	node->seek_thd = src->seek_thd;
 
 	return RET_OK;
 }
@@ -1533,8 +1552,6 @@ static int init_decoder_node(struct test_node *node)
 	decoder->output.desc.events |= decoder->capture.desc.events;
 	decoder->capture.desc.events = 0;
 
-	decoder->output.start = start_dec;
-	/*decoder->output.stop = stop_dec;*/
 	decoder->output.sizeimage = decoder->sizeimage;
 	decoder->output.is_end = is_decoder_output_finish;
 	decoder->output.buffer_count = 4;
@@ -2380,6 +2397,7 @@ static int parser_run(void *arg, struct pitcher_buffer *pbuf)
 	struct parser_test_t *parser = arg;
 	struct pitcher_buffer *buffer;
 	struct pitcher_frame *frame;
+	unsigned int seek_flag = 0;
 
 	if (!parser || parser->fd < 0)
 		return -RET_E_INVAL;
@@ -2415,16 +2433,34 @@ static int parser_run(void *arg, struct pitcher_buffer *pbuf)
 		parser->end = true;
 	}
 
-	if (parser->frame_num > 0 && parser->frame_count >= parser->frame_num)
-		parser->end = true;
+	if (parser->seek.enable && parser->frame_count == parser->seek.pos_seek)
+		seek_flag = 1;
 
-	if (parser->end)
-		buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
+	if (!seek_flag) {
+		if (parser->frame_num > 0 && parser->frame_count >= parser->frame_num)
+			parser->end = true;
 
-	if (buffer->planes[0].bytesused > 0)
-		pitcher_push_back_output(parser->chnno, buffer);
+		if (parser->end)
+			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
+	} else {
+		buffer->flags |= PITCHER_BUFFER_FLAG_SEEK;
+		PITCHER_LOG("seek at %ld\n", parser->frame_count);
+	}
+
+	if (buffer->planes[0].bytesused > 0) {
+		if (parser->frame_count > parser->skip)
+			pitcher_push_back_output(parser->chnno, buffer);
+	}
 
 	SAFE_RELEASE(buffer, pitcher_put_buffer);
+
+	if (seek_flag) {
+		pitcher_parser_seek_to_begin(parser->p);
+		parser->offset = 0;
+		parser->frame_count = 0;
+		parser->seek.enable = 0;
+		parser->skip = parser->seek.pos_new;
+	}
 
 	return RET_OK;
 }
@@ -2648,6 +2684,8 @@ static struct test_node *alloc_parser_node(void)
 	parser->mode = "rb";
 	parser->chnno = -1;
 	parser->fd = -1;
+	parser->skip = 0;
+	parser->seek.enable = 0;
 
 	return &parser->node;
 }
@@ -2682,8 +2720,27 @@ static int parse_parser_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "loop")) {
 		parser->loop = strtol(argv[0], NULL, 0);
 		PITCHER_LOG("set loop: %d\n", parser->loop);
+	} else if (!strcasecmp(option->name, "skip")) {
+		parser->skip = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "seek")) {
+		parser->seek.pos_seek = strtol(argv[0], NULL, 0);
+		parser->node.seek_thd = strtol(argv[1], NULL, 0);
+		parser->seek.pos_new = strtol(argv[2], NULL, 0);
+		parser->seek.enable = 1;
 	} else if (!strcasecmp(option->name, "show")) {
 		parser->show = true;
+	}
+
+	if (parser->seek.enable) {
+		if (parser->seek.pos_seek <= parser->skip) {
+			parser->seek.enable = 0;
+			parser->skip = max(parser->seek.pos_new, parser->skip);
+		} else {
+			unsigned int cnt = parser->seek.pos_seek - parser->skip;
+
+			if (parser->node.seek_thd > cnt)
+				parser->node.seek_thd = cnt;
+		}
 	}
 
 	return RET_OK;

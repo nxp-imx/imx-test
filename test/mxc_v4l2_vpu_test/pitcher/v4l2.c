@@ -394,6 +394,7 @@ static void __qbuf(struct v4l2_component_t *component,
 				(unsigned long)buffer->planes[0].virt;
 		}
 	}
+	v4lbuf.timestamp.tv_sec = -1;
 	ret = ioctl(fd, VIDIOC_QBUF, &v4lbuf);
 	if (ret) {
 		PITCHER_ERR("(%s)qbuf fail, error: %s\n",
@@ -872,6 +873,8 @@ static int check_v4l2_ready(void *arg, int *is_end)
 	if (V4L2_TYPE_IS_OUTPUT(component->type))
 		__check_v4l2_events(component);
 
+	if (V4L2_TYPE_IS_OUTPUT(component->type) && component->seek)
+		return false;
 
 	__clear_error_buffers(component);
 	for (i = 0; i < component->buffer_count; i++) {
@@ -1001,6 +1004,9 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 	}
 
 	SAFE_RELEASE(component->buffers[buffer->index], pitcher_put_buffer);
+
+	if (pbuf->flags & PITCHER_BUFFER_FLAG_SEEK)
+		component->seek = true;
 
 	return ret;
 }

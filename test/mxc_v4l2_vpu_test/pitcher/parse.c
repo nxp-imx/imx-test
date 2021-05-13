@@ -188,7 +188,7 @@ void pitcher_parser_show(Parser p)
 		return;
 
 	list_for_each_entry_safe(frame, tmp, &parser->queue, list) {
-		PITCHER_LOG("[%d] size:%ld, offset:0x%x\n", frame->idx, frame->size, frame->offset);
+		PITCHER_LOG("[%d] size:%ld, offset:0x%x(%d)\n", frame->idx, frame->size, frame->offset, frame->offset);
 		 PITCHER_LOG("0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
 						parser->virt[frame->offset],
 						parser->virt[frame->offset+1],
@@ -403,7 +403,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 	}
 
 	end = parser->size;
-	if (frame_count) {
+	if (start >= 0 && start < end) {
 		frame_count--;
 		pitcher_parser_push_new_frame(parser,
 						start,
