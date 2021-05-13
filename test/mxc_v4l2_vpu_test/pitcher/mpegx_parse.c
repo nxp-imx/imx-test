@@ -40,6 +40,10 @@ static int mpeg4_check_frame(uint8_t *p, uint32_t size, void *priv)
 		return PARSER_TYPE_FRAME;
 	else if (type == 0xB0)	//VOS
 		return PARSER_TYPE_CONFIG;
+	else if (type == 0xB3)	//group of vop start code
+		return PARSER_TYPE_CONFIG;
+	else if (type == 0xB5)	//visual object start code
+		return PARSER_TYPE_CONFIG;
 	else if (type >= 0 && type <= 0x2F)	//object/object layer start code
 		return PARSER_TYPE_CONFIG;
 	else
