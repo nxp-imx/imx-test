@@ -69,6 +69,7 @@ struct test_node {
 	uint32_t height;
 	uint32_t bytesperline;
 	uint32_t framerate;
+	uint32_t field;
 	int (*set_source)(struct test_node *node, struct test_node *src);
 	int (*init_node)(struct test_node *node);
 	void (*free_node)(struct test_node *node);
@@ -153,6 +154,7 @@ struct convert_test_t {
 	uint32_t height;
 	uint32_t ifmt;
 	int end;
+	uint32_t field;
 };
 
 struct parser_test_t {
@@ -410,6 +412,7 @@ static void sync_decoder_node_info(struct decoder_test_t *decoder)
 	decoder->node.height = decoder->capture.height;
 	decoder->node.pixelformat = decoder->capture.pixelformat;
 	decoder->node.bytesperline = decoder->capture.bytesperline;
+	decoder->node.field = decoder->capture.field;
 	if (decoder->platform.type == IMX_8X)
 		switch_fmt_to_tile(&decoder->node.pixelformat);
 }
@@ -2096,6 +2099,7 @@ static int set_convert_source(struct test_node *node,
 	cvrt->node.height = src->height;
 	cvrt->node.bytesperline = src->bytesperline;
 	cvrt->ifmt = src->pixelformat;
+	cvrt->field = cvrt->node.field = src->field;
 
 	return RET_OK;
 }
@@ -2219,6 +2223,7 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 		cvrt_ctx.width = cvrt->node.width;
 		cvrt_ctx.height = cvrt->node.height;
 		cvrt_ctx.bytesperline = cvrt->node.bytesperline;
+		cvrt_ctx.field = cvrt->field;
 
 		convert_frame(&cvrt_ctx);
 		pitcher_push_back_output(cvrt->chnno, buffer);
@@ -2255,6 +2260,7 @@ static int init_convert_node(struct test_node *node)
 
 	switch (cvrt->node.pixelformat) {
 	case V4L2_PIX_FMT_NV12:
+	case V4L2_PIX_FMT_YUV420:
 		break;
 	default:
 		return -RET_E_NOT_SUPPORT;

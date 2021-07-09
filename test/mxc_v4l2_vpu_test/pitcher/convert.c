@@ -141,11 +141,42 @@ static void __convert_nv12_tiled_to_linear(uint8_t *src, uint8_t *dst,
 	SAFE_RELEASE(inter_buf, pitcher_free);
 }
 
+static void convert_nv12_interlace_to_progress(uint8_t *y_src, uint8_t *uv_src,
+		uint8_t *y_dst, uint8_t *uv_dst, uint32_t width, uint32_t height)
+{
+	uint32_t i;
+	uint8_t *y_src_top = y_src;
+	uint8_t *y_src_bot = y_src + width * height / 2;
+	uint8_t *uv_src_top = uv_src;
+	uint8_t *uv_src_bot = uv_src_top + width * height / 4;
+
+	for (i = 0; i < height; i ++) {
+		if (i & 1) {
+			memcpy(y_dst, y_src_bot, width);
+			y_src_bot += width;
+		} else {
+			memcpy(y_dst, y_src_top, width);
+			y_src_top += width;
+		}
+		y_dst += width;
+	}
+
+	for (i = 0; i < height / 2; i ++) {
+		if (i & 1) {
+			memcpy(uv_dst, uv_src_bot, width);
+			uv_src_bot += width;
+		} else {
+			memcpy(uv_dst, uv_src_top, width);
+			uv_src_top += width;
+		}
+		uv_dst += width;
+	}
+}
+
 static void convert_nv12_tiled_to_linear(struct convert_ctx *cvrt_ctx)
 {
 	struct pitcher_buffer *src;
 	struct pitcher_buffer *dst;
-	uint32_t width;
 	uint32_t height;
 	uint32_t stride;
 	uint8_t *y_src_start;
@@ -157,9 +188,8 @@ static void convert_nv12_tiled_to_linear(struct convert_ctx *cvrt_ctx)
 
 	src = cvrt_ctx->src_buf;
 	dst = cvrt_ctx->dst_buf;
-	width = ALIGN(cvrt_ctx->width, MALONE_ALIGN_W);
 	height = ALIGN(cvrt_ctx->height, MALONE_ALIGN_H);
-	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(width, MALONE_ALIGN_LINE);
+	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(cvrt_ctx->width, MALONE_ALIGN_LINE);
 
 	switch (src->count) {
 	case 1:
@@ -191,8 +221,46 @@ static void convert_nv12_tiled_to_linear(struct convert_ctx *cvrt_ctx)
 		return;
 	}
 
-	__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height, stride);
-	__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+	if (cvrt_ctx->field == V4L2_FIELD_INTERLACED) {
+		uint8_t *tmp_dst_buf = NULL;
+		uint8_t *tmp_buf = NULL;
+		uint8_t *uv_src = NULL;
+		uint32_t dst_size = 0;
+		int i;
+		uint8_t *y_src_start_bot = y_src_start + stride * height / 2;
+		uint8_t *uv_src_start_bot = uv_src_start + stride * height / 4;
+		uint8_t *y_dst_start_bot = y_dst_start + cvrt_ctx->width * cvrt_ctx->height / 2;
+		uint8_t *uv_dst_start_bot = uv_dst_start + cvrt_ctx->width * cvrt_ctx->height / 4;
+
+		__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+		__convert_nv12_tiled_to_linear(y_src_start_bot, y_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+
+		__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
+		__convert_nv12_tiled_to_linear(uv_src_start_bot, uv_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
+
+		for (i = 0; i < dst->count; i++)
+			dst_size += dst->planes[i].bytesused;
+
+		tmp_dst_buf = malloc(dst_size);
+		if (!tmp_dst_buf) {
+			PITCHER_ERR("allocate buffer fail\n");
+			return;
+		}
+		tmp_buf = tmp_dst_buf;
+		for (i = 0; i < cvrt_ctx->dst_buf->count; i++) {
+			memcpy(tmp_buf, cvrt_ctx->dst_buf->planes[i].virt, cvrt_ctx->dst_buf->planes[i].bytesused);
+			tmp_buf = tmp_dst_buf + cvrt_ctx->dst_buf->planes[i].bytesused;
+		}
+
+		uv_src = tmp_dst_buf + cvrt_ctx->width * cvrt_ctx->height;
+		convert_nv12_interlace_to_progress(tmp_dst_buf, uv_src,
+			y_dst_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height);
+
+		SAFE_RELEASE(tmp_dst_buf, free);
+	} else {
+		__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height, stride);
+		__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+	}
 }
 
 static void __convert_nv12_tiled_to_linear_10bit(uint8_t *src, uint8_t *dst,
@@ -309,10 +377,188 @@ static void convert_nv12_tiled_to_linear_10bit(struct convert_ctx *cvrt_ctx)
 		return;
 	}
 
-	__convert_nv12_tiled_to_linear_10bit(y_src_start, y_dst_start,
-					     cvrt_ctx->width, cvrt_ctx->height, stride);
-	__convert_nv12_tiled_to_linear_10bit(uv_src_start, uv_dst_start,
-					     cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+	if (cvrt_ctx->field == V4L2_FIELD_INTERLACED) {
+		uint8_t *tmp_dst_buf = NULL;
+		uint8_t *tmp_buf = NULL;
+		uint8_t *uv_src = NULL;
+		uint32_t dst_size = 0;
+		int i;
+		uint8_t *y_src_start_bot = y_src_start + stride * height / 2;
+		uint8_t *uv_src_start_bot = uv_src_start + stride * height / 4;
+		uint8_t *y_dst_start_bot = y_dst_start + cvrt_ctx->width * cvrt_ctx->height / 2;
+		uint8_t *uv_dst_start_bot = uv_dst_start + cvrt_ctx->width * cvrt_ctx->height / 4;
+
+		__convert_nv12_tiled_to_linear_10bit(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+		__convert_nv12_tiled_to_linear_10bit(y_src_start_bot, y_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+
+		__convert_nv12_tiled_to_linear_10bit(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
+		__convert_nv12_tiled_to_linear_10bit(uv_src_start_bot, uv_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
+
+		for (i = 0; i < dst->count; i++)
+			dst_size += dst->planes[i].bytesused;
+
+		tmp_dst_buf = malloc(dst_size);
+		if (!tmp_dst_buf) {
+			PITCHER_ERR("allocate buffer fail\n");
+			return;
+		}
+		tmp_buf = tmp_dst_buf;
+		for (i = 0; i < cvrt_ctx->dst_buf->count; i++) {
+			memcpy(tmp_buf, cvrt_ctx->dst_buf->planes[i].virt, cvrt_ctx->dst_buf->planes[i].bytesused);
+			tmp_buf = tmp_dst_buf + cvrt_ctx->dst_buf->planes[i].bytesused;
+		}
+
+		uv_src = tmp_dst_buf + cvrt_ctx->width * cvrt_ctx->height;
+		convert_nv12_interlace_to_progress(tmp_dst_buf, uv_src,
+			y_dst_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height);
+
+		SAFE_RELEASE(tmp_dst_buf, free);
+		tmp_buf = NULL;
+	} else {
+		__convert_nv12_tiled_to_linear_10bit(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height, stride);
+		__convert_nv12_tiled_to_linear_10bit(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
+	}
+}
+
+static void convert_nv12_to_i420(struct convert_ctx *cvrt_ctx)
+{
+	struct pitcher_buffer *src;
+	struct pitcher_buffer *dst;
+	uint32_t width;
+	uint32_t height;
+	uint8_t *uv_start;
+	uint8_t *u_temp;
+	uint8_t *v_temp;
+	uint32_t uv_size;
+	int i;
+	int j;
+
+	assert(cvrt_ctx);
+
+	src = cvrt_ctx->src_buf;
+	dst = cvrt_ctx->dst_buf;
+	width = max(cvrt_ctx->width, cvrt_ctx->bytesperline);
+	height = cvrt_ctx->height;
+	uv_size = width * height / 2;
+
+	switch (src->count) {
+	case 1:
+		uv_start = src->planes[0].virt + width * height;
+		break;
+	case 2:
+		uv_start = src->planes[1].virt;
+		break;
+	default:
+		return;
+	}
+
+	switch (dst->count) {
+	case 1:
+		u_temp = dst->planes[0].virt + width * height;
+		v_temp = u_temp + uv_size / 2;
+		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
+							  width, height);
+		break;
+	case 2:
+		u_temp = dst->planes[1].virt;
+		v_temp = u_temp + uv_size / 2;
+		dst->planes[0].bytesused = width * height;
+		dst->planes[1].bytesused = uv_size;
+		break;
+	case 3:
+		u_temp = dst->planes[1].virt;
+		v_temp = dst->planes[2].virt;
+		dst->planes[0].bytesused = width * height;
+		dst->planes[1].bytesused = uv_size / 2;
+		dst->planes[1].bytesused = uv_size / 2;
+		break;
+	default:
+		return;
+	}
+
+	memcpy(dst->planes[0].virt, src->planes[0].virt, width * height);
+	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
+		u_temp[i] = uv_start[j];
+		v_temp[i] = uv_start[j+1];
+	}
+}
+
+static void __convert_nv12_tiled_to_i420(struct convert_ctx *cvrt_ctx)
+{
+	uint8_t *tmp_dst_buf = NULL;
+	uint8_t *tmp_buf = NULL;
+	uint32_t dst_size = 0;
+	uint32_t width;
+	uint32_t height;
+	uint8_t *y_src, *uv_src;
+	uint8_t *y_dst, *u_dst, *v_dst;
+	uint32_t uv_size;
+	int i, j;
+
+	assert(cvrt_ctx);
+	width = cvrt_ctx->width;
+	height = cvrt_ctx->height;
+	uv_size = width * height / 2;
+
+	if (cvrt_ctx->src_fmt == V4L2_PIX_FMT_NV12_TILE)
+		convert_nv12_tiled_to_linear(cvrt_ctx);
+	else
+		convert_nv12_tiled_to_linear_10bit(cvrt_ctx);
+
+	for (i = 0; i < cvrt_ctx->dst_buf->count; i++)
+		dst_size += cvrt_ctx->dst_buf->planes[i].bytesused;
+
+	tmp_dst_buf = malloc(dst_size);
+	if (!tmp_dst_buf) {
+		PITCHER_ERR("allocate buf fail\n");
+		return;
+	}
+
+	tmp_buf = tmp_dst_buf;
+	for (i = 0; i < cvrt_ctx->dst_buf->count; i++) {
+		memcpy(tmp_buf, cvrt_ctx->dst_buf->planes[i].virt, cvrt_ctx->dst_buf->planes[i].bytesused);
+		tmp_buf = tmp_dst_buf + cvrt_ctx->dst_buf->planes[i].bytesused;
+	}
+
+	y_src = tmp_dst_buf;
+	uv_src = tmp_dst_buf + width * height;
+
+	y_dst = cvrt_ctx->dst_buf->planes[0].virt;
+	switch (cvrt_ctx->dst_buf->count) {
+	case 1:
+		u_dst = cvrt_ctx->dst_buf->planes[0].virt + width * height;
+		v_dst = u_dst + uv_size / 2;
+		break;
+	case 2:
+		u_dst = cvrt_ctx->dst_buf->planes[1].virt;
+		v_dst = u_dst + uv_size / 2;
+		break;
+	case 3:
+		u_dst = cvrt_ctx->dst_buf->planes[1].virt;
+		v_dst = cvrt_ctx->dst_buf->planes[2].virt;
+		break;
+	default:
+		return;
+	}
+
+	memcpy(y_dst, y_src, width * height);
+	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
+		u_dst[i] = uv_src[j];
+		v_dst[i] = uv_src[j+1];
+	}
+
+	SAFE_RELEASE(tmp_dst_buf, free);
+	tmp_buf = NULL;
+}
+
+static void convert_nv12_tiled_to_i420(struct convert_ctx *cvrt_ctx)
+{
+	__convert_nv12_tiled_to_i420(cvrt_ctx);
+}
+
+static void convert_nv12_tiled_to_i420_10bit(struct convert_ctx *cvrt_ctx)
+{
+	__convert_nv12_tiled_to_i420(cvrt_ctx);
 }
 
 static void convert_frame_to_nv12(struct convert_ctx *cvrt_ctx)
@@ -332,11 +578,31 @@ static void convert_frame_to_nv12(struct convert_ctx *cvrt_ctx)
 	}
 }
 
+static void convert_frame_to_i420(struct convert_ctx *cvrt_ctx)
+{
+	switch (cvrt_ctx->src_fmt) {
+	case V4L2_PIX_FMT_NV12:
+		convert_nv12_to_i420(cvrt_ctx);
+		break;
+        case V4L2_PIX_FMT_NV12_TILE:
+                convert_nv12_tiled_to_i420(cvrt_ctx);
+                break;
+	case V4L2_PIX_FMT_NV12_TILE_10BIT:
+		convert_nv12_tiled_to_i420_10bit(cvrt_ctx);
+		break;
+	default:
+		break;
+	}
+}
+
 void convert_frame(struct convert_ctx *cvrt_ctx)
 {
 	switch (cvrt_ctx->dst_fmt) {
 	case V4L2_PIX_FMT_NV12:
 		convert_frame_to_nv12(cvrt_ctx);
+		break;
+	case V4L2_PIX_FMT_YUV420:
+		convert_frame_to_i420(cvrt_ctx);
 		break;
 	default:
 		break;

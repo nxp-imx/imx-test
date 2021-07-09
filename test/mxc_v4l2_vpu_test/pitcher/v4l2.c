@@ -128,6 +128,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		component->pixelformat = format.fmt.pix.pixelformat;
 		component->sizeimage = format.fmt.pix.sizeimage;
 		component->bytesperline = format.fmt.pix.bytesperline;
+		component->field = format.fmt.pix.field;
 	} else {
 		component->num_planes = format.fmt.pix_mp.num_planes;
 		component->width = format.fmt.pix_mp.width;
@@ -135,6 +136,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		component->pixelformat = format.fmt.pix_mp.pixelformat;
 		component->sizeimage = format.fmt.pix_mp.plane_fmt[0].sizeimage;
 		component->bytesperline = format.fmt.pix_mp.plane_fmt[0].bytesperline;
+		component->field = format.fmt.pix_mp.field;
 	}
 
 	return RET_OK;

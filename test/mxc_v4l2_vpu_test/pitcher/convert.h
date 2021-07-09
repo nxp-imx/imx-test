@@ -34,6 +34,7 @@ struct convert_ctx {
 	uint32_t width;
 	uint32_t height;
 	uint32_t bytesperline;
+	uint32_t field;
 };
 
 void convert_frame(struct convert_ctx *cvrt_ctx);

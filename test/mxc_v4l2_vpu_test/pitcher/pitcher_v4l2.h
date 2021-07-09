@@ -102,6 +102,7 @@ struct v4l2_component_t {
 	uint64_t ts_e;
 	int eos_received;
 	int resolution_change;
+	uint32_t field;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;
