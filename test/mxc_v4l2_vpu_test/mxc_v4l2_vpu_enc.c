@@ -2095,8 +2095,9 @@ static int set_convert_source(struct test_node *node,
 		return -RET_E_INVAL;
 
 	cvrt = container_of(node, struct convert_test_t, node);
-	cvrt->node.width = src->width;
-	cvrt->node.height = src->height;
+	/* width and height have to align to 2 */
+	cvrt->node.width = ALIGN_DOWN(src->width, 0x2);
+	cvrt->node.height = ALIGN_DOWN(src->height, 0x2);
 	cvrt->node.bytesperline = src->bytesperline;
 	cvrt->ifmt = src->pixelformat;
 	cvrt->field = cvrt->node.field = src->field;

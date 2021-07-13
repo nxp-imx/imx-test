@@ -145,7 +145,7 @@ enum {
 #define __ALIGN(x, mask)	(((x) + (mask)) & ~(mask))
 #endif
 #ifndef ALIGN_DOWN
-#define ALIGN_DOWN		ALIGN((x) - ((a) - 1), (a))
+#define ALIGN_DOWN(x, a)	ALIGN((x) - ((a) - 1), (a))
 #endif
 
 int pitcher_poll(int fd, short events, int timeout);

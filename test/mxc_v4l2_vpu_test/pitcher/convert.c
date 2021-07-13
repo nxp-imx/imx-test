@@ -183,13 +183,17 @@ static void convert_nv12_tiled_to_linear(struct convert_ctx *cvrt_ctx)
 	uint8_t *uv_src_start;
 	uint8_t *y_dst_start;
 	uint8_t *uv_dst_start;
+	uint32_t sizeimage = 0;
+	int i;
 
 	assert(cvrt_ctx);
 
 	src = cvrt_ctx->src_buf;
 	dst = cvrt_ctx->dst_buf;
-	height = ALIGN(cvrt_ctx->height, MALONE_ALIGN_H);
 	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(cvrt_ctx->width, MALONE_ALIGN_LINE);
+	for (i = 0; i < src->count; i++)
+		sizeimage += src->planes[i].bytesused;
+	height = (sizeimage * 2 / 3) / stride;
 
 	switch (src->count) {
 	case 1:
@@ -338,14 +342,18 @@ static void convert_nv12_tiled_to_linear_10bit(struct convert_ctx *cvrt_ctx)
 	uint8_t *uv_src_start;
 	uint8_t *y_dst_start;
 	uint8_t *uv_dst_start;
+	uint32_t sizeimage = 0;
+	int i;
 
 	assert(cvrt_ctx);
 
 	src = cvrt_ctx->src_buf;
 	dst = cvrt_ctx->dst_buf;
 	width = ALIGN(cvrt_ctx->width, MALONE_ALIGN_W);
-	height = ALIGN(cvrt_ctx->height, MALONE_ALIGN_H);
 	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(width * 10 / 8, MALONE_ALIGN_LINE);
+	for (i = 0; i < src->count; i++)
+		sizeimage += src->planes[i].bytesused;
+	height = (sizeimage * 2 / 3) / stride;
 
 	switch (src->count) {
 	case 1:
