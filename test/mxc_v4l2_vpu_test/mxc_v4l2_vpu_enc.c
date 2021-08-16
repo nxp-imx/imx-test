@@ -2229,10 +2229,8 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 		convert_frame(&cvrt_ctx);
 		pitcher_push_back_output(cvrt->chnno, buffer);
 		SAFE_RELEASE(buffer, pitcher_put_buffer);
-		SAFE_RELEASE(pbuf, pitcher_put_buffer);
 	} else {
 		pitcher_push_back_output(cvrt->chnno, pbuf);
-		SAFE_RELEASE(pbuf, pitcher_put_buffer);
 	}
 
 	return RET_OK;
