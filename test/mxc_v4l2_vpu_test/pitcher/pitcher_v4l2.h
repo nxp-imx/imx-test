@@ -66,6 +66,8 @@ struct v4l2_enc_ipcm_params {
 #define V4L2_CID_IPCM_COUNT		(V4L2_CID_USER_IMX_BASE + 4)
 #define V4L2_CID_IPCM			(V4L2_CID_USER_IMX_BASE + 5)
 
+#define V4L2_PIX_FMT_BGR565		v4l2_fourcc('B', 'G', 'R', 'P') /* 16  BGR-5-6-5     */
+
 #endif
 
 #define MAX_BUFFER_COUNT	32

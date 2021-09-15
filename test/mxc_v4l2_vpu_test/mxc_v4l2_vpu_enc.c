@@ -591,7 +591,9 @@ static int flush_dec(struct v4l2_component_t *component)
 struct mxc_vpu_test_option ifile_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"name", 1, "--name <filename>\n\t\t\tassign input file name"},
-	{"fmt",  1, "--fmt <fmt>\n\t\t\tassign input file pixel format, support nv12, i420"},
+	{"fmt",  1, "--fmt <fmt>\n\t\t\tassign input file pixel format, encode support\n\
+		     \r\t\t\tinput format nv12, i420, nv21, yuyv, rgb565, bgr565,\n\
+		     \r\t\t\trgb555, rgba, bgr32, argb, rgbx"},
 	{"size", 2, "--size <width> <height>\n\t\t\tassign input file resolution"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset input frame number"},
 	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
@@ -630,7 +632,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"peak", 1, "--peak <br>\n\t\t\tset encoder peak bitrate, the unit is b"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
-	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265"},
+	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265, vp8, vp9"},
 	{"roi", 5, "--roi <left> <top> <width> <height> <qp_delta>\n\t\t\tenable roi"},
 	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
 	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
@@ -644,21 +646,23 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"device", 1, "--device <devnode>\n\t\t\tassign encoder video device node"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
 	{"framemode", 1, "--framemode <level>\n\t\t\tSpecify input frame mode, 0: frame level, 1: non-frame level"},
-	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21, i420"},
+	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21,\n\
+		    \r\t\t\ti420, dtrc, dtrc10, P010, nvx2, rfc, rfcx, nv16"},
 	{NULL, 0, NULL},
 };
 
 struct mxc_vpu_test_option convert_options[] = {
 	{"key", 1, "--key <key>\n\t\t\tassign key number"},
 	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
-	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign output pixel format"},
+	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign output pixel format, support mutual convert of nv12 and i420"},
 	{NULL, 0, NULL},
 };
 
 struct mxc_vpu_test_option parser_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"name", 1, "--name <filename>\n\t\t\tassign parse file name"},
-	{"fmt",  1, "--fmt <fmt>\n\t\t\tassign input file pixel format, current support h264, h265"},
+	{"fmt",  1, "--fmt <fmt>\n\t\t\tassign input file pixel format, support h264, h265, mpeg2, mpeg4,\n\
+		     \r\t\t\th263, jpeg, vc1l, vc1g, xvid, vp9, vp8, vp6, avs, rv, spk, divx"},
 	{"size", 2, "--size <width> <height>\n\t\t\tset size"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset input/parse frame number"},
 	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
@@ -731,6 +735,22 @@ static int get_pixelfmt_from_str(const char *str)
 		return v4l2_fourcc('R', 'F', 'C', 'X');
 	if (!strcasecmp(str, "nv16"))
 		return V4L2_PIX_FMT_NV16;
+	if (!strcasecmp(str, "yuyv"))
+		return V4L2_PIX_FMT_YUYV;
+	if (!strcasecmp(str, "rgb565"))
+		return V4L2_PIX_FMT_RGB565;
+	if (!strcasecmp(str, "bgr565"))
+		return V4L2_PIX_FMT_BGR565;
+	if (!strcasecmp(str, "rgb555"))
+		return V4L2_PIX_FMT_RGB555;
+	if (!strcasecmp(str, "rgba"))
+		return V4L2_PIX_FMT_RGBA32;
+	if (!strcasecmp(str, "bgr32"))
+		return V4L2_PIX_FMT_BGR32;
+	if (!strcasecmp(str, "argb"))
+		return V4L2_PIX_FMT_ABGR32;
+	if (!strcasecmp(str, "rgbx"))
+		return V4L2_PIX_FMT_RGBX32;
 
 	PITCHER_ERR("unsupport pixelformat : %s\n", str);
 	return -RET_E_INVAL;
@@ -911,7 +931,24 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 	encoder->output.pixelformat = src->pixelformat;
 	encoder->output.width = src->width;
 	encoder->output.height = src->height;
-	encoder->output.bytesperline = src->width;
+	switch (src->pixelformat) {
+	case V4L2_PIX_FMT_YUYV:
+	case V4L2_PIX_FMT_RGB565:
+	case V4L2_PIX_FMT_BGR565:
+	case V4L2_PIX_FMT_RGB555:
+		encoder->output.bytesperline = src->width * 2;
+		break;
+	case V4L2_PIX_FMT_RGBA32:
+	case V4L2_PIX_FMT_BGR32:
+	case V4L2_PIX_FMT_ABGR32:
+	case V4L2_PIX_FMT_RGBX32:
+		encoder->output.bytesperline = src->width * 4;
+		break;
+	default:
+		encoder->output.bytesperline = src->width;
+		break;
+	}
+
 	if (src->type == TEST_TYPE_CAMERA) {
 		encoder->output.memory = V4L2_MEMORY_USERPTR;
 		encoder->node.frame_skip = true;

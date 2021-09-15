@@ -1259,6 +1259,9 @@ uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 		size = ((width * 3) >> 1) * height;
 		break;
 	case V4L2_PIX_FMT_YUYV:
+	case V4L2_PIX_FMT_RGB565:
+	case V4L2_PIX_FMT_BGR565:
+	case V4L2_PIX_FMT_RGB555:
 		size = width * height * 2;
 		break;
 	case V4L2_PIX_FMT_NV12_TILE:
@@ -1272,6 +1275,12 @@ uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
 		height = ALIGN(height, MALONE_ALIGN_H);
 		stride = ALIGN(width * 10 / 8, MALONE_ALIGN_LINE);
 		size = ((stride * 3) >> 1) * height;
+		break;
+	case V4L2_PIX_FMT_RGBA32:
+	case V4L2_PIX_FMT_BGR32:
+	case V4L2_PIX_FMT_ABGR32:
+	case V4L2_PIX_FMT_RGBX32:
+		size = width * height * 4;
 		break;
 	default:
 		break;
