@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * v4l2.c
  *
@@ -34,6 +32,7 @@
 #include "pitcher.h"
 #include "pitcher_v4l2.h"
 #include "platform_8x.h"
+#include "dmabuf.h"
 
 static int __is_v4l2_end(struct v4l2_component_t *component)
 {
@@ -65,15 +64,12 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 	assert(component && component->fd >= 0);
 	fd = component->fd;
 
-	if (component->pixelformat) {
+	if (component->pixelformat != PIX_FMT_NONE) {
 		ret = check_v4l2_support_fmt(component->fd,
 				component->type, component->pixelformat);
 		if (ret == FALSE) {
-			PITCHER_ERR("set fmt %c%c%c%c fail, not supported \n",
-					component->pixelformat,
-					component->pixelformat >> 8,
-					component->pixelformat >> 16,
-					component->pixelformat >> 24);
+			PITCHER_ERR("set fmt %s fail, not supported \n",
+					pitcher_get_format_name(component->pixelformat));
 			return -RET_E_INVAL;
 		}
 	}
@@ -81,11 +77,12 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 	memset(&format, 0, sizeof(format));
 	format.type = component->type;
 	ioctl(fd, VIDIOC_G_FMT, &format);
-	if (!component->pixelformat) {
+	if (!component->fourcc) {
 		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type))
-			component->pixelformat = format.fmt.pix.pixelformat;
+			component->fourcc = format.fmt.pix.pixelformat;
 		else
-			component->pixelformat = format.fmt.pix_mp.pixelformat;
+			component->fourcc = format.fmt.pix_mp.pixelformat;
+		component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc);
 	}
 	if (!component->width || !component->height) {
 		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
@@ -98,13 +95,13 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 	}
 
 	if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
-		format.fmt.pix.pixelformat = component->pixelformat;
+		format.fmt.pix.pixelformat = component->fourcc;
 		format.fmt.pix.width = component->width;
 		format.fmt.pix.height = component->height;
 		format.fmt.pix.bytesperline = component->bytesperline;
 		format.fmt.pix.sizeimage = component->sizeimage;
 	} else {
-		format.fmt.pix_mp.pixelformat = component->pixelformat;
+		format.fmt.pix_mp.pixelformat = component->fourcc;
 		format.fmt.pix_mp.width = component->width;
 		format.fmt.pix_mp.height = component->height;
 		format.fmt.pix_mp.num_planes = 2;
@@ -125,7 +122,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		component->num_planes = 1;
 		component->width = format.fmt.pix.width;
 		component->height = format.fmt.pix.height;
-		component->pixelformat = format.fmt.pix.pixelformat;
+		component->fourcc = format.fmt.pix.pixelformat;
 		component->sizeimage = format.fmt.pix.sizeimage;
 		component->bytesperline = format.fmt.pix.bytesperline;
 		component->field = format.fmt.pix.field;
@@ -133,11 +130,12 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		component->num_planes = format.fmt.pix_mp.num_planes;
 		component->width = format.fmt.pix_mp.width;
 		component->height = format.fmt.pix_mp.height;
-		component->pixelformat = format.fmt.pix_mp.pixelformat;
+		component->fourcc = format.fmt.pix_mp.pixelformat;
 		component->sizeimage = format.fmt.pix_mp.plane_fmt[0].sizeimage;
 		component->bytesperline = format.fmt.pix_mp.plane_fmt[0].bytesperline;
 		component->field = format.fmt.pix_mp.field;
 	}
+	component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc);
 
 	return RET_OK;
 }
@@ -243,6 +241,7 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 	PITCHER_LOG("%s min buffers : %d\n",
 		V4L2_TYPE_IS_OUTPUT(component->type) ? "output" : "capture",
 		min_buffer_count);
+	min_buffer_count += 3;
 	if (component->buffer_count < min_buffer_count)
 		component->buffer_count = min_buffer_count;
 	if (component->buffer_count > MAX_BUFFER_COUNT)
@@ -468,12 +467,18 @@ static struct pitcher_buffer *__get_buf(struct v4l2_component_t *component)
 	return NULL;
 }
 
-static int init_v4l2_mmap_plane(struct pitcher_plane *plane,
+static int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)
+{
+	return ioctl(fd, VIDIOC_ENUM_FMT, fmt);
+}
+
+static int init_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	struct v4l2_buffer v4lbuf;
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 	struct v4l2_component_t *component = arg;
+	struct v4l2_exportbuffer exp;
 	int fd;
 	int ret;
 
@@ -493,6 +498,20 @@ static int init_v4l2_mmap_plane(struct pitcher_plane *plane,
 	if (ret) {
 		PITCHER_ERR("query buf fail, error: %s\n", strerror(errno));
 		return -RET_E_INVAL;
+	}
+
+	exp.type = component->type;
+	exp.index = component->buffer_index;
+	exp.plane = index;
+	exp.fd = -1;
+	exp.flags = O_CLOEXEC | O_RDWR;
+	ioctl(fd, VIDIOC_EXPBUF, &exp);
+	/*printf("[%d:%d] fd = %d\n", component->buffer_index, index, exp.fd);*/
+	if (exp.fd >= 0) {
+		plane->dmafd = exp.fd;
+		plane->size = V4L2_TYPE_IS_MULTIPLANAR(component->type) ? v4lbuf.m.planes[index].length : v4lbuf.length;
+		if (!pitcher_construct_dma_buf_from_fd(plane))
+			return RET_OK;
 	}
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
@@ -524,7 +543,7 @@ static int init_v4l2_mmap_plane(struct pitcher_plane *plane,
 	return RET_OK;
 }
 
-static int uninit_v4l2_mmap_plane(struct pitcher_plane *plane,
+static int uninit_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	if (plane && plane->virt && plane->size)
@@ -533,7 +552,7 @@ static int uninit_v4l2_mmap_plane(struct pitcher_plane *plane,
 	return RET_OK;
 }
 
-static int init_v4l2_userptr_plane(struct pitcher_plane *plane,
+static int init_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	struct v4l2_buffer v4lbuf;
@@ -573,7 +592,7 @@ static int init_v4l2_userptr_plane(struct pitcher_plane *plane,
 	return RET_OK;
 }
 
-static int uninit_v4l2_userptr_plane(struct pitcher_plane *plane,
+static int uninit_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
@@ -610,6 +629,7 @@ static int __alloc_v4l2_buffer(struct v4l2_component_t *component)
 	int i;
 	struct pitcher_buffer_desc desc;
 	struct pitcher_buffer *buffer;
+	int supported_fmt = 0;
 
 	assert(component && component->fd >= 0);
 
@@ -626,6 +646,15 @@ static int __alloc_v4l2_buffer(struct v4l2_component_t *component)
 		return -RET_E_INVAL;
 	}
 
+	component->format.format = component->pixelformat;
+	component->format.width = component->width;
+	component->format.height = component->height;
+	if (component->num_planes == 1)
+		component->format.size = component->sizeimage;
+	component->format.interlaced = component->field == V4L2_FIELD_INTERLACED ? 1 : 0;
+	if (!pitcher_get_pix_fmt_info(&component->format, component->bytesperline))
+		supported_fmt = 1;
+
 	desc.plane_count = component->num_planes;
 	desc.recycle = __recycle_v4l2_buffer;
 	desc.arg = component;
@@ -637,6 +666,8 @@ static int __alloc_v4l2_buffer(struct v4l2_component_t *component)
 			break;
 		buffer->index = i;
 		component->buffers[i] = buffer;
+		if (supported_fmt)
+			buffer->format = &component->format;
 	}
 	component->buffer_count = i;
 	if (!component->buffer_count)
@@ -739,6 +770,24 @@ static int __cleanup_v4l2(struct v4l2_component_t *component)
 	return RET_OK;
 }
 
+static int get_v4l2_fourcc(struct v4l2_component_t *component)
+{
+	struct v4l2_fmtdesc fmt_desc;
+
+	fmt_desc.type = component->type;
+	fmt_desc.index = 0;
+
+	while (!v4l2_enum_fmt(component->fd, &fmt_desc)) {
+		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat) == component->pixelformat) {
+			component->fourcc = fmt_desc.pixelformat;
+			return RET_OK;
+		}
+		fmt_desc.index++;
+	}
+
+	return -RET_E_NOT_SUPPORT;
+}
+
 static int start_v4l2(void *arg)
 {
 	struct v4l2_component_t *component = arg;
@@ -747,6 +796,12 @@ static int start_v4l2(void *arg)
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
 
+	ret = get_v4l2_fourcc(component);
+	if (ret) {
+		PITCHER_ERR("can't find fourcc for foramt %s\n",
+				pitcher_get_format_name(component->pixelformat));
+		return ret;
+	}
 	ret = __init_v4l2(component);
 	if (ret < 0)
 		return ret;
@@ -843,13 +898,6 @@ static void __check_v4l2_events(struct v4l2_component_t *component)
 		PITCHER_LOG("Receive Source Change, fd = %d\n", component->fd);
 		component->resolution_change = true;
 		break;
-	case V4L2_EVENT_CODEC_ERROR:
-		PITCHER_LOG("Receive Codec Error, fd = %d\n", component->fd);
-		pitcher_set_error(component->chnno);
-		break;
-	case V4L2_EVENT_SKIP:
-		PITCHER_LOG("Receive Skip, fd = %d\n", component->fd);
-		break;
 	default:
 		break;
 	}
@@ -894,6 +942,7 @@ static int __transfer_output_buffer_userptr(struct pitcher_buffer *src,
 					struct pitcher_buffer *dst)
 {
 	int i;
+	unsigned long size;
 
 	if (!src || !dst)
 		return -RET_E_NULL_POINTER;
@@ -904,8 +953,8 @@ static int __transfer_output_buffer_userptr(struct pitcher_buffer *src,
 
 		for (i = 0; i < dst->count; i++) {
 			bytesused = src->planes[0].bytesused - total;
-			if (bytesused > dst->planes[i].size)
-				bytesused = dst->planes[i].size;
+			size = pitcher_get_buffer_plane_size(dst, i);
+			bytesused = min(bytesused, size);
 
 			dst->planes[i].virt = src->planes[0].virt + total;
 			dst->planes[i].bytesused = bytesused;
@@ -916,7 +965,7 @@ static int __transfer_output_buffer_userptr(struct pitcher_buffer *src,
 	} else if (src->count == dst->count) {
 		for (i = 0; i < dst->count; i++)
 			memcpy(&dst->planes[i], &src->planes[i],
-					sizeof(struct pitcher_plane));
+					sizeof(struct pitcher_buf_ref));
 	} else {
 		return -RET_E_INVAL;
 	}
@@ -929,6 +978,7 @@ static int __transfer_output_buffer_mmap(struct pitcher_buffer *src,
 					struct pitcher_buffer *dst)
 {
 	int i;
+	unsigned long size;
 
 	if (!src || !dst)
 		return -RET_E_NULL_POINTER;
@@ -939,8 +989,8 @@ static int __transfer_output_buffer_mmap(struct pitcher_buffer *src,
 
 		for (i = 0; i < dst->count; i++) {
 			bytesused = src->planes[0].bytesused - total;
-			if (bytesused > dst->planes[i].size)
-				bytesused = dst->planes[i].size;
+			size = pitcher_get_buffer_plane_size(dst, i);
+			bytesused = min(bytesused, size);
 
 			memcpy(dst->planes[i].virt,
 					src->planes[0].virt + total,
@@ -1086,11 +1136,6 @@ struct pitcher_unit_desc pitcher_v4l2_output = {
 	.events = EPOLLOUT | EPOLLET | EPOLLPRI,
 };
 
-static int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)
-{
-	return ioctl(fd, VIDIOC_ENUM_FMT, fmt);
-}
-
 int is_v4l2_mplane(struct v4l2_capability *cap)
 {
     if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE_MPLANE
@@ -1124,12 +1169,12 @@ int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
 	fmt_desc.index = 0;
 
 	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
-		if (fmt_desc.pixelformat == pixelformat) {
+		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat) == pixelformat) {
 			PITCHER_LOG("%c%c%c%c %s is found\n",
-					pixelformat,
-					pixelformat >> 8,
-					pixelformat >> 16,
-					pixelformat >> 24,
+					fmt_desc.pixelformat,
+					fmt_desc.pixelformat >> 8,
+					fmt_desc.pixelformat >> 16,
+					fmt_desc.pixelformat >> 24,
 					fmt_desc.description);
 			return TRUE;
 		}
@@ -1150,6 +1195,9 @@ int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
 	if (ioctl(fd, VIDIOC_QUERYCAP, &cap) != 0)
 		return FALSE;
 
+	PITCHER_LOG("check v4l2 devcie for %s to %s\n",
+			pitcher_get_format_name(out_fmt),
+			pitcher_get_format_name(cap_fmt));
 	if (is_v4l2_mplane(&cap)) {
 		cap_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -1158,12 +1206,12 @@ int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
 		out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 	}
 
-	if (cap_fmt)
+	if (cap_fmt != PIX_FMT_NONE)
 		cap_find = check_v4l2_support_fmt(fd, cap_type, cap_fmt);
-	if (out_fmt)
+	if (out_fmt != PIX_FMT_NONE)
 		out_find = check_v4l2_support_fmt(fd, out_type, out_fmt);
 
-	if ((cap_find & out_find))
+	if (cap_find && out_find)
 		return TRUE;
 
 	return FALSE;
@@ -1247,44 +1295,17 @@ int get_ctrl(int fd, int id, int *value)
 	return 0;
 }
 
-uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height)
+uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t alignment)
 {
 	uint32_t size = width * height;
-	uint32_t stride;
+	struct pix_fmt_info format;
 
-	switch (fmt) {
-	case V4L2_PIX_FMT_NV12:
-	case V4L2_PIX_FMT_YUV420:
-	case V4L2_PIX_FMT_NV21:
-		size = ((width * 3) >> 1) * height;
-		break;
-	case V4L2_PIX_FMT_YUYV:
-	case V4L2_PIX_FMT_RGB565:
-	case V4L2_PIX_FMT_BGR565:
-	case V4L2_PIX_FMT_RGB555:
-		size = width * height * 2;
-		break;
-	case V4L2_PIX_FMT_NV12_TILE:
-		width = ALIGN(width, MALONE_ALIGN_W);
-		height = ALIGN(height, MALONE_ALIGN_H);
-		stride = ALIGN(width, MALONE_ALIGN_LINE);
-		size = ((stride * 3) >> 1) * height;
-		break;
-	case V4L2_PIX_FMT_NV12_TILE_10BIT:
-		width = ALIGN(width, MALONE_ALIGN_W);
-		height = ALIGN(height, MALONE_ALIGN_H);
-		stride = ALIGN(width * 10 / 8, MALONE_ALIGN_LINE);
-		size = ((stride * 3) >> 1) * height;
-		break;
-	case V4L2_PIX_FMT_RGBA32:
-	case V4L2_PIX_FMT_BGR32:
-	case V4L2_PIX_FMT_ABGR32:
-	case V4L2_PIX_FMT_RGBX32:
-		size = width * height * 4;
-		break;
-	default:
-		break;
-	}
+	memset(&format, 0, sizeof(format));
+	format.format = fmt;
+	format.width = width;
+	format.height = height;
+	if (!pitcher_get_pix_fmt_info(&format, alignment))
+		size = format.size;
 
 	return size;
 }

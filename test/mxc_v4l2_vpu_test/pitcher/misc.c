@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * misc.c
  *
@@ -32,7 +30,7 @@ static uint64_t __get_time(clockid_t clk_id)
 
 	clock_gettime(clk_id, &tv);
 
-	tm = (uint64_t)tv.tv_sec * 1000000000 + tv.tv_nsec;
+	tm = (uint64_t)tv.tv_sec * NSEC_PER_SEC + tv.tv_nsec;
 
 	return tm;
 }

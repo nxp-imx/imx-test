@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * core/buffer.c
  *
@@ -34,10 +32,10 @@ struct ext_buffer {
 	handle_plane uninit_plane;
 	handle_buffer recycle;
 	void *arg;
-	struct pitcher_plane planes[0];
+	struct pitcher_buf_ref planes[0];
 };
 
-int pitcher_alloc_plane(struct pitcher_plane *plane,
+int pitcher_alloc_plane(struct pitcher_buf_ref *plane,
 			unsigned int index, void *arg)
 {
 	assert(plane);
@@ -52,7 +50,7 @@ int pitcher_alloc_plane(struct pitcher_plane *plane,
 	return RET_OK;
 }
 
-int pitcher_free_plane(struct pitcher_plane *plane,
+int pitcher_free_plane(struct pitcher_buf_ref *plane,
 			unsigned int index, void *arg)
 {
 	if (!plane)
@@ -95,9 +93,11 @@ struct pitcher_buffer *pitcher_new_buffer(struct pitcher_buffer_desc *desc)
 	if (!desc || !desc->plane_count || !desc->init_plane ||
 			!desc->uninit_plane || !desc->recycle)
 		return NULL;
+	if (desc->plane_count > MAX_PLANES)
+		return NULL;
 
 	exb = pitcher_calloc(1, sizeof(*exb) +
-			desc->plane_count * sizeof(struct pitcher_plane));
+			desc->plane_count * sizeof(struct pitcher_buf_ref));
 	if (!exb)
 		return NULL;
 
@@ -109,7 +109,8 @@ struct pitcher_buffer *pitcher_new_buffer(struct pitcher_buffer_desc *desc)
 	exb->arg = desc->arg;
 
 	for (i = 0; i < exb->buffer.count; i++) {
-		exb->buffer.planes[i].size = desc->plane_size;
+		exb->buffer.planes[i].size = desc->plane_size[i];
+		exb->buffer.planes[i].dmafd = -1;
 		ret = exb->init_plane(&exb->buffer.planes[i], i, exb->arg);
 		if (ret < 0)
 			break;
@@ -157,5 +158,13 @@ unsigned int pitcher_get_buffer_refcount(struct pitcher_buffer *buffer)
 
 	exb = container_of(buffer, struct ext_buffer, buffer);
 	return pitcher_get_obj_refcount(&exb->obj);
+}
+
+int pitcher_auto_remove_buffer(struct pitcher_buffer *buffer, void *arg, int *del)
+{
+	if (del)
+		*del = true;
+
+	return RET_OK;
 }
 

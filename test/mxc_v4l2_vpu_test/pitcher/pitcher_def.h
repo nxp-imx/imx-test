@@ -118,10 +118,13 @@ enum {
 #endif
 
 #ifndef NSEC_PER_MSEC
-#define	NSEC_PER_MSEC			1000000
+#define	NSEC_PER_MSEC			(1000000)
 #endif
 #ifndef USEC_PER_MSEC
-#define	USEC_PER_MSEC			1000
+#define	USEC_PER_MSEC			(1000L)
+#endif
+#ifndef NSEC_PER_SEC
+#define NSEC_PER_SEC			(1000000000L)
 #endif
 
 #ifdef LOG_TAG
@@ -141,7 +144,8 @@ enum {
 #define MAXPATHLEN	255
 
 #ifndef ALIGN
-#define ALIGN(x, a)		__ALIGN(x, (typeof(x))(a) - 1)
+//#define ALIGN(x, a)		__ALIGN(x, (typeof(x))(a) - 1)
+#define ALIGN(x, a)		({typeof(x) _x = (x) % (a); _x ? ((x) + (a) - _x) : (x);})
 #define __ALIGN(x, mask)	(((x) + (mask)) & ~(mask))
 #endif
 #ifndef ALIGN_DOWN
@@ -155,12 +159,15 @@ uint64_t pitcher_get_monotonic_raw_time(void);
 long pitcher_get_file_size(const char *filename);
 void *_pitcher_malloc(size_t size, const char *func, int line);
 void *_pitcher_calloc(size_t nmemb, size_t size, const char *func, int line);
+void *_pitcher_realloc(void *ptr, size_t size, const char *func, int line);
 void pitcher_free(void *ptr);
 long pitcher_memory_count(void);
 #define pitcher_malloc(size)		\
 		_pitcher_malloc(size, __func__, __LINE__)
 #define pitcher_calloc(nmemb, size)	\
 		_pitcher_calloc(nmemb, size, __func__, __LINE__)
+#define pitcher_realloc(ptr, size) \
+		_pitcher_realloc(ptr, size, __func__, __LINE__);
 
 #ifdef __cplusplus
 }

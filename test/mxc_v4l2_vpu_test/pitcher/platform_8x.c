@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * platform_8x.c
  *

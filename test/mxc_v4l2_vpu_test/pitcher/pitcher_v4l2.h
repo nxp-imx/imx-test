@@ -25,15 +25,9 @@ extern "C"
 #endif
 
 #include <linux/videodev2.h>
+#include "pixfmt.h"
 
 #ifndef _UAPI__LINUX_IMX_VPU_H
-
-#ifndef V4L2_EVENT_CODEC_ERROR
-#define V4L2_EVENT_CODEC_ERROR	(V4L2_EVENT_PRIVATE_START + 1)
-#endif
-#ifndef V4L2_EVENT_SKIP
-#define V4L2_EVENT_SKIP		(V4L2_EVENT_PRIVATE_START + 2)
-#endif
 
 #define V4L2_MAX_ROI_REGIONS            8
 struct v4l2_enc_roi_param {
@@ -79,6 +73,7 @@ struct v4l2_component_t {
 	enum v4l2_buf_type type;
 	enum v4l2_memory memory;
 	uint32_t pixelformat;
+	uint32_t fourcc;
 	uint32_t width;
 	uint32_t height;
 	struct v4l2_rect crop;
@@ -105,6 +100,7 @@ struct v4l2_component_t {
 	int eos_received;
 	int resolution_change;
 	uint32_t field;
+	struct pix_fmt_info format;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;
@@ -117,7 +113,7 @@ int is_v4l2_splane(struct v4l2_capability *cap);
 int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat);
 int set_ctrl(int fd, int id, int value);
 int get_ctrl(int fd, int id, int *value);
-uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height);
+uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t alignment);
 #ifdef __cplusplus
 }
 #endif

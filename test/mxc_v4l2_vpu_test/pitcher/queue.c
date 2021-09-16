@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * queue.c
  *
@@ -262,18 +260,18 @@ long pitcher_queue_count(Queue q)
 }
 
 int pitcher_queue_find(Queue q, queue_callback func, void *arg,
-		int (*compeare)(unsigned long item, unsigned long key),
+		int (*compare)(unsigned long item, unsigned long key),
 		unsigned long key)
 {
 	struct queue_t *queue = q;
 	struct queue_node *node;
 	struct queue_node *tmp;
 
-	if (!q || !compeare)
+	if (!q || !compare)
 		return -RET_E_INVAL;
 
 	list_for_each_entry_safe(node, tmp, &queue->queue, list) {
-		if (!compeare(node->item, key))
+		if (!compare(node->item, key))
 			continue;
 		if (func && func(node->item, arg)) {
 			__remove_queue_node(queue, node);

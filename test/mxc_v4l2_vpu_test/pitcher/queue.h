@@ -37,7 +37,7 @@ void pitcher_queue_enumerate(Queue q, queue_callback func, void *arg);
 int pitcher_queue_is_empty(Queue q);
 long pitcher_queue_count(Queue q);
 int pitcher_queue_find(Queue q, queue_callback func, void *arg,
-		int (*compeare)(unsigned long item, unsigned long key),
+		int (*compare)(unsigned long item, unsigned long key),
 		unsigned long key);
 #ifdef __cplusplus
 }

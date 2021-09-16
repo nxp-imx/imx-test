@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,13 +10,11 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * convert.c
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -29,591 +26,498 @@
 #include "platform_8x.h"
 #include "convert.h"
 
+struct sw_cvrt_t {
+	struct pix_fmt_info format;
+	struct pitcher_buffer *mid;
+};
 
-static void convert_i420_to_nv12(struct convert_ctx *cvrt_ctx)
+static void unpack_tile_2_nv12(uint8_t * src, uint32_t tw, uint32_t x,
+			       uint32_t y, uint8_t * dst, uint32_t stride,
+			       uint32_t offset)
 {
-	struct pitcher_buffer *src;
-	struct pitcher_buffer *dst;
-	uint32_t width;
-	uint32_t height;
-	uint8_t *u_start;
-	uint8_t *v_start;
-	uint8_t *uv_temp;
-	uint32_t uv_size;
-	int i;
-	int j;
+	uint32_t i;
 
-	assert(cvrt_ctx);
-
-	src = cvrt_ctx->src_buf;
-	dst = cvrt_ctx->dst_buf;
-	width = max(cvrt_ctx->width, cvrt_ctx->bytesperline);
-	height = cvrt_ctx->height;
-	uv_size = width * height / 2;
-
-	switch (src->count) {
-	case 1:
-		u_start = src->planes[0].virt + width * height;
-		v_start = u_start + uv_size / 2;
-		break;
-	case 2:
-		u_start = src->planes[1].virt;
-		v_start = u_start + uv_size / 2;
-		break;
-	case 3:
-		u_start = src->planes[1].virt;
-		v_start = src->planes[2].virt;
-		break;
-	default:
-		return;
-	}
-
-	switch (dst->count) {
-	case 1:
-		uv_temp = dst->planes[0].virt + width * height;
-		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-								width, height);
-		break;
-	case 2:
-		dst->planes[0].bytesused = width * height;
-		dst->planes[1].bytesused = uv_size;
-		uv_temp = dst->planes[1].virt;
-		break;
-	default:
-		return;
-	}
-
-	memcpy(dst->planes[0].virt, src->planes[0].virt, width * height);
-	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
-		uv_temp[j] = u_start[i];
-		uv_temp[j + 1] = v_start[i];
+	for (i = 0; i < y; i++) {
+		memcpy(dst + offset, src, x);
+		src += tw;
+		dst += stride;
 	}
 }
 
-static void __convert_nv12_tiled_to_linear(uint8_t *src, uint8_t *dst,
-			uint32_t width, uint32_t height, uint32_t stride)
+static void swc_unpack_tile_2_nv12(uint8_t * src, uint32_t tw, uint32_t th,
+				   uint32_t w, uint32_t h, uint32_t ntx,
+				   uint32_t nty, uint8_t * dst, uint32_t stride,
+				   uint32_t offset)
 {
-	uint32_t h_cnt;
-	uint32_t v_cnt;
-	uint32_t v_remain;
-	uint32_t h_num;
-	uint32_t v_num;
-	uint32_t v_base_offset;
-	uint8_t *inter_buf;
-	uint8_t *cur_addr;
-	uint32_t line_num;
-	uint32_t line_base;
+	uint32_t x;
 	uint32_t i;
 	uint32_t j;
-	uint32_t n;
+	uint32_t ts = tw * th;
+	uint32_t len_x = tw;
+	uint32_t len_y;
 
-	inter_buf = pitcher_calloc(1, 8 * 128);
-	if (!inter_buf)	{
-		PITCHER_ERR("failed to alloc inter_buf\n");
-		return;
+	for (j = 0; j < nty; j++) {
+		i = 0;
+		len_y = min(th, h - th * j);
+		for (x = 0, i = 0; x < w; x += len_x, i++) {
+			len_x = min(tw, w - x);
+			unpack_tile_2_nv12(src + ts * i, tw, len_x, len_y, dst,
+					   stride, offset + tw * i);
+		}
+		src += ntx * ts;
+		dst += (stride * th);
+	}
+}
+
+static int swc_unpack_tiled_nv12(struct pitcher_buffer *src,
+				 struct pitcher_buffer *dst)
+{
+	uint32_t tw = src->format->tile_ws;
+	uint32_t th = src->format->tile_hs;
+	uint32_t width = src->format->width;
+	uint32_t height = src->format->height;
+	uint32_t h;
+	struct pitcher_buf_ref splane;
+	struct pitcher_buf_ref dplane;
+
+	if (src->format->interlaced) {
+		h = height / 2;
+		pitcher_get_buffer_plane(src, 0, &splane);
+		pitcher_get_buffer_plane(dst, 0, &dplane);
+		swc_unpack_tile_2_nv12(splane.virt, tw, th, width, h,
+				       src->format->planes[0].line / tw,
+				       DIV_ROUND_UP(h, th), dplane.virt,
+				       dst->format->planes[0].line * 2, 0);
+		swc_unpack_tile_2_nv12(splane.virt + splane.size / 2, tw, th,
+				       width, h,
+				       src->format->planes[0].line / tw,
+				       DIV_ROUND_UP(h, th), dplane.virt,
+				       dst->format->planes[0].line * 2, width);
+
+		h = DIV_ROUND_UP(h, 2);
+		pitcher_get_buffer_plane(src, 1, &splane);
+		pitcher_get_buffer_plane(dst, 1, &dplane);
+		swc_unpack_tile_2_nv12(splane.virt, tw, th, width, h,
+				       src->format->planes[1].line / tw,
+				       DIV_ROUND_UP(h, th), dplane.virt,
+				       dst->format->planes[1].line * 2, 0);
+		swc_unpack_tile_2_nv12(splane.virt + splane.size / 2, tw, th,
+				       width, h,
+				       src->format->planes[1].line / tw,
+				       DIV_ROUND_UP(h, th), dplane.virt,
+				       dst->format->planes[1].line * 2, width);
+	} else {
+		h = height;
+		pitcher_get_buffer_plane(src, 0, &splane);
+		pitcher_get_buffer_plane(dst, 0, &dplane);
+		swc_unpack_tile_2_nv12(splane.virt, tw, th, width, h,
+				       src->format->planes[0].line / tw,
+				       DIV_ROUND_UP(h, th), dplane.virt,
+				       dst->format->planes[0].line, 0);
+
+		h = DIV_ROUND_UP(height, 2);
+		pitcher_get_buffer_plane(src, 1, &splane);
+		pitcher_get_buffer_plane(dst, 1, &dplane);
+		swc_unpack_tile_2_nv12(splane.virt, tw, th, width, h,
+				       src->format->planes[1].line / tw,
+				       DIV_ROUND_UP(h, th), dplane.virt,
+				       dst->format->planes[1].line, 0);
 	}
 
-	h_cnt = width / 8;
-	v_cnt = (height + 127) / 128;
-	v_remain = height % 128;
+	return 0;
+}
 
-	for (v_num = 0; v_num < v_cnt; v_num++)	{
-		v_base_offset = stride * 128 * v_num;
+#define GET_U8_BITS(__pdata, __mask, __shift)   (((*(uint8_t *)(__pdata)) >> (__shift)) & (__mask))
+#define TILE_POS_TO_ADDR(base, offset, ts, tw, y, x) ((base) + (offset) + (((ts) * ((x) / (tw))) + (tw) * (y) + ((x) % (tw))))
 
-		for (h_num = 0; h_num < h_cnt; h_num++) {
-			cur_addr = (uint8_t *)(src + h_num * (8 * 128) + v_base_offset);
-			memcpy(inter_buf, cur_addr, 8 * 128);
+static void get_10BE_pos(uint32_t x, int pos[2], int bits[2], uint8_t mask[2])
+{
+	const int depth = 10;
+	int bit_index = depth * x;
 
-			if (v_num == (v_cnt - 1) && v_remain != 0)
-				n = v_remain;
-			else
-				n = 128;
-			for (i = 0; i < n; i++) {
-				line_num  = i + 128 * v_num;
-				line_base = line_num * width;
-				for (j = 0; j < 8; j++) {
-					dst[line_base + (8 * h_num) + j] = inter_buf[8 * i + j];
-				}
+	pos[0] = bit_index / 8;
+	bits[0] = 8 - (bit_index % 8);
+	bits[1] = depth - bits[0];
+	pos[1] = pos[0] + 1;
+	mask[0] = (1 << bits[0]) - 1;
+	mask[1] = (1 << bits[1]) - 1;
+}
+
+static int swc_unpack_nv12_10be_8l128(struct pitcher_buffer *src,
+				      struct pitcher_buffer *dst)
+{
+	uint32_t width = src->format->width;
+	uint32_t height = src->format->height;
+	uint32_t tw = src->format->tile_ws;
+	uint32_t th = src->format->tile_hs;
+	uint32_t ts = tw * th;
+	uint8_t *luma = pitcher_get_frame_line_vaddr(src, 0, 0);
+	uint8_t *chroma = pitcher_get_frame_line_vaddr(src, 1, 0);
+	uint8_t *py;
+	uint8_t *uv;
+	uint32_t y;
+	uint32_t x;
+	uint32_t offset[2];
+	uint32_t line_size[2];
+	const uint8_t *pdata[2];
+	int pos[2];
+	int bits[2];
+	uint8_t mask[2];
+	uint16_t Y = 0, U = 0, V = 0;
+
+	line_size[0] = src->format->planes[0].line * th;
+	line_size[1] = src->format->planes[1].line * th;
+
+	for (y = 0; y < height; y++) {
+		py = pitcher_get_frame_line_vaddr(dst, 0, y);
+		uv = pitcher_get_frame_line_vaddr(dst, 1, y / 2);
+
+		offset[0] = (y / th) * line_size[0];
+		offset[1] = ((y / 2) / th) * line_size[1];
+		for (x = 0; x < width; x++) {
+			get_10BE_pos(x, pos, bits, mask);
+			pdata[0] = TILE_POS_TO_ADDR(luma, offset[0] ,ts, tw, y % th, pos[0]);
+			pdata[1] = TILE_POS_TO_ADDR(luma, offset[0],ts, tw, y % th, pos[1]);
+			Y = (GET_U8_BITS(pdata[0], mask[0], 0) << bits[1]) |
+					GET_U8_BITS(pdata[1], mask[1], 8 - bits[1]);
+			py[x] = Y >> 2;
+
+			if ((y % 2 == 0) && (x % 2 == 0)) {
+				get_10BE_pos(x, pos, bits, mask);
+				pdata[0] = TILE_POS_TO_ADDR(chroma, offset[1], ts, tw, (y / 2) % th, pos[0]);
+				pdata[1] = TILE_POS_TO_ADDR(chroma, offset[1], ts, tw, (y / 2) % th, pos[1]);
+				U = (GET_U8_BITS(pdata[0], mask[0], 0) << bits[1]) | GET_U8_BITS(pdata[1], mask[1], 8 - bits[1]);
+
+				get_10BE_pos(x + 1, pos, bits, mask);
+				pdata[0] = TILE_POS_TO_ADDR(chroma, offset[1], ts, tw, (y / 2) % th, pos[0]);
+				pdata[1] = TILE_POS_TO_ADDR(chroma, offset[1], ts, tw, (y / 2) % th, pos[1]);
+				V = (GET_U8_BITS(pdata[0], mask[0], 0) << bits[1]) | GET_U8_BITS(pdata[1], mask[1], 8 - bits[1]);
+
+				uv[x] = U >> 2;
+				uv[x + 1] = V >> 2;
 			}
 		}
 	}
 
-	SAFE_RELEASE(inter_buf, pitcher_free);
+	return 0;
 }
 
-static void convert_nv12_interlace_to_progress(uint8_t *y_src, uint8_t *uv_src,
-		uint8_t *y_dst, uint8_t *uv_dst, uint32_t width, uint32_t height)
+static int swc_unpack_i420(struct pitcher_buffer *src,
+			   struct pitcher_buffer *dst)
 {
-	uint32_t i;
-	uint8_t *y_src_top = y_src;
-	uint8_t *y_src_bot = y_src + width * height / 2;
-	uint8_t *uv_src_top = uv_src;
-	uint8_t *uv_src_bot = uv_src_top + width * height / 4;
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	uint32_t x;
 
-	for (i = 0; i < height; i ++) {
-		if (i & 1) {
-			memcpy(y_dst, y_src_bot, width);
-			y_src_bot += width;
-		} else {
-			memcpy(y_dst, y_src_top, width);
-			y_src_top += width;
-		}
-		y_dst += width;
-	}
+	for (y = 0; y < h; y++) {
+		uint8_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint8_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
 
-	for (i = 0; i < height / 2; i ++) {
-		if (i & 1) {
-			memcpy(uv_dst, uv_src_bot, width);
-			uv_src_bot += width;
-		} else {
-			memcpy(uv_dst, uv_src_top, width);
-			uv_src_top += width;
-		}
-		uv_dst += width;
-	}
-}
+		memcpy(pdst, psrc, w);
 
-static void convert_nv12_tiled_to_linear(struct convert_ctx *cvrt_ctx)
-{
-	struct pitcher_buffer *src;
-	struct pitcher_buffer *dst;
-	uint32_t height;
-	uint32_t stride;
-	uint8_t *y_src_start;
-	uint8_t *uv_src_start;
-	uint8_t *y_dst_start;
-	uint8_t *uv_dst_start;
-	uint32_t sizeimage = 0;
-	int i;
+		if (y < DIV_ROUND_UP(h, 2)) {
+			uint8_t *pu = pitcher_get_frame_line_vaddr(src, 1, y);
+			uint8_t *pv = pitcher_get_frame_line_vaddr(src, 2, y);
+			uint8_t *uv = pitcher_get_frame_line_vaddr(dst, 1, y);
 
-	assert(cvrt_ctx);
-
-	src = cvrt_ctx->src_buf;
-	dst = cvrt_ctx->dst_buf;
-	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(cvrt_ctx->width, MALONE_ALIGN_LINE);
-	for (i = 0; i < src->count; i++)
-		sizeimage += src->planes[i].bytesused;
-	height = (sizeimage * 2 / 3) / stride;
-
-	switch (src->count) {
-	case 1:
-		y_src_start = src->planes[0].virt;
-		uv_src_start = src->planes[0].virt + stride * height;
-		break;
-	case 2:
-		y_src_start = src->planes[0].virt;
-		uv_src_start = src->planes[1].virt;
-		break;
-	default:
-		return;
-	}
-
-	switch (dst->count) {
-	case 1:
-		y_dst_start = dst->planes[0].virt;
-		uv_dst_start = dst->planes[0].virt + cvrt_ctx->width * cvrt_ctx->height;
-		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-						cvrt_ctx->width, cvrt_ctx->height);
-		break;
-	case 2:
-		y_dst_start = dst->planes[0].virt;
-		uv_dst_start = dst->planes[1].virt;
-		dst->planes[0].bytesused = cvrt_ctx->width * cvrt_ctx->height;
-		dst->planes[1].bytesused = cvrt_ctx->width * cvrt_ctx->height / 2;
-		break;
-	default:
-		return;
-	}
-
-	if (cvrt_ctx->field == V4L2_FIELD_INTERLACED) {
-		uint8_t *tmp_dst_buf = NULL;
-		uint8_t *tmp_buf = NULL;
-		uint8_t *uv_src = NULL;
-		uint32_t dst_size = 0;
-		int i;
-		uint8_t *y_src_start_bot = y_src_start + stride * height / 2;
-		uint8_t *uv_src_start_bot = uv_src_start + stride * height / 4;
-		uint8_t *y_dst_start_bot = y_dst_start + cvrt_ctx->width * cvrt_ctx->height / 2;
-		uint8_t *uv_dst_start_bot = uv_dst_start + cvrt_ctx->width * cvrt_ctx->height / 4;
-
-		__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
-		__convert_nv12_tiled_to_linear(y_src_start_bot, y_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
-
-		__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
-		__convert_nv12_tiled_to_linear(uv_src_start_bot, uv_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
-
-		for (i = 0; i < dst->count; i++)
-			dst_size += dst->planes[i].bytesused;
-
-		tmp_dst_buf = malloc(dst_size);
-		if (!tmp_dst_buf) {
-			PITCHER_ERR("allocate buffer fail\n");
-			return;
-		}
-		tmp_buf = tmp_dst_buf;
-		for (i = 0; i < cvrt_ctx->dst_buf->count; i++) {
-			memcpy(tmp_buf, cvrt_ctx->dst_buf->planes[i].virt, cvrt_ctx->dst_buf->planes[i].bytesused);
-			tmp_buf = tmp_dst_buf + cvrt_ctx->dst_buf->planes[i].bytesused;
-		}
-
-		uv_src = tmp_dst_buf + cvrt_ctx->width * cvrt_ctx->height;
-		convert_nv12_interlace_to_progress(tmp_dst_buf, uv_src,
-			y_dst_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height);
-
-		SAFE_RELEASE(tmp_dst_buf, free);
-	} else {
-		__convert_nv12_tiled_to_linear(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height, stride);
-		__convert_nv12_tiled_to_linear(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
-	}
-}
-
-static void __convert_nv12_tiled_to_linear_10bit(uint8_t *src, uint8_t *dst,
-			uint32_t width, uint32_t height, uint32_t stride)
-{
-	int h_num, v_num, h_cnt, v_cnt, v_remain;
-	int sx, sy, dx, dy;
-	int i, j, n;
-	uint8_t *psrc;
-	uint8_t *pdst;
-	int bit_pos, bit_loc;
-	uint8_t first_byte, second_byte;
-	uint16_t byte_16;
-	int start_pos = 0;
-
-	h_cnt = (width * 10 / 8) / 8;
-	v_cnt = (height + 127) / 128;
-	v_remain = height % 128;
-
-	for (v_num = 0; v_num < v_cnt; v_num++)	{
-		for (h_num = 0; h_num < h_cnt; h_num++) {
-			sx = h_num * 8;
-			sy = v_num * 128;
-			dx = (sx * 8 + 9) / 10;
-			dy = sy;
-
-			if (v_num == (v_cnt - 1) && v_remain != 0)
-				n = v_remain;
-			else
-				n = 128;
-			for (i = 0; i < n; i++) {
-				psrc = &src[sy * (stride) + h_num * (8 * 128) + i * 8];
-				pdst = &dst[dy * width + i * width + dx];
-				bit_pos = 10 * dx;
-
-				/*
-				 * front remain 2 bit, that means the first byte(8bit)
-				 * all belone front pixel, should skip it
-				 */
-				if ((sx * 8 % 10) == 2)
-					start_pos = 1;
-				else
-					start_pos = 0;
-
-				for (j = start_pos; j < 8; j++) {
-					first_byte = psrc[j];
-					second_byte = (j != 7) ? psrc[j + 1] : psrc[8 * 128];
-					byte_16 = (first_byte << 8) | second_byte;
-					bit_loc = bit_pos % 8;
-
-
-					*pdst = byte_16 >> (8 - bit_loc);
-					pdst++;
-					bit_pos += 10;
-					/*
-					 * first_byte use 2 bit, second_byte use 8 bit
-					 * seconed_byte exhaused, should skip in next cycle
-					 */
-					if (bit_loc == 6)
-						j++;
-				}
+			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
+				uv[x * 2] = pu[x];
+				uv[x * 2 + 1] = pv[x];
 			}
 		}
 	}
+
+	return 0;
 }
 
-static void convert_nv12_tiled_to_linear_10bit(struct convert_ctx *cvrt_ctx)
+static int swc_pack_i420(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	uint32_t x;
+
+	for (y = 0; y < h; y++) {
+		uint8_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint8_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		memcpy(pdst, psrc, w);
+
+		if (y < DIV_ROUND_UP(h, 2)) {
+			uint8_t *uv = pitcher_get_frame_line_vaddr(src, 1, y);
+			uint8_t *pu = pitcher_get_frame_line_vaddr(dst, 1, y);
+			uint8_t *pv = pitcher_get_frame_line_vaddr(dst, 2, y);
+
+			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
+				pu[x] = uv[x * 2];
+				pv[x] = uv[x * 2 + 1];
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int swc_unpack_yuyv(struct pitcher_buffer *src,
+			   struct pitcher_buffer *dst)
+{
+	uint32_t x;
+	uint32_t y;
+	uint8_t *yuv;
+	uint8_t *py;
+	uint8_t *uv;
+
+	for (y = 0; y < src->format->height; y++) {
+		yuv = pitcher_get_frame_line_vaddr(src, 0, y);
+		py = pitcher_get_frame_line_vaddr(dst, 0, y);
+		if (y % 2 == 0)
+			uv = pitcher_get_frame_line_vaddr(dst, 1, y / 2);
+
+		for (x = 0; x < src->format->width; x++) {
+			py[x] = yuv[x * 2];
+			if (y % 2 == 0)
+				uv[x] = yuv[x * 2 + 1];
+		}
+	}
+
+	return 0;
+}
+
+static int swc_pack_yuyv(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t x;
+	uint32_t y;
+	uint8_t *yuv;
+	uint8_t *py;
+	uint8_t *uv;
+
+	for (y = 0; y < src->format->height; y++) {
+		py = pitcher_get_frame_line_vaddr(src, 0, y);
+		uv = pitcher_get_frame_line_vaddr(src, 1, y / 2);
+		yuv = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		for (x = 0; x < src->format->width; x++) {
+			yuv[x * 2] = py[x];
+			yuv[x * 2 + 1] = uv[x];
+		}
+	}
+
+	return 0;
+}
+
+static int swc_copy_nv12(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	struct pitcher_buf_ref splane;
+	struct pitcher_buf_ref dplane;
+
+	for (y = 0; y < h; y++) {
+		pitcher_get_buffer_plane(src, 0, &splane);
+		pitcher_get_buffer_plane(dst, 0, &dplane);
+		memcpy(dplane.virt + y * dst->format->planes[0].line,
+		       splane.virt + y * src->format->planes[0].line, w);
+
+		if (y < DIV_ROUND_UP(h, 2)) {
+			pitcher_get_buffer_plane(src, 1, &splane);
+			pitcher_get_buffer_plane(dst, 1, &dplane);
+			memcpy(dplane.virt + y * dst->format->planes[1].line,
+			       splane.virt + y * src->format->planes[1].line,
+			       w);
+		}
+	}
+
+	return 0;
+}
+
+int pitcher_sw_unpack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	int ret = -RET_E_NOT_SUPPORT;
+
+	assert(dst->format->format == PIX_FMT_NV12);
+
+	switch (src->format->format) {
+	case PIX_FMT_NV12_8L128:
+		ret = swc_unpack_tiled_nv12(src, dst);
+		break;
+	case PIX_FMT_NV12_10BE_8L128:
+		ret = swc_unpack_nv12_10be_8l128(src, dst);
+		break;
+	case PIX_FMT_I420:
+		ret = swc_unpack_i420(src, dst);
+		break;
+	case PIX_FMT_YUYV:
+		ret = swc_unpack_yuyv(src, dst);
+		break;
+	case PIX_FMT_NV21:
+		break;
+	case PIX_FMT_NV12:
+		ret = swc_copy_nv12(src, dst);
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
+int pitcher_sw_pack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	int ret = -RET_E_NOT_SUPPORT;
+
+	assert(src->format->format == PIX_FMT_NV12);
+
+	switch (dst->format->format) {
+	case PIX_FMT_I420:
+		ret = swc_pack_i420(src, dst);
+		break;
+	case PIX_FMT_YUYV:
+		ret = swc_pack_yuyv(src, dst);
+		break;
+	case PIX_FMT_NV21:
+		break;
+	case PIX_FMT_NV12:
+		ret = swc_copy_nv12(src, dst);
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
+static int sw_convert_init_plane(struct pitcher_buf_ref *plane,
+				 unsigned int index, void *arg)
+{
+	struct sw_cvrt_t *swc = arg;
+
+	plane->size = swc->format.planes[index].size;
+	return pitcher_alloc_plane(plane, index, arg);
+}
+
+static int pitcher_sw_convert_alloc_mid_buffer(struct convert_ctx *ctx)
+{
+	struct sw_cvrt_t *swc = ctx->priv;
+	struct pix_fmt_info format;
+	struct pitcher_buffer_desc desc;
+
+	memset(&format, 0, sizeof(format));
+	format.format = PIX_FMT_NV12;
+	format.width = ctx->src->format->width;
+	format.height = ctx->src->format->height;
+	pitcher_get_pix_fmt_info(&format, 0);
+	if (swc->mid) {
+		if (!pitcher_compare_format(swc->mid->format, &format))
+			return 0;
+		SAFE_RELEASE(swc->mid, pitcher_put_buffer);
+	}
+	swc->format = format;
+
+	desc.init_plane = sw_convert_init_plane;
+	desc.uninit_plane = pitcher_free_plane;
+	desc.plane_count = swc->format.num_planes;
+	desc.recycle = pitcher_auto_remove_buffer;
+	desc.arg = swc;
+	swc->mid = pitcher_new_buffer(&desc);
+	if (!swc->mid)
+		return -RET_E_NO_MEMORY;
+	swc->mid->format = &swc->format;
+
+	return 0;
+}
+
+int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 {
 	struct pitcher_buffer *src;
 	struct pitcher_buffer *dst;
-	uint32_t width;
-	uint32_t height;
-	uint32_t stride;
-	uint8_t *y_src_start;
-	uint8_t *uv_src_start;
-	uint8_t *y_dst_start;
-	uint8_t *uv_dst_start;
-	uint32_t sizeimage = 0;
-	int i;
+	struct sw_cvrt_t *swc;
+	int ret;
 
-	assert(cvrt_ctx);
+	if (!ctx || !ctx->priv || !ctx->src || !ctx->dst)
+		return -RET_E_NULL_POINTER;
 
-	src = cvrt_ctx->src_buf;
-	dst = cvrt_ctx->dst_buf;
-	width = ALIGN(cvrt_ctx->width, MALONE_ALIGN_W);
-	stride = cvrt_ctx->bytesperline ? cvrt_ctx->bytesperline : ALIGN(width * 10 / 8, MALONE_ALIGN_LINE);
-	for (i = 0; i < src->count; i++)
-		sizeimage += src->planes[i].bytesused;
-	height = (sizeimage * 2 / 3) / stride;
+	if (!ctx->src->format || !ctx->dst->format)
+		return -RET_E_NULL_POINTER;
+	if (ctx->src->format->width != ctx->dst->format->width ||
+	    ctx->src->format->height != ctx->dst->format->height)
+		return -RET_E_INVAL;
+	if (ctx->dst->format->interlaced) {
+		PITCHER_ERR("not support to convert to interlaced format\n");
+		return -RET_E_NOT_SUPPORT;
+	}
+	if (ctx->src->format->interlaced &&
+	    ctx->src->format->format != PIX_FMT_NV12_8L128) {
+		PITCHER_ERR("not support to convert interlaced format %s\n",
+		     pitcher_get_format_name(ctx->src->format->format));
+		return -RET_E_NOT_SUPPORT;
 
-	switch (src->count) {
-	case 1:
-		y_src_start = src->planes[0].virt;
-		uv_src_start = src->planes[0].virt + stride * height;
-		break;
-	case 2:
-		y_src_start = src->planes[0].virt;
-		uv_src_start = src->planes[1].virt;
-		break;
-	default:
-		return;
 	}
 
-	switch (dst->count) {
-	case 1:
-		y_dst_start = dst->planes[0].virt;
-		uv_dst_start = dst->planes[0].virt + cvrt_ctx->width * cvrt_ctx->height;
-		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-						cvrt_ctx->width, cvrt_ctx->height);
-		break;
-	case 2:
-		y_dst_start = dst->planes[0].virt;
-		uv_dst_start = dst->planes[1].virt;
-		dst->planes[0].bytesused = cvrt_ctx->width * cvrt_ctx->height;
-		dst->planes[1].bytesused = cvrt_ctx->width * cvrt_ctx->height / 2;
-		break;
-	default:
-		return;
+	if (ctx->src->format->format == PIX_FMT_NV12
+	    && !ctx->src->format->interlaced) {
+		src = ctx->src;
+		dst = ctx->dst;
+		return pitcher_sw_pack(src, dst);
 	}
 
-	if (cvrt_ctx->field == V4L2_FIELD_INTERLACED) {
-		uint8_t *tmp_dst_buf = NULL;
-		uint8_t *tmp_buf = NULL;
-		uint8_t *uv_src = NULL;
-		uint32_t dst_size = 0;
-		int i;
-		uint8_t *y_src_start_bot = y_src_start + stride * height / 2;
-		uint8_t *uv_src_start_bot = uv_src_start + stride * height / 4;
-		uint8_t *y_dst_start_bot = y_dst_start + cvrt_ctx->width * cvrt_ctx->height / 2;
-		uint8_t *uv_dst_start_bot = uv_dst_start + cvrt_ctx->width * cvrt_ctx->height / 4;
-
-		__convert_nv12_tiled_to_linear_10bit(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
-		__convert_nv12_tiled_to_linear_10bit(y_src_start_bot, y_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
-
-		__convert_nv12_tiled_to_linear_10bit(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
-		__convert_nv12_tiled_to_linear_10bit(uv_src_start_bot, uv_dst_start_bot, cvrt_ctx->width, cvrt_ctx->height / 4, stride);
-
-		for (i = 0; i < dst->count; i++)
-			dst_size += dst->planes[i].bytesused;
-
-		tmp_dst_buf = malloc(dst_size);
-		if (!tmp_dst_buf) {
-			PITCHER_ERR("allocate buffer fail\n");
-			return;
-		}
-		tmp_buf = tmp_dst_buf;
-		for (i = 0; i < cvrt_ctx->dst_buf->count; i++) {
-			memcpy(tmp_buf, cvrt_ctx->dst_buf->planes[i].virt, cvrt_ctx->dst_buf->planes[i].bytesused);
-			tmp_buf = tmp_dst_buf + cvrt_ctx->dst_buf->planes[i].bytesused;
-		}
-
-		uv_src = tmp_dst_buf + cvrt_ctx->width * cvrt_ctx->height;
-		convert_nv12_interlace_to_progress(tmp_dst_buf, uv_src,
-			y_dst_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height);
-
-		SAFE_RELEASE(tmp_dst_buf, free);
-		tmp_buf = NULL;
-	} else {
-		__convert_nv12_tiled_to_linear_10bit(y_src_start, y_dst_start, cvrt_ctx->width, cvrt_ctx->height, stride);
-		__convert_nv12_tiled_to_linear_10bit(uv_src_start, uv_dst_start, cvrt_ctx->width, cvrt_ctx->height / 2, stride);
-	}
-}
-
-static void convert_nv12_to_i420(struct convert_ctx *cvrt_ctx)
-{
-	struct pitcher_buffer *src;
-	struct pitcher_buffer *dst;
-	uint32_t width;
-	uint32_t height;
-	uint8_t *uv_start;
-	uint8_t *u_temp;
-	uint8_t *v_temp;
-	uint32_t uv_size;
-	int i;
-	int j;
-
-	assert(cvrt_ctx);
-
-	src = cvrt_ctx->src_buf;
-	dst = cvrt_ctx->dst_buf;
-	width = max(cvrt_ctx->width, cvrt_ctx->bytesperline);
-	height = cvrt_ctx->height;
-	uv_size = width * height / 2;
-
-	switch (src->count) {
-	case 1:
-		uv_start = src->planes[0].virt + width * height;
-		break;
-	case 2:
-		uv_start = src->planes[1].virt;
-		break;
-	default:
-		return;
+	swc = ctx->priv;
+	if (ctx->dst->format->format != PIX_FMT_NV12) {
+		ret = pitcher_sw_convert_alloc_mid_buffer(ctx);
+		if (ret)
+			return ret;
 	}
 
-	switch (dst->count) {
-	case 1:
-		u_temp = dst->planes[0].virt + width * height;
-		v_temp = u_temp + uv_size / 2;
-		dst->planes[0].bytesused = get_image_size(V4L2_PIX_FMT_NV12,
-							  width, height);
-		break;
-	case 2:
-		u_temp = dst->planes[1].virt;
-		v_temp = u_temp + uv_size / 2;
-		dst->planes[0].bytesused = width * height;
-		dst->planes[1].bytesused = uv_size;
-		break;
-	case 3:
-		u_temp = dst->planes[1].virt;
-		v_temp = dst->planes[2].virt;
-		dst->planes[0].bytesused = width * height;
-		dst->planes[1].bytesused = uv_size / 2;
-		dst->planes[1].bytesused = uv_size / 2;
-		break;
-	default:
-		return;
-	}
-
-	memcpy(dst->planes[0].virt, src->planes[0].virt, width * height);
-	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
-		u_temp[i] = uv_start[j];
-		v_temp[i] = uv_start[j+1];
-	}
-}
-
-static void __convert_nv12_tiled_to_i420(struct convert_ctx *cvrt_ctx)
-{
-	uint8_t *tmp_dst_buf = NULL;
-	uint8_t *tmp_buf = NULL;
-	uint32_t dst_size = 0;
-	uint32_t width;
-	uint32_t height;
-	uint8_t *y_src, *uv_src;
-	uint8_t *y_dst, *u_dst, *v_dst;
-	uint32_t uv_size;
-	int i, j;
-
-	assert(cvrt_ctx);
-	width = cvrt_ctx->width;
-	height = cvrt_ctx->height;
-	uv_size = width * height / 2;
-
-	if (cvrt_ctx->src_fmt == V4L2_PIX_FMT_NV12_TILE)
-		convert_nv12_tiled_to_linear(cvrt_ctx);
+	src = ctx->src;
+	if (ctx->dst->format->format != PIX_FMT_NV12)
+		dst = swc->mid;
 	else
-		convert_nv12_tiled_to_linear_10bit(cvrt_ctx);
+		dst = ctx->dst;
 
-	for (i = 0; i < cvrt_ctx->dst_buf->count; i++)
-		dst_size += cvrt_ctx->dst_buf->planes[i].bytesused;
+	ret = pitcher_sw_unpack(src, dst);
+	if (ret)
+		return ret;
+	if (dst == ctx->dst)
+		return 0;
+	src = dst;
+	dst = ctx->dst;
+	return pitcher_sw_pack(src, dst);
+}
 
-	tmp_dst_buf = malloc(dst_size);
-	if (!tmp_dst_buf) {
-		PITCHER_ERR("allocate buf fail\n");
+void pitcher_free_sw_convert(struct convert_ctx *cvrt_ctx)
+{
+	struct sw_cvrt_t *swc;
+
+	if (!cvrt_ctx)
 		return;
-	}
-
-	tmp_buf = tmp_dst_buf;
-	for (i = 0; i < cvrt_ctx->dst_buf->count; i++) {
-		memcpy(tmp_buf, cvrt_ctx->dst_buf->planes[i].virt, cvrt_ctx->dst_buf->planes[i].bytesused);
-		tmp_buf = tmp_dst_buf + cvrt_ctx->dst_buf->planes[i].bytesused;
-	}
-
-	y_src = tmp_dst_buf;
-	uv_src = tmp_dst_buf + width * height;
-
-	y_dst = cvrt_ctx->dst_buf->planes[0].virt;
-	switch (cvrt_ctx->dst_buf->count) {
-	case 1:
-		u_dst = cvrt_ctx->dst_buf->planes[0].virt + width * height;
-		v_dst = u_dst + uv_size / 2;
-		break;
-	case 2:
-		u_dst = cvrt_ctx->dst_buf->planes[1].virt;
-		v_dst = u_dst + uv_size / 2;
-		break;
-	case 3:
-		u_dst = cvrt_ctx->dst_buf->planes[1].virt;
-		v_dst = cvrt_ctx->dst_buf->planes[2].virt;
-		break;
-	default:
-		return;
-	}
-
-	memcpy(y_dst, y_src, width * height);
-	for (i = 0, j = 0; j < uv_size; j += 2, i++) {
-		u_dst[i] = uv_src[j];
-		v_dst[i] = uv_src[j+1];
-	}
-
-	SAFE_RELEASE(tmp_dst_buf, free);
-	tmp_buf = NULL;
+	swc = cvrt_ctx->priv;
+	cvrt_ctx->priv = NULL;
+	if (swc)
+		SAFE_RELEASE(swc->mid, pitcher_put_buffer);
+	SAFE_RELEASE(swc, pitcher_free);
+	SAFE_RELEASE(cvrt_ctx, pitcher_free);
 }
 
-static void convert_nv12_tiled_to_i420(struct convert_ctx *cvrt_ctx)
+struct convert_ctx *pitcher_create_sw_convert(void)
 {
-	__convert_nv12_tiled_to_i420(cvrt_ctx);
-}
+	struct convert_ctx *ctx = NULL;
+	struct sw_cvrt_t *swc = NULL;
 
-static void convert_nv12_tiled_to_i420_10bit(struct convert_ctx *cvrt_ctx)
-{
-	__convert_nv12_tiled_to_i420(cvrt_ctx);
-}
+	ctx = pitcher_calloc(1, sizeof(*ctx));
+	if (!ctx)
+		goto error;
+	swc = pitcher_calloc(1, sizeof(*swc));
+	if (!swc)
+		goto error;
 
-static void convert_frame_to_nv12(struct convert_ctx *cvrt_ctx)
-{
-	switch (cvrt_ctx->src_fmt) {
-	case V4L2_PIX_FMT_YUV420:
-		convert_i420_to_nv12(cvrt_ctx);
-		break;
-        case V4L2_PIX_FMT_NV12_TILE:
-                convert_nv12_tiled_to_linear(cvrt_ctx);
-                break;
-	case V4L2_PIX_FMT_NV12_TILE_10BIT:
-		convert_nv12_tiled_to_linear_10bit(cvrt_ctx);
-		break;
-	default:
-		break;
-	}
-}
+	ctx->convert_frame = pitcher_sw_convert_frame;
+	ctx->free = pitcher_free_sw_convert;
+	ctx->priv = swc;
 
-static void convert_frame_to_i420(struct convert_ctx *cvrt_ctx)
-{
-	switch (cvrt_ctx->src_fmt) {
-	case V4L2_PIX_FMT_NV12:
-		convert_nv12_to_i420(cvrt_ctx);
-		break;
-        case V4L2_PIX_FMT_NV12_TILE:
-                convert_nv12_tiled_to_i420(cvrt_ctx);
-                break;
-	case V4L2_PIX_FMT_NV12_TILE_10BIT:
-		convert_nv12_tiled_to_i420_10bit(cvrt_ctx);
-		break;
-	default:
-		break;
-	}
+	return ctx;
+error:
+	SAFE_RELEASE(swc, pitcher_free);
+	SAFE_RELEASE(ctx, pitcher_free);
+	return NULL;
 }
-
-void convert_frame(struct convert_ctx *cvrt_ctx)
-{
-	switch (cvrt_ctx->dst_fmt) {
-	case V4L2_PIX_FMT_NV12:
-		convert_frame_to_nv12(cvrt_ctx);
-		break;
-	case V4L2_PIX_FMT_YUV420:
-		convert_frame_to_i420(cvrt_ctx);
-		break;
-	default:
-		break;
-	}
-}
-

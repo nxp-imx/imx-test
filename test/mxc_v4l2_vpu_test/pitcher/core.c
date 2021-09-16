@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * core/core.c
  *
@@ -242,6 +240,45 @@ static int __find_sink_chn(unsigned long item, void *arg)
 	return 0;
 }
 
+static int __find_alive_sink_chn(unsigned long item, void *arg)
+{
+	Pipe pipe = (Pipe)item;
+	struct connect_t *ct = arg;
+	struct pitcher_chn *dst;
+
+	if (!pipe || !ct || !ct->src)
+		return 0;
+
+	if (pitcher_get_pipe_src(pipe) == ct->src) {
+		dst = pitcher_get_pipe_dst(pipe);
+		if (dst->state != PITCHER_STATE_STOPPED)
+			ct->dst = dst;
+	}
+
+	return 0;
+}
+
+static int __start_sink_chn(unsigned long item, void *arg)
+{
+	Pipe pipe = (Pipe)item;
+	struct connect_t *ct = arg;
+
+	if (!pipe || !ct || !ct->src)
+		return 0;
+
+	if (pitcher_get_pipe_src(pipe) != ct->src)
+		return 0;
+
+	ct->dst = pitcher_get_pipe_dst(pipe);
+	if (!ct->dst)
+		return 0;
+
+	if (ct->dst->state == PITCHER_STATE_STOPPED)
+		pitcher_start_chn(ct->dst->chnno);
+
+	return 0;
+}
+
 static struct pitcher_chn *__get_source_chn(unsigned int chnno)
 {
 	struct pitcher_core *core;
@@ -284,6 +321,30 @@ static struct pitcher_chn *__get_sink_chn(unsigned int chnno)
 	ct.src = chn;
 	ct.dst = NULL;
 	pitcher_queue_enumerate(core->pipes, __find_sink_chn, (void *)&ct);
+	if (!ct.dst)
+		return NULL;
+
+	return ct.dst;
+}
+
+static struct pitcher_chn *__get_alive_sink_chn(unsigned int chnno)
+{
+	struct pitcher_core *core;
+	struct pitcher_chn *chn;
+	struct connect_t ct;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return NULL;
+
+	core = chn->core;
+	assert(core);
+	if (!core->chns || !core->pipes)
+		return NULL;
+
+	ct.src = chn;
+	ct.dst = NULL;
+	pitcher_queue_enumerate(core->pipes, __find_alive_sink_chn, (void *)&ct);
 	if (!ct.dst)
 		return NULL;
 
@@ -364,7 +425,8 @@ static int __process_chn_stopping(struct pitcher_chn *chn)
 		return RET_OK;
 
 	dst = __get_sink_chn(chn->chnno);
-	if (dst && dst->state != PITCHER_STATE_STOPPED)
+	dst = __get_alive_sink_chn(chn->chnno);
+	if (dst)
 		return RET_OK;
 
 	pitcher_unit_stop(chn->unit);
@@ -518,7 +580,7 @@ int pitcher_register_chn(PitcherContext context,
 	assert(core);
 	chnno = __get_chnno();
 	if (chnno < 0)
-		return RET_E_FULL;
+		return -RET_E_FULL;
 
 	if (!core->chns)
 		return -RET_E_INVAL;
@@ -662,7 +724,7 @@ void pitcher_put_buffer_idle(unsigned int chnno, struct pitcher_buffer *buffer)
 void pitcher_push_back_output(unsigned int chnno, struct pitcher_buffer *buffer)
 {
 	struct pitcher_chn *chn;
-	int dst;
+	struct connect_t ct;
 
 	chn = __find_chn(chnno);
 	if (!chn)
@@ -670,10 +732,9 @@ void pitcher_push_back_output(unsigned int chnno, struct pitcher_buffer *buffer)
 	if (!buffer)
 		return;
 
-	dst = pitcher_get_sink(chnno);
-	if (dst >= 0 &&
-	    pitcher_get_status(dst) == PITCHER_STATE_STOPPED)
-		pitcher_start_chn(dst);
+	ct.src = chn;
+	ct.dst = NULL;
+	pitcher_queue_enumerate(chn->core->pipes, __start_sink_chn, (void *)&ct);
 
 	pitcher_unit_push_back_output(chn->unit, buffer);
 }

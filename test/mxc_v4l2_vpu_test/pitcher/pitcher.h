@@ -25,6 +25,7 @@ extern "C"
 #endif
 
 #include <sys/epoll.h>
+#include "pixfmt.h"
 
 enum {
 	PITCHER_STATE_STOPPED = 0,
@@ -57,30 +58,32 @@ enum {
 #define GET_BUFFER_TYPE(flags, type)	\
 	(((flags) >> BUFFER_TYPE_OFFSET) & BUFFER_TYPE_MASK)
 
-struct pitcher_plane {
+struct pitcher_buf_ref {
 	void *virt;
 	unsigned long size;
 	unsigned long phys;
 	unsigned long bytesused;
 	unsigned long offset;
+	int dmafd;
 };
 
 struct pitcher_buffer {
 	unsigned int count;
-	struct pitcher_plane *planes;
+	struct pitcher_buf_ref *planes;
 	unsigned int index;
 	unsigned int flags;
 	void *priv;
+	struct pix_fmt_info *format;
 };
 
-typedef int (*handle_plane)(struct pitcher_plane *plane,
+typedef int (*handle_plane)(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg);
 typedef int (*handle_buffer)(struct pitcher_buffer *buffer,
 				void *arg, int *del);
 
 struct pitcher_buffer_desc {
 	unsigned int plane_count;
-	unsigned long plane_size;
+	unsigned long plane_size[MAX_PLANES];
 	handle_plane init_plane;
 	handle_plane uninit_plane;
 	handle_buffer recycle;
@@ -91,10 +94,11 @@ struct pitcher_buffer *pitcher_new_buffer(struct pitcher_buffer_desc *desc);
 struct pitcher_buffer *pitcher_get_buffer(struct pitcher_buffer *buffer);
 void pitcher_put_buffer(struct pitcher_buffer *buffer);
 unsigned int pitcher_get_buffer_refcount(struct pitcher_buffer *buffer);
+int pitcher_auto_remove_buffer(struct pitcher_buffer *buffer, void *arg, int *del);
 
-int pitcher_alloc_plane(struct pitcher_plane *plane,
+int pitcher_alloc_plane(struct pitcher_buf_ref *plane,
 			unsigned int index, void *arg);
-int pitcher_free_plane(struct pitcher_plane *plane,
+int pitcher_free_plane(struct pitcher_buf_ref *plane,
 			unsigned int index, void *arg);
 
 struct pitcher_unit_desc {
@@ -138,7 +142,9 @@ int pitcher_start_chn(unsigned int chnno);
 int pitcher_stop_chn(unsigned int chnno);
 int pitcher_set_skip(unsigned int src, unsigned int dst,
 			uint32_t numerator, uint32_t denominator);
-
+int pitcher_get_buffer_plane(struct pitcher_buffer *buf, int index, struct pitcher_buf_ref *plane);
+unsigned long pitcher_get_buffer_plane_size(struct pitcher_buffer *buf, int index);
+void *pitcher_get_frame_line_vaddr(struct pitcher_buffer *buf, int index, int y);
 #ifdef __cplusplus
 }
 #endif

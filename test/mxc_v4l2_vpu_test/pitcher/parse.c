@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,13 +10,11 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * parse.c
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -204,53 +201,53 @@ void pitcher_parser_show(Parser p)
 }
 
 struct parse_handler parse_handler_table[] = {
-	{.format = V4L2_PIX_FMT_H264,
+	{.format = PIX_FMT_H264,
 	 .handle_parse = h264_parse,
 	},
-	{.format = V4L2_PIX_FMT_HEVC,
+	{.format = PIX_FMT_H265,
 	 .handle_parse = h265_parse,
 	},
-	{.format = V4L2_PIX_FMT_JPEG,
+	{.format = PIX_FMT_JPEG,
 	 .handle_parse = jpeg_parse,
 	},
-	{.format = V4L2_PIX_FMT_H263,
+	{.format = PIX_FMT_H263,
 	 .handle_parse = h263_parse,
 	},
 	{.format = VPU_PIX_FMT_SPK,
 	 .handle_parse = spk_parse,
 	},
-	{.format = V4L2_PIX_FMT_MPEG4,
+	{.format = PIX_FMT_MPEG4,
 	 .handle_parse = mpeg4_parse,
 	},
-	{.format = V4L2_PIX_FMT_MPEG2,
+	{.format = PIX_FMT_MPEG2,
 	 .handle_parse = mpeg2_parse,
 	},
-	{.format = V4L2_PIX_FMT_XVID,
+	{.format = PIX_FMT_XVID,
 	 .handle_parse = xvid_parse,
 	},
 	{.format = VPU_PIX_FMT_AVS,
 	 .handle_parse = avs_parse,
 	},
-	{.format = V4L2_PIX_FMT_VP8,
+	{.format = PIX_FMT_VP8,
 	 .handle_parse = vp8_parse,
 	},
-	{.format = V4L2_PIX_FMT_VP9,
+	{.format = PIX_FMT_VP9,
 	 .handle_parse = vp9_parse,
 	},
-	{.format = V4L2_PIX_FMT_VC1_ANNEX_L,
+	{.format = PIX_FMT_VC1L,
 	 .handle_parse = vc1l_parse,
 	},
-	{.format = V4L2_PIX_FMT_VC1_ANNEX_G,
+	{.format = PIX_FMT_VC1G,
 	 .handle_parse = vc1g_parse,
 	},
-	{.format = VPU_PIX_FMT_VP6,
+	{.format = PIX_FMT_VP6,
 	 .handle_parse = vp6_parse,
 	},
-	{.format = VPU_PIX_FMT_DIVX,
+	{.format = PIX_FMT_DIVX,
 	 .handle_parse = divx_parse,
 	},
 #ifdef RV_PARSE
-	{.format = VPU_PIX_FMT_RV,
+	{.format = PIX_FMT_RV,
 	 .handle_parse = rv_parse,
 	},
 #endif

@@ -2,7 +2,6 @@
  * Copyright 2018-2021 NXP
  *
  */
-
 /*
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,7 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
 /*
  * mxc_v4l2_vpu_test.c
  *
@@ -38,47 +36,18 @@
 #include "pitcher/platform.h"
 #include "pitcher/platform_8x.h"
 #include "pitcher/convert.h"
+#include "pitcher/dmabuf.h"
+#include "mxc_v4l2_vpu_enc.h"
 
 #define VERSION_MAJOR		2
-#define VERSION_MINOR		0
+#define VERSION_MINOR		1
 
 #define MAX_NODE_COUNT		32
-#define DEFAULT_FMT		V4L2_PIX_FMT_NV12
+#define DEFAULT_FMT		PIX_FMT_NV12
 #define DEFAULT_WIDTH		1920
 #define DEFAULT_HEIGHT		1080
 #define DEFAULT_FRAMERATE	30
 #define MIN_BS			128
-
-enum {
-	TEST_TYPE_ENCODER = 0,
-	TEST_TYPE_CAMERA,
-	TEST_TYPE_FILEIN,
-	TEST_TYPE_FILEOUT,
-	TEST_TYPE_CONVERT,
-	TEST_TYPE_DECODER,
-	TEST_TYPE_PARSER,
-};
-
-struct test_node {
-	int key;
-	int source;
-	int type;
-
-	uint32_t pixelformat;
-	uint32_t width;
-	uint32_t height;
-	uint32_t bytesperline;
-	uint32_t framerate;
-	uint32_t field;
-	int (*set_source)(struct test_node *node, struct test_node *src);
-	int (*init_node)(struct test_node *node);
-	void (*free_node)(struct test_node *node);
-	int (*get_source_chnno)(struct test_node *node);
-	int (*get_sink_chnno)(struct test_node *node);
-	int frame_skip;
-	unsigned int seek_thd;
-	PitcherContext context;
-};
 
 struct encoder_test_t {
 	struct test_node node;
@@ -103,6 +72,7 @@ struct encoder_test_t {
 	uint32_t force_key;
 	uint32_t new_bitrate;
 	uint32_t nbr_no;
+	uint32_t idrhdr;
 
 	const char *devnode;
 };
@@ -130,6 +100,7 @@ struct camera_test_t {
 struct test_file_t {
 	struct test_node node;
 	struct pitcher_unit_desc desc;
+	uint32_t alignment;
 
 	int chnno;
 	unsigned long frame_count;
@@ -144,6 +115,7 @@ struct test_file_t {
 
 	unsigned long frame_num;
 	int loop;
+	struct pix_fmt_info format;
 };
 
 struct convert_test_t {
@@ -154,7 +126,8 @@ struct convert_test_t {
 	uint32_t height;
 	uint32_t ifmt;
 	int end;
-	uint32_t field;
+	struct pix_fmt_info format;
+	struct convert_ctx *ctx;
 };
 
 struct parser_test_t {
@@ -185,11 +158,15 @@ struct parser_test_t {
 	Parser p;
 };
 
-struct mxc_vpu_test_option
-{
-	const char *name;
-	uint32_t arg_num;
-	const char *desc;
+struct g2d_cvt_test_t {
+	struct test_node node;
+	struct pitcher_unit_desc desc;
+	int chnno;
+	uint32_t ifmt;
+	struct pix_fmt_info format;
+	struct convert_ctx *ctx;
+	unsigned long frame_count;
+	int end;
 };
 
 struct mxc_vpu_test_subcmd {
@@ -226,7 +203,7 @@ static int terminate(void)
 	return 0;
 }
 
-static int is_force_exit(void)
+int is_force_exit(void)
 {
 	if (g_exit & FORCE_EXIT_MASK)
 		return true;
@@ -263,14 +240,6 @@ static int subscribe_event(int fd)
 	sub.type = V4L2_EVENT_EOS;
 	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 
-	memset(&sub, 0, sizeof(sub));
-	sub.type = V4L2_EVENT_CODEC_ERROR;
-	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
-
-	memset(&sub, 0, sizeof(sub));
-	sub.type = V4L2_EVENT_SKIP;
-	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
-
 	return 0;
 }
 
@@ -291,7 +260,7 @@ static int unsubcribe_event(int fd)
 	return 0;
 }
 
-static int is_source_end(int chnno)
+int is_source_end(int chnno)
 {
 	int source;
 
@@ -397,8 +366,8 @@ static int is_encoder_capture_finish(struct v4l2_component_t *component)
 static void switch_fmt_to_tile(unsigned int *fmt)
 {
 	switch (*fmt) {
-	case V4L2_PIX_FMT_NV12:
-		*fmt = V4L2_PIX_FMT_NV12_TILE;
+	case PIX_FMT_NV12:
+		*fmt = PIX_FMT_NV12_8L128;
 	default:
 		break;
 	}
@@ -412,9 +381,14 @@ static void sync_decoder_node_info(struct decoder_test_t *decoder)
 	decoder->node.height = decoder->capture.height;
 	decoder->node.pixelformat = decoder->capture.pixelformat;
 	decoder->node.bytesperline = decoder->capture.bytesperline;
-	decoder->node.field = decoder->capture.field;
-	if (decoder->platform.type == IMX_8X)
+	if (decoder->platform.type == IMX_8X) {
 		switch_fmt_to_tile(&decoder->node.pixelformat);
+		if (decoder->capture.format.format != decoder->node.pixelformat) {
+			decoder->capture.format.format = decoder->node.pixelformat;
+			pitcher_get_pix_fmt_info(&decoder->capture.format,
+					decoder->capture.bytesperline);
+		}
+	}
 }
 
 static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
@@ -441,11 +415,6 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 	if (pitcher_get_status(chnno) == PITCHER_STATE_STOPPED) {
 		decoder->capture.width = 0;
 		decoder->capture.height = 0;
-		PITCHER_LOG("decoder fmt : %c%c%c%c\n",
-				decoder->capture.pixelformat,
-				decoder->capture.pixelformat >> 8,
-				decoder->capture.pixelformat >> 16,
-				decoder->capture.pixelformat >> 24);
 		ret = pitcher_start_chn(chnno);
 		if (ret < 0) {
 			force_exit();
@@ -453,6 +422,8 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 		}
 
 		sync_decoder_node_info(decoder);
+		PITCHER_LOG("decoder fmt : %s\n",
+				pitcher_get_format_name(decoder->node.pixelformat));
 		PITCHER_LOG("decoder capture : %d x %d, count = %ld\n",
 			decoder->capture.width, decoder->capture.height,
 			decoder->capture.frame_count);
@@ -595,6 +566,7 @@ struct mxc_vpu_test_option ifile_options[] = {
 		     \r\t\t\tinput format nv12, i420, nv21, yuyv, rgb565, bgr565,\n\
 		     \r\t\t\trgb555, rgba, bgr32, argb, rgbx"},
 	{"size", 2, "--size <width> <height>\n\t\t\tassign input file resolution"},
+	{"alignment", 1, "--alignment <alignment>\n\t\t\tassign line alignment"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset input frame number"},
 	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
 	{NULL, 0, NULL},
@@ -637,6 +609,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
 	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
 	{"nbr", 2, "--nbr <br> <no>\n\t\t\tset encoder new target bitrate since frame <no>, the unit is b"},
+	{"seqhdr", 1, "--seqhdr <br> <no>\n\t\t\tset encoder idr sequence header"},
 	{NULL, 0, NULL},
 };
 
@@ -658,6 +631,13 @@ struct mxc_vpu_test_option convert_options[] = {
 	{NULL, 0, NULL},
 };
 
+struct mxc_vpu_test_option g2d_cvt_options[] = {
+	{"key", 1, "--key <key>\n\t\t\tassign key number"},
+	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
+	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign output pixel format, support mutual convert of nv12 and i420"},
+	{NULL, 0, NULL},
+};
+
 struct mxc_vpu_test_option parser_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"name", 1, "--name <filename>\n\t\t\tassign parse file name"},
@@ -671,90 +651,6 @@ struct mxc_vpu_test_option parser_options[] = {
 	{"show", 0, "--show\n\t\t\tshow size and offset of per frame"},
 	{NULL, 0, NULL},
 };
-
-static int get_pixelfmt_from_str(const char *str)
-{
-	if (!str)
-		return -RET_E_INVAL;
-
-	if (!strcasecmp(str, "nv12"))
-		return V4L2_PIX_FMT_NV12;
-	if (!strcasecmp(str, "nv21"))
-		return V4L2_PIX_FMT_NV21;
-	if (!strcasecmp(str, "i420"))
-		return V4L2_PIX_FMT_YUV420;
-	if (!strcasecmp(str, "yuv420p"))
-		return V4L2_PIX_FMT_YUV420;
-	if (!strcasecmp(str, "na12"))
-		return V4L2_PIX_FMT_NV12_TILE;
-	if (!strcasecmp(str, "nt12"))
-		return V4L2_PIX_FMT_NV12_TILE_10BIT;
-	if (!strcasecmp(str, "h264"))
-		return V4L2_PIX_FMT_H264;
-	if (!strcasecmp(str, "h265"))
-		return V4L2_PIX_FMT_HEVC;
-	if (!strcasecmp(str, "mpeg2"))
-		return V4L2_PIX_FMT_MPEG2;
-	if (!strcasecmp(str, "mpeg4"))
-		return V4L2_PIX_FMT_MPEG4;
-	if (!strcasecmp(str, "h263"))
-		return V4L2_PIX_FMT_H263;
-	if (!strcasecmp(str, "jpeg"))
-		return V4L2_PIX_FMT_JPEG;
-	if (!strcasecmp(str, "vc1l"))
-		return V4L2_PIX_FMT_VC1_ANNEX_L;
-	if (!strcasecmp(str, "vc1g"))
-		return V4L2_PIX_FMT_VC1_ANNEX_G;
-	if (!strcasecmp(str, "xvid"))
-		return V4L2_PIX_FMT_XVID;
-	if (!strcasecmp(str, "vp9"))
-		return V4L2_PIX_FMT_VP9;
-	if (!strcasecmp(str, "vp8"))
-		return V4L2_PIX_FMT_VP8;
-	if (!strcasecmp(str, "vp6"))
-		return VPU_PIX_FMT_VP6;
-	if (!strcasecmp(str, "avs"))
-		return VPU_PIX_FMT_AVS;
-	if (!strcasecmp(str, "rv"))
-		return VPU_PIX_FMT_RV;
-	if (!strcasecmp(str, "spk"))
-		return VPU_PIX_FMT_SPK;
-	if (!strcasecmp(str, "divx"))
-		return VPU_PIX_FMT_DIVX;
-	if (!strcasecmp(str, "dtrc"))
-		return v4l2_fourcc('D', 'T', 'R', 'C');
-	if (!strcasecmp(str, "dtrc10"))
-		return v4l2_fourcc('D', 'T', 'R', 'X');
-	if (!strcasecmp(str, "P010"))
-		return v4l2_fourcc('P', '0', '1', '0');
-	if (!strcasecmp(str, "nvx2"))
-		return v4l2_fourcc('N', 'V', 'X', '2');
-	if (!strcasecmp(str, "rfc"))
-		return v4l2_fourcc('R', 'F', 'C', '0');
-	if (!strcasecmp(str, "rfcx"))
-		return v4l2_fourcc('R', 'F', 'C', 'X');
-	if (!strcasecmp(str, "nv16"))
-		return V4L2_PIX_FMT_NV16;
-	if (!strcasecmp(str, "yuyv"))
-		return V4L2_PIX_FMT_YUYV;
-	if (!strcasecmp(str, "rgb565"))
-		return V4L2_PIX_FMT_RGB565;
-	if (!strcasecmp(str, "bgr565"))
-		return V4L2_PIX_FMT_BGR565;
-	if (!strcasecmp(str, "rgb555"))
-		return V4L2_PIX_FMT_RGB555;
-	if (!strcasecmp(str, "rgba"))
-		return V4L2_PIX_FMT_RGBA32;
-	if (!strcasecmp(str, "bgr32"))
-		return V4L2_PIX_FMT_BGR32;
-	if (!strcasecmp(str, "argb"))
-		return V4L2_PIX_FMT_ABGR32;
-	if (!strcasecmp(str, "rgbx"))
-		return V4L2_PIX_FMT_RGBX32;
-
-	PITCHER_ERR("unsupport pixelformat : %s\n", str);
-	return -RET_E_INVAL;
-}
 
 static void free_camera_node(struct test_node *node)
 {
@@ -868,10 +764,10 @@ static int parse_camera_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "device")) {
 		camera->devnode = argv[0];
 	} else if (!strcasecmp(option->name, "fmt")) {
-		int fmt = get_pixelfmt_from_str(argv[0]);
+		int fmt = pitcher_get_format_by_name(argv[0]);
 
-		if (fmt < 0)
-			return fmt;
+		if (fmt == PIX_FMT_NONE)
+			return -RET_E_NOT_SUPPORT;
 		camera->node.pixelformat = fmt;
 	} else if (!strcasecmp(option->name, "size")) {
 		camera->node.width = strtol(argv[0], NULL, 0);
@@ -932,16 +828,16 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 	encoder->output.width = src->width;
 	encoder->output.height = src->height;
 	switch (src->pixelformat) {
-	case V4L2_PIX_FMT_YUYV:
-	case V4L2_PIX_FMT_RGB565:
-	case V4L2_PIX_FMT_BGR565:
-	case V4L2_PIX_FMT_RGB555:
+	case PIX_FMT_YUYV:
+	case PIX_FMT_RGB565:
+	case PIX_FMT_BGR565:
+	case PIX_FMT_RGB555:
 		encoder->output.bytesperline = src->width * 2;
 		break;
-	case V4L2_PIX_FMT_RGBA32:
-	case V4L2_PIX_FMT_BGR32:
-	case V4L2_PIX_FMT_ABGR32:
-	case V4L2_PIX_FMT_RGBX32:
+	case PIX_FMT_RGBA:
+	case PIX_FMT_BGR32:
+	case PIX_FMT_ARGB:
+	case PIX_FMT_RGBX:
 		encoder->output.bytesperline = src->width * 4;
 		break;
 	default:
@@ -1132,17 +1028,17 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		encoder->new_bitrate = 0;
 
 	switch (encoder->capture.pixelformat) {
-	case V4L2_PIX_FMT_H264:
+	case PIX_FMT_H264:
 		profile_id = V4L2_CID_MPEG_VIDEO_H264_PROFILE;
 		level_id = V4L2_CID_MPEG_VIDEO_H264_LEVEL;
 		validate_h264_profile_level(encoder);
 		break;
-	case V4L2_PIX_FMT_HEVC:
+	case PIX_FMT_H265:
 		profile_id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
 		level_id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
 		validate_h265_profile_level(encoder);
 		break;
-	case V4L2_PIX_FMT_VP8:
+	case PIX_FMT_VP8:
 		profile_id = V4L2_CID_MPEG_VIDEO_VP8_PROFILE;
 		validate_vpx_profile_level(encoder);
 		break;
@@ -1172,6 +1068,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		set_encoder_roi(fd, &encoder->roi);
 	if (encoder->ipcm.enable)
 		set_encoder_ipcm(fd, &encoder->ipcm);
+	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER, encoder->idrhdr);
 
 	return RET_OK;
 }
@@ -1319,7 +1216,7 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->node.source = -1;
 	encoder->fd = -1;
 	encoder->node.type = TEST_TYPE_ENCODER;
-	encoder->node.pixelformat = V4L2_PIX_FMT_H264;
+	encoder->node.pixelformat = PIX_FMT_H264;
 	encoder->node.width = DEFAULT_WIDTH;
 	encoder->node.height = DEFAULT_HEIGHT;
 	encoder->node.framerate = DEFAULT_FRAMERATE;
@@ -1335,6 +1232,7 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->bframes = 0;
 	encoder->qp = 25;
 	encoder->target_bitrate = 2 * 1024 * 1024;
+	encoder->idrhdr = 1;
 	encoder->output.chnno = -1;
 	encoder->capture.chnno = -1;
 
@@ -1342,7 +1240,7 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	encoder->output.memory = V4L2_MEMORY_MMAP;
 	encoder->capture.memory = V4L2_MEMORY_MMAP;
-	encoder->output.pixelformat = V4L2_PIX_FMT_NV12;
+	encoder->output.pixelformat = PIX_FMT_NV12;
 	encoder->capture.pixelformat = encoder->node.pixelformat;
 
 	return &encoder->node;
@@ -1393,9 +1291,9 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->output.crop.width = strtol(argv[2], NULL, 0);
 		encoder->output.crop.height = strtol(argv[3], NULL, 0);
 	} else if (!strcasecmp(option->name, "fmt")) {
-		int fmt = get_pixelfmt_from_str(argv[0]);
+		int fmt = pitcher_get_format_by_name(argv[0]);
 
-		if (fmt > 0)
+		if (fmt != PIX_FMT_NONE)
 			encoder->node.pixelformat = fmt;
 	} else if (!strcasecmp(option->name, "roi")) {
 		encoder->roi.enable = 1;
@@ -1415,6 +1313,8 @@ static int parse_encoder_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "nbr")) {
 		encoder->new_bitrate = strtol(argv[0], NULL, 0);
 		encoder->nbr_no = strtol(argv[1], NULL, 0);
+	} else if (!strcasecmp(option->name, "seqhdr")) {
+		encoder->idrhdr = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
@@ -1454,23 +1354,22 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 	decoder = container_of(node, struct decoder_test_t, node);
 
 	switch (src->pixelformat) {
-	case V4L2_PIX_FMT_H264:
-	case V4L2_PIX_FMT_H264_MVC:
-	case V4L2_PIX_FMT_HEVC:
-	case V4L2_PIX_FMT_MPEG2:
-	case V4L2_PIX_FMT_MPEG4:
-	case V4L2_PIX_FMT_H263:
-	case V4L2_PIX_FMT_JPEG:
-	case V4L2_PIX_FMT_VC1_ANNEX_L:
-	case V4L2_PIX_FMT_VC1_ANNEX_G:
-	case V4L2_PIX_FMT_XVID:
-	case V4L2_PIX_FMT_VP8:
-	case V4L2_PIX_FMT_VP9:
-	case VPU_PIX_FMT_VP6:
-	case VPU_PIX_FMT_AVS:
-	case VPU_PIX_FMT_RV:
-	case VPU_PIX_FMT_SPK:
-	case VPU_PIX_FMT_DIVX:
+	case PIX_FMT_H264:
+	case PIX_FMT_H265:
+	case PIX_FMT_MPEG2:
+	case PIX_FMT_MPEG4:
+	case PIX_FMT_H263:
+	case PIX_FMT_JPEG:
+	case PIX_FMT_VC1L:
+	case PIX_FMT_VC1G:
+	case PIX_FMT_XVID:
+	case PIX_FMT_VP8:
+	case PIX_FMT_VP9:
+	case PIX_FMT_VP6:
+	case PIX_FMT_AVS:
+	case PIX_FMT_RV:
+	case PIX_FMT_SPK:
+	case PIX_FMT_DIVX:
 		break;
 	default:
 		return -RET_E_NOT_SUPPORT;
@@ -1522,7 +1421,8 @@ static int init_decoder_platform(struct decoder_test_t *decoder)
 
 	ioctl(decoder->fd, VIDIOC_QUERYCAP, &cap);
 	if (!strcasecmp((const char*)cap.driver, "vpu B0") ||
-	    !strcasecmp((const char*)cap.driver, "imx vpu decoder")) {
+	    !strcasecmp((const char*)cap.driver, "imx vpu decoder") ||
+	    !strcasecmp((const char*)cap.driver, "amphion-vpu")) {
 		decoder->platform.type = IMX_8X;
 		decoder->platform.set_decoder_parameter = set_decoder_parameter_8x;
 	} else if (!strcasecmp((const char*)cap.driver, "vsi_v4l2")) {
@@ -1550,11 +1450,8 @@ static int init_decoder_node(struct test_node *node)
 
 	decoder = container_of(node, struct decoder_test_t, node);
 	decoder->capture.pixelformat = decoder->node.pixelformat;
-	PITCHER_LOG("decode capture format: %c%c%c%c\n",
-			decoder->capture.pixelformat,
-			decoder->capture.pixelformat >> 8,
-			decoder->capture.pixelformat >> 16,
-			decoder->capture.pixelformat >> 24);
+	PITCHER_LOG("decode capture format: %s\n",
+			pitcher_get_format_name(decoder->capture.pixelformat));
 	if (decoder->devnode) {
 		decoder->fd = open(decoder->devnode, O_RDWR | O_NONBLOCK);
 		if (decoder->fd >= 0 &&
@@ -1629,7 +1526,7 @@ static struct test_node *alloc_decoder_node(void)
 	decoder->node.source = -1;
 	decoder->fd = -1;
 	decoder->node.type = TEST_TYPE_DECODER;
-	decoder->node.pixelformat = V4L2_PIX_FMT_NV12;
+	decoder->node.pixelformat = PIX_FMT_NV12;
 	decoder->sizeimage = DEFAULT_WIDTH * DEFAULT_HEIGHT;
 
 	decoder->node.init_node = init_decoder_node;
@@ -1644,8 +1541,8 @@ static struct test_node *alloc_decoder_node(void)
 	decoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	decoder->output.memory = V4L2_MEMORY_MMAP;
 	decoder->capture.memory = V4L2_MEMORY_MMAP;
-	decoder->output.pixelformat = V4L2_PIX_FMT_H264;
-	decoder->capture.pixelformat = V4L2_PIX_FMT_NV12;
+	decoder->output.pixelformat = PIX_FMT_H264;
+	decoder->capture.pixelformat = PIX_FMT_NV12;
 
 	return &decoder->node;
 }
@@ -1678,10 +1575,10 @@ static int parse_decoder_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "framemode")) {
 		decoder->platform.frame_mode = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "fmt")) {
-		int fmt = get_pixelfmt_from_str(argv[0]);
+		int fmt = pitcher_get_format_by_name(argv[0]);
 
-		if (fmt < 0)
-			return fmt;
+		if (fmt == PIX_FMT_NONE)
+			return -RET_E_NOT_SUPPORT;
 		decoder->node.pixelformat = fmt;
 	}
 
@@ -1722,13 +1619,13 @@ static void free_file_node(struct test_node *node)
 	SAFE_RELEASE(file, pitcher_free);
 }
 
-static int ifile_init_plane(struct pitcher_plane *plane,
+static int ifile_init_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int ifile_uninit_plane(struct pitcher_plane *plane,
+static int ifile_uninit_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
@@ -1764,9 +1661,7 @@ static struct pitcher_buffer *ifile_alloc_buffer(void *arg)
 
 	memset(&desc, 0, sizeof(desc));
 	desc.plane_count = 1;
-	desc.plane_size = get_image_size(file->node.pixelformat,
-					file->node.width,
-					file->node.height);
+	desc.plane_size[0] = file->format.size;
 	desc.init_plane = ifile_init_plane;
 	desc.uninit_plane = ifile_uninit_plane;
 	desc.recycle = ifile_recycle_buffer;
@@ -1835,6 +1730,7 @@ static int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 		file->end = true;
 		buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
 	}
+	buffer->format = &file->format;
 	pitcher_push_back_output(file->chnno, buffer);
 
 	SAFE_RELEASE(buffer, pitcher_put_buffer);
@@ -1879,6 +1775,12 @@ static int init_ifile_node(struct test_node *node)
 	file->desc.alloc_buffer = ifile_alloc_buffer;
 	snprintf(file->desc.name, sizeof(file->desc.name), "input.%s.%d",
 			file->filename, file->node.key);
+
+	memset(&file->format, 0, sizeof(file->format));
+	file->format.format = file->node.pixelformat;
+	file->format.width = file->node.width;
+	file->format.height = file->node.height;
+	pitcher_get_pix_fmt_info(&file->format, file->alignment);
 
 	ret = pitcher_register_chn(file->node.context, &file->desc, file);
 	if (ret < 0) {
@@ -1935,14 +1837,16 @@ static int parse_ifile_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "name")) {
 		file->filename = argv[0];
 	} else if (!strcasecmp(option->name, "fmt")) {
-		int fmt = get_pixelfmt_from_str(argv[0]);
+		int fmt = pitcher_get_format_by_name(argv[0]);
 
-		if (fmt < 0)
-			return fmt;
+		if (fmt == PIX_FMT_NONE)
+			return -RET_E_NOT_SUPPORT;
 		file->node.pixelformat = fmt;
 	} else if (!strcasecmp(option->name, "size")) {
 		file->node.width = strtol(argv[0], NULL, 0);
 		file->node.height = strtol(argv[1], NULL, 0);
+	} else if (!strcasecmp(option->name, "alignment")) {
+		file->alignment = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "framenum")) {
 		file->frame_num = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "loop")) {
@@ -1989,7 +1893,7 @@ static void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
 	int i;
 
 	switch (file->node.pixelformat) {
-	case V4L2_PIX_FMT_VP8:
+	case PIX_FMT_VP8:
 		for (i = 0; i < buffer->count; i++)
 			data_len += buffer->planes[i].bytesused;
 
@@ -2029,7 +1933,6 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 static int init_ofile_node(struct test_node *node)
 {
 	struct test_file_t *file;
-	int ret;
 
 	if (!node)
 		return -RET_E_NULL_POINTER;
@@ -2051,14 +1954,6 @@ static int init_ofile_node(struct test_node *node)
 	snprintf(file->desc.name, sizeof(file->desc.name), "output.%s.%d",
 			file->filename, file->node.key);
 
-	ret = pitcher_register_chn(file->node.context, &file->desc, file);
-	if (ret < 0) {
-		PITCHER_ERR("register file output fail\n");
-		SAFE_RELEASE(file->filp, fclose);
-		return ret;
-	}
-	file->chnno = ret;
-
 	return RET_OK;
 }
 
@@ -2078,6 +1973,27 @@ static int set_ofile_source(struct test_node *node, struct test_node *src)
 	return RET_OK;
 }
 
+static int get_ofile_chnno(struct test_node *node)
+{
+	struct test_file_t *file;
+	struct test_node *src_node;
+
+	if (!node)
+		return -RET_E_NULL_POINTER;
+
+	file = container_of(node, struct test_file_t, node);
+	if (file->chnno >= 0)
+		return file->chnno;
+
+	src_node = nodes[file->node.source];
+	if (src_node->get_source_chnno(src_node) < 0)
+		return file->chnno;
+
+	file->chnno = pitcher_register_chn(file->node.context, &file->desc, file);
+
+	return file->chnno;
+}
+
 static struct test_node *alloc_ofile_node(void)
 {
 	struct test_file_t *file;
@@ -2091,7 +2007,7 @@ static struct test_node *alloc_ofile_node(void)
 	file->node.type = TEST_TYPE_FILEOUT;
 
 	file->node.init_node = init_ofile_node;
-	file->node.get_sink_chnno = get_file_chnno;
+	file->node.get_sink_chnno = get_ofile_chnno;
 	file->node.free_node = free_file_node;
 	file->node.set_source = set_ofile_source;
 	file->mode = "wb";
@@ -2135,9 +2051,14 @@ static int set_convert_source(struct test_node *node,
 	/* width and height have to align to 2 */
 	cvrt->node.width = ALIGN_DOWN(src->width, 0x2);
 	cvrt->node.height = ALIGN_DOWN(src->height, 0x2);
-	cvrt->node.bytesperline = src->bytesperline;
+	/*cvrt->node.bytesperline = src->bytesperline;*/
 	cvrt->ifmt = src->pixelformat;
-	cvrt->field = cvrt->node.field = src->field;
+
+	memset(&cvrt->format, 0, sizeof(cvrt->format));
+	cvrt->format.format = cvrt->node.pixelformat;
+	cvrt->format.width = cvrt->node.width;
+	cvrt->format.height = cvrt->node.height;
+	pitcher_get_pix_fmt_info(&cvrt->format, 0);
 
 	return RET_OK;
 }
@@ -2162,7 +2083,7 @@ static int recycle_convert_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
-static int convert_init_plane(struct pitcher_plane *plane, unsigned int index,
+static int convert_init_plane(struct pitcher_buf_ref *plane, unsigned int index,
 				void *arg)
 {
 	assert(plane);
@@ -2191,9 +2112,10 @@ static struct pitcher_buffer *alloc_convert_buffer(void *arg)
 
 	memset(&desc, 0, sizeof(desc));
 	desc.plane_count = 1;
-	desc.plane_size = get_image_size(cvrt->node.pixelformat,
+	desc.plane_size[0] = get_image_size(cvrt->node.pixelformat,
 					cvrt->node.width,
-					cvrt->node.height);
+					cvrt->node.height,
+					0);
 	desc.init_plane = convert_init_plane;
 	desc.uninit_plane = pitcher_free_plane;
 	desc.recycle = recycle_convert_buffer;
@@ -2248,22 +2170,23 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 
 	if (cvrt->ifmt != cvrt->node.pixelformat) {
 		struct pitcher_buffer *buffer;
-		struct convert_ctx cvrt_ctx;
+
+		if (!cvrt->ctx)
+			cvrt->ctx = pitcher_create_sw_convert();
+		if (!cvrt->ctx)
+			return -RET_E_INVAL;
 
 		buffer = pitcher_get_idle_buffer(cvrt->chnno);
 		if (!buffer)
 			return -RET_E_NOT_READY;
 
-		cvrt_ctx.src_buf = pbuf;
-		cvrt_ctx.dst_buf = buffer;
-		cvrt_ctx.src_fmt = cvrt->ifmt;
-		cvrt_ctx.dst_fmt = cvrt->node.pixelformat;
-		cvrt_ctx.width = cvrt->node.width;
-		cvrt_ctx.height = cvrt->node.height;
-		cvrt_ctx.bytesperline = cvrt->node.bytesperline;
-		cvrt_ctx.field = cvrt->field;
+		buffer->format = &cvrt->format;
+		cvrt->ctx->src = pbuf;
+		cvrt->ctx->dst = buffer;
+		if (cvrt->ctx->convert_frame)
+			cvrt->ctx->convert_frame(cvrt->ctx);
+		buffer->planes[0].bytesused = buffer->planes[0].size;
 
-		convert_frame(&cvrt_ctx);
 		pitcher_push_back_output(cvrt->chnno, buffer);
 		SAFE_RELEASE(buffer, pitcher_put_buffer);
 	} else {
@@ -2276,7 +2199,6 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 static int init_convert_node(struct test_node *node)
 {
 	struct convert_test_t *cvrt;
-	int ret;
 	struct test_node *src_node;
 
 	if (!node)
@@ -2285,20 +2207,26 @@ static int init_convert_node(struct test_node *node)
 	cvrt = container_of(node, struct convert_test_t, node);
 
 	switch (cvrt->ifmt) {
-	case V4L2_PIX_FMT_NV12:
-	case V4L2_PIX_FMT_YUV420:
-	case V4L2_PIX_FMT_NV12_TILE:
-	case V4L2_PIX_FMT_NV12_TILE_10BIT:
+	case PIX_FMT_NV12:
+	case PIX_FMT_I420:
+	case PIX_FMT_NV12_8L128:
+	case PIX_FMT_NV12_10BE_8L128:
+	case PIX_FMT_YUYV:
 		break;
 	default:
+		printf("not support convert format %s\n",
+				pitcher_get_format_name(cvrt->ifmt));
 		return -RET_E_NOT_SUPPORT;
 	}
 
 	switch (cvrt->node.pixelformat) {
-	case V4L2_PIX_FMT_NV12:
-	case V4L2_PIX_FMT_YUV420:
+	case PIX_FMT_NV12:
+	case PIX_FMT_I420:
+	case PIX_FMT_YUYV:
 		break;
 	default:
+		printf("not support to convert to format %s\n",
+				pitcher_get_format_name(cvrt->node.pixelformat));
 		return -RET_E_NOT_SUPPORT;
 	}
 
@@ -2317,13 +2245,6 @@ static int init_convert_node(struct test_node *node)
 	snprintf(cvrt->desc.name, sizeof(cvrt->desc.name), "convert.%d",
 			cvrt->node.key);
 
-	ret = pitcher_register_chn(cvrt->node.context, &cvrt->desc, cvrt);
-	if (ret < 0) {
-		PITCHER_ERR("register convert fail\n");
-		return ret;
-	}
-	cvrt->chnno = ret;
-
 	return RET_OK;
 }
 
@@ -2335,6 +2256,8 @@ static void free_convert_node(struct test_node *node)
 		return;
 
 	cvrt = container_of(node, struct convert_test_t, node);
+	if (cvrt->ctx && cvrt->ctx->free)
+		SAFE_RELEASE(cvrt->ctx, cvrt->ctx->free);
 	SAFE_CLOSE(cvrt->chnno, pitcher_unregister_chn);
 	SAFE_RELEASE(cvrt, pitcher_free);
 }
@@ -2342,11 +2265,20 @@ static void free_convert_node(struct test_node *node)
 static int get_convert_chnno(struct test_node *node)
 {
 	struct convert_test_t *cvrt;
+	struct test_node *src_node;
 
 	if (!node)
 		return -RET_E_NULL_POINTER;
 
 	cvrt = container_of(node, struct convert_test_t, node);
+	if (cvrt->chnno >= 0)
+		return cvrt->chnno;
+
+	src_node = nodes[cvrt->node.source];
+	if (src_node->get_source_chnno(src_node) < 0)
+		return cvrt->chnno;
+
+	cvrt->chnno = pitcher_register_chn(cvrt->node.context, &cvrt->desc, cvrt);
 
 	return cvrt->chnno;
 }
@@ -2364,7 +2296,7 @@ static struct test_node *alloc_convert_node(void)
 	cvrt->node.type = TEST_TYPE_CONVERT;
 	cvrt->chnno = -1;
 
-	cvrt->node.pixelformat = V4L2_PIX_FMT_NV12;
+	cvrt->node.pixelformat = PIX_FMT_NV12;
 	cvrt->node.init_node = init_convert_node;
 	cvrt->node.free_node = free_convert_node;
 	cvrt->node.get_source_chnno = get_convert_chnno;
@@ -2392,11 +2324,259 @@ static int parse_convert_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "source")) {
 		cvrt->node.source = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "fmt")) {
-		int fmt = get_pixelfmt_from_str(argv[0]);
+		int fmt = pitcher_get_format_by_name(argv[0]);
 
-		if (fmt < 0)
-			return fmt;
+		if (fmt == PIX_FMT_NONE)
+			return -RET_E_NOT_SUPPORT;
 		cvrt->node.pixelformat = fmt;
+	}
+
+	return RET_OK;
+}
+
+static int set_g2d_cvt_source(struct test_node *node,
+				struct test_node *src)
+{
+	struct g2d_cvt_test_t *g2dc;
+
+	if (!node || !src)
+		return -RET_E_INVAL;
+
+	g2dc = container_of(node, struct g2d_cvt_test_t, node);
+	g2dc->node.width = ALIGN(src->width, 2);
+	g2dc->node.height = ALIGN(src->height, 2);
+	g2dc->ifmt = src->pixelformat;
+
+	memset(&g2dc->format, 0, sizeof(g2dc->format));
+	g2dc->format.format = g2dc->node.pixelformat;
+	g2dc->format.width = g2dc->node.width;
+	g2dc->format.height = g2dc->node.height;
+	pitcher_get_pix_fmt_info(&g2dc->format, 0);
+
+	return RET_OK;
+}
+
+static int recycle_g2d_cvt_buffer(struct pitcher_buffer *buffer,
+				void *arg, int *del)
+{
+	struct g2d_cvt_test_t *g2dc = arg;
+	int is_end = false;
+
+	if (!g2dc)
+		return -RET_E_NULL_POINTER;
+
+	if (pitcher_is_active(g2dc->chnno) && !g2dc->end)
+		pitcher_put_buffer_idle(g2dc->chnno, buffer);
+	else
+		is_end = true;
+	if (del)
+		*del = is_end;
+
+	return RET_OK;
+}
+
+static struct pitcher_buffer *alloc_g2d_cvt_buffer(void *arg)
+{
+	struct g2d_cvt_test_t *g2dc = arg;
+	struct test_node *src_node;
+
+	if (!g2dc)
+		return NULL;
+
+	src_node = nodes[g2dc->node.source];
+	if (!src_node)
+		return NULL;
+	if (g2dc->ifmt != src_node->pixelformat ||
+			g2dc->node.width != src_node->width ||
+			g2dc->node.height != src_node->height)
+		set_g2d_cvt_source(&g2dc->node, src_node);
+	if (!g2dc->format.size || !g2dc->format.num_planes)
+		return NULL;
+
+	return pitcher_new_dma_buffer(&g2dc->format, recycle_g2d_cvt_buffer, g2dc);
+}
+
+static int g2d_cvt_start(void *arg)
+{
+	struct g2d_cvt_test_t *g2dc = arg;
+
+	g2dc->end = false;
+	return RET_OK;
+}
+
+static int g2d_cvt_checkready(void *arg, int *is_end)
+{
+	struct g2d_cvt_test_t *g2dc = arg;
+
+	if (!g2dc)
+		return false;
+
+	if (is_force_exit())
+		g2dc->end = true;
+	if (is_source_end(g2dc->chnno))
+		g2dc->end = true;
+	if (is_end)
+		*is_end = g2dc->end;
+	if (g2dc->end)
+		return false;
+	if (!pitcher_chn_poll_input(g2dc->chnno))
+		return false;
+	if (g2dc->ifmt == g2dc->node.pixelformat)
+		return true;
+	if (pitcher_poll_idle_buffer(g2dc->chnno))
+		return true;
+
+	return false;
+}
+
+static int g2d_cvt_run(void *arg, struct pitcher_buffer *pbuf)
+{
+	struct g2d_cvt_test_t *g2dc = arg;
+	uint32_t i;
+
+	if (!g2dc || !pbuf)
+		return -RET_E_INVAL;
+
+	if (pbuf->planes[0].bytesused == 0) {
+		g2dc->end = true;
+		return 0;
+	}
+
+	if (g2dc->ifmt != g2dc->node.pixelformat) {
+		struct pitcher_buffer *buffer;
+
+		if (!g2dc->ctx)
+			g2dc->ctx = pitcher_create_g2d_convert();
+		if (!g2dc->ctx)
+			return -RET_E_INVAL;
+
+		buffer = pitcher_get_idle_buffer(g2dc->chnno);
+		if (!buffer)
+			return -RET_E_NOT_READY;
+
+		buffer->format = &g2dc->format;
+		for (i = 0; i < buffer->format->num_planes; i++)
+			buffer->planes[i].bytesused = buffer->format->planes[i].size;
+		g2dc->ctx->src = pbuf;
+		g2dc->ctx->dst = buffer;
+		if (g2dc->ctx->convert_frame)
+			g2dc->ctx->convert_frame(g2dc->ctx);
+
+		g2dc->frame_count++;
+		pitcher_push_back_output(g2dc->chnno, buffer);
+		SAFE_RELEASE(buffer, pitcher_put_buffer);
+	} else {
+		pitcher_push_back_output(g2dc->chnno, pbuf);
+	}
+
+	if (pbuf->flags & PITCHER_BUFFER_FLAG_LAST)
+		g2dc->end = true;
+
+	return RET_OK;
+}
+
+static int init_g2d_cvt_node(struct test_node *node)
+{
+	struct g2d_cvt_test_t *g2dc;
+
+	if (!node)
+		return -RET_E_NULL_POINTER;
+
+	g2dc = container_of(node, struct g2d_cvt_test_t, node);
+
+	g2dc->desc.fd = -1;
+	g2dc->desc.start = g2d_cvt_start;
+	g2dc->desc.check_ready = g2d_cvt_checkready;
+	g2dc->desc.runfunc = g2d_cvt_run;
+	g2dc->desc.buffer_count = 4;
+	g2dc->desc.alloc_buffer = alloc_g2d_cvt_buffer;
+	snprintf(g2dc->desc.name, sizeof(g2dc->desc.name), "g2dc.%d",
+			g2dc->node.key);
+
+	return RET_OK;
+}
+
+static void free_g2d_cvt_node(struct test_node *node)
+{
+	struct g2d_cvt_test_t *g2dc;
+
+	if (!node)
+		return;
+
+	g2dc = container_of(node, struct g2d_cvt_test_t, node);
+	PITCHER_LOG("g2d convert frame count : %ld\n", g2dc->frame_count);
+	if (g2dc->ctx && g2dc->ctx->free)
+		g2dc->ctx->free(g2dc->ctx);
+	SAFE_CLOSE(g2dc->chnno, pitcher_unregister_chn);
+	SAFE_RELEASE(g2dc, pitcher_free);
+}
+
+static int get_g2d_cvt_chnno(struct test_node *node)
+{
+	struct g2d_cvt_test_t *g2dc;
+	struct test_node *src_node;
+
+	if (!node)
+		return -RET_E_NULL_POINTER;
+
+	g2dc = container_of(node, struct g2d_cvt_test_t, node);
+	if (g2dc->chnno >= 0)
+		return g2dc->chnno;
+
+	src_node = nodes[g2dc->node.source];
+	if (!src_node || src_node->get_source_chnno(src_node) < 0)
+		return g2dc->chnno;
+
+	g2dc->chnno = pitcher_register_chn(g2dc->node.context, &g2dc->desc, g2dc);
+	return g2dc->chnno;
+}
+
+static struct test_node *alloc_g2d_cvt_node(void)
+{
+	struct g2d_cvt_test_t *g2dc;
+
+	g2dc = pitcher_calloc(1, sizeof(*g2dc));
+	if (!g2dc)
+		return NULL;
+
+	g2dc->node.key = -1;
+	g2dc->node.source = -1;
+	g2dc->node.type = TEST_TYPE_CONVERT;
+	g2dc->chnno = -1;
+
+	g2dc->node.pixelformat = PIX_FMT_YUYV;
+	g2dc->node.init_node = init_g2d_cvt_node;
+	g2dc->node.free_node = free_g2d_cvt_node;
+	g2dc->node.get_source_chnno = get_g2d_cvt_chnno;
+	g2dc->node.get_sink_chnno = get_g2d_cvt_chnno;
+	g2dc->node.set_source = set_g2d_cvt_source;
+
+	return &g2dc->node;
+}
+
+static int parse_g2d_cvt_option(struct test_node *node,
+				struct mxc_vpu_test_option *option,
+				char *argv[])
+{
+	struct g2d_cvt_test_t *g2dc;
+
+	if (!node || !option || !option->name)
+		return -RET_E_INVAL;
+	if (option->arg_num && !argv)
+		return -RET_E_INVAL;
+
+	g2dc = container_of(node, struct g2d_cvt_test_t, node);
+
+	if (!strcasecmp(option->name, "key")) {
+		g2dc->node.key = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "source")) {
+		g2dc->node.source = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "fmt")) {
+		int fmt = pitcher_get_format_by_name(argv[0]);
+
+		if (fmt == PIX_FMT_NONE)
+			return -RET_E_NOT_SUPPORT;
+		g2dc->node.pixelformat = fmt;
 	}
 
 	return RET_OK;
@@ -2507,13 +2687,13 @@ static int parser_run(void *arg, struct pitcher_buffer *pbuf)
 	return RET_OK;
 }
 
-static int parser_init_plane(struct pitcher_plane *plane,
+static int parser_init_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int parser_uninit_plane(struct pitcher_plane *plane,
+static int parser_uninit_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
@@ -2549,9 +2729,10 @@ static struct pitcher_buffer *parser_alloc_buffer(void *arg)
 
 	memset(&desc, 0, sizeof(desc));
 	desc.plane_count = 1;
-	desc.plane_size = get_image_size(parser->node.pixelformat,
+	desc.plane_size[0] = get_image_size(parser->node.pixelformat,
 					parser->node.width,
-					parser->node.height);
+					parser->node.height,
+					0);
 	desc.init_plane = parser_init_plane;
 	desc.uninit_plane = parser_uninit_plane;
 	desc.recycle = parser_recycle_buffer;
@@ -2618,11 +2799,8 @@ static int init_parser_node(struct test_node *node)
 		return -RET_E_INVAL;
 
 	if (is_support_parser(parser->node.pixelformat) == false) {
-		PITCHER_LOG("Format %c%c%c%c unsupported parser\n",
-			    (parser->node.pixelformat) & 0xff,
-			    (parser->node.pixelformat >> 8) & 0xff,
-			    (parser->node.pixelformat >> 16) & 0xff,
-			    (parser->node.pixelformat >> 24) & 0xff);
+		PITCHER_LOG("Format %s unsupported parser\n",
+				pitcher_get_format_name(parser->node.pixelformat));
 
 		return -RET_E_NOT_SUPPORT;
 	}
@@ -2719,7 +2897,7 @@ static struct test_node *alloc_parser_node(void)
 	parser->node.key = -1;
 	parser->node.source = -1;
 	parser->node.type = TEST_TYPE_PARSER;
-	parser->node.pixelformat = V4L2_PIX_FMT_H264;
+	parser->node.pixelformat = PIX_FMT_H264;
 	parser->node.get_source_chnno = get_parser_chnno;
 	parser->node.init_node = init_parser_node;
 	parser->node.free_node = free_parser_node;
@@ -2749,10 +2927,10 @@ static int parse_parser_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "name")) {
 		parser->filename = argv[0];
 	} else if (!strcasecmp(option->name, "fmt")) {
-		int fmt = get_pixelfmt_from_str(argv[0]);
+		int fmt = pitcher_get_format_by_name(argv[0]);
 
-		if (fmt < 0)
-			return fmt;
+		if (fmt == PIX_FMT_NONE)
+			return -RET_E_NOT_SUPPORT;
 		parser->node.pixelformat = fmt;
 	} else if (!strcasecmp(option->name, "size")) {
 		parser->node.width = strtol(argv[0], NULL, 0);
@@ -2832,11 +3010,36 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.alloc_node = alloc_convert_node,
 	},
 	{
+		.subcmd = "g2dc",
+		.type = TEST_TYPE_CONVERT,
+#ifdef ENABLE_G2D
+		.option = g2d_cvt_options,
+		.parse_option = parse_g2d_cvt_option,
+		.alloc_node = alloc_g2d_cvt_node,
+#endif
+	},
+	{
 		.subcmd = "parser",
 		.option = parser_options,
 		.type = TEST_TYPE_PARSER,
 		.parse_option = parse_parser_option,
 		.alloc_node = alloc_parser_node,
+	},
+	{
+		.subcmd = "dma",
+		.type = TEST_TYPE_CONVERT,
+		.option = dmanode_options,
+		.parse_option = parse_dmanode_option,
+		.alloc_node = alloc_dmanode,
+	},
+	{
+		.subcmd = "waylandsink",
+		.type = TEST_TYPE_SINK,
+#ifdef ENABLE_WAYLAND
+		.option = waylandsink_options,
+		.parse_option = parse_wayland_sink_option,
+		.alloc_node = alloc_wayland_sink_node,
+#endif
 	},
 };
 
@@ -3066,6 +3269,11 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 		return -RET_E_INVAL;
 
 	PITCHER_LOG("connect <%d, %d>\n", src->key, dst->key);
+	if (dst->set_source) {
+		ret = dst->set_source(dst, src);
+		if (ret < 0)
+			return ret;
+	}
 
 	ret = pitcher_connect(schn, dchn);
 	if (ret < 0)
@@ -3185,6 +3393,14 @@ static int ctrl_run(void *arg, struct pitcher_buffer *pbuf)
 	return RET_OK;
 }
 
+struct test_node *get_test_node(uint32_t key)
+{
+	if (key >= ARRAY_SIZE(nodes))
+		return NULL;
+
+	return nodes[key];
+}
+
 int main(int argc, char *argv[])
 {
 	PitcherContext context = NULL;
@@ -3197,6 +3413,7 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, sig_handler);
 
 	printf("mxc_v4l2_vpu_test.out V%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
+
 	if (argc < 2 || !strcasecmp("help", argv[1]))
 		return show_help(argc, argv);
 

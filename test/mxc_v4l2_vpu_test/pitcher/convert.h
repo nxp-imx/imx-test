@@ -27,17 +27,19 @@ extern "C"
 #include "pitcher.h"
 
 struct convert_ctx {
-	struct pitcher_buffer *src_buf;
-	struct pitcher_buffer *dst_buf;
-	uint32_t src_fmt;
-	uint32_t dst_fmt;
-	uint32_t width;
-	uint32_t height;
-	uint32_t bytesperline;
-	uint32_t field;
+	struct pitcher_buffer *src;
+	struct pitcher_buffer *dst;
+	int (*convert_frame)(struct convert_ctx *cvrt_ctx);
+	void (*free)(struct convert_ctx *cvrt_ctx);
+	void *priv;
 };
 
-void convert_frame(struct convert_ctx *cvrt_ctx);
+struct convert_ctx *pitcher_create_sw_convert(void);
+#ifdef ENABLE_G2D
+struct convert_ctx *pitcher_create_g2d_convert(void);
+#else
+static inline struct convert_ctx *pitcher_create_g2d_convert(void) {return NULL;}
+#endif
 
 #ifdef __cplusplus
 }
