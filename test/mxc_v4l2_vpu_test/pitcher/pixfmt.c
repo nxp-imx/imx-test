@@ -86,7 +86,7 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 	},
 	[PIX_FMT_NV12_8L128] = {
 		.name = "na12",
-		.fourcc_nc = V4L2_PIX_FMT_NV12M_8L128,
+		.fourcc_nc = V4L2_PIX_FMT_NV12MT_8L128,
 		.num_planes = 2,
 		.log2_chroma_w = 1,
 		.log2_chroma_h = 1,
@@ -99,7 +99,7 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 	},
 	[PIX_FMT_NV12_10BE_8L128] = {
 		.name = "nt12",
-		.fourcc_nc = V4L2_PIX_FMT_NV12M_10BE_8L128,
+		.fourcc_nc = V4L2_PIX_FMT_NV12MT_10BE_8L128,
 		.num_planes = 2,
 		.log2_chroma_w = 1,
 		.log2_chroma_h = 1,
