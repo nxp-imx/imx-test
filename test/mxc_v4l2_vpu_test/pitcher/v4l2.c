@@ -1036,8 +1036,10 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 
 	__check_v4l2_events(component);
 
-	if (!pbuf)
+	if (!pbuf || !pbuf->count || !pbuf->planes)
 		return -RET_E_NOT_READY;
+	if (pbuf->planes[0].bytesused == 0)
+		return 0;
 
 	buffer = __get_buf(component);
 	if (!buffer)
