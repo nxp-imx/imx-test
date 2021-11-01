@@ -845,6 +845,9 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 		break;
 	}
 
+	if (encoder->output.bytesperline < src->bytesperline)
+		encoder->output.bytesperline = src->bytesperline;
+
 	if (src->type == TEST_TYPE_CAMERA) {
 		encoder->output.memory = V4L2_MEMORY_USERPTR;
 		encoder->node.frame_skip = true;
@@ -1781,6 +1784,7 @@ static int init_ifile_node(struct test_node *node)
 	file->format.width = file->node.width;
 	file->format.height = file->node.height;
 	pitcher_get_pix_fmt_info(&file->format, file->alignment);
+	node->bytesperline = file->alignment;
 
 	ret = pitcher_register_chn(file->node.context, &file->desc, file);
 	if (ret < 0) {
