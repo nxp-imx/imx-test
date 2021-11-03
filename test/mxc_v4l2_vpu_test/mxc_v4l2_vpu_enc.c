@@ -2496,6 +2496,9 @@ static int init_g2d_cvt_node(struct test_node *node)
 	g2dc->desc.alloc_buffer = alloc_g2d_cvt_buffer;
 	snprintf(g2dc->desc.name, sizeof(g2dc->desc.name), "g2dc.%d",
 			g2dc->node.key);
+	g2dc->ctx = pitcher_create_g2d_convert();
+	if (!g2dc->ctx)
+		return -RET_E_INVAL;
 
 	return RET_OK;
 }

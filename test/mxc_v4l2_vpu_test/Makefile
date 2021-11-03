@@ -28,6 +28,7 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			pitcher/vp6_parse.o \
 			pitcher/platform_8x.o \
 			pitcher/convert.o \
+			pitcher/sysloadso.o \
 			dmanode.o
 
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/linux/dma-heap.h))
@@ -41,7 +42,6 @@ endif
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/g2d.h))
 mxc_v4l2_vpu_enc.out += pitcher/g2dcvt.o
 CFLAGS += -DENABLE_G2D
-LDFLAGS += -lg2d
 endif
 
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/wayland-client.h))
@@ -51,11 +51,11 @@ mxc_v4l2_vpu_enc.out += waylandsink.o \
 			wayland-generated-protocols/xdg-shell-protocol.o \
 			wayland-generated-protocols/linux-dmabuf-unstable-v1-protocol.o
 CFLAGS += -DENABLE_WAYLAND
-LDFLAGS += -lwayland-egl -lwayland-client
+LDFLAGS += -lwayland-client
 endif
 endif
 endif
 
-LDFLAGS += -lpthread
+LDFLAGS += -ldl -lpthread
 COPY = README
 endif

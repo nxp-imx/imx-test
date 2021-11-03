@@ -28,6 +28,14 @@
 #include "convert.h"
 #include "dmabuf.h"
 #include "platform_8x.h"
+#include "loadso.h"
+
+#define DEFAULT_G2D	"/usr/lib/libg2d.so"
+#define LOAD_FUNC(g2d, NAME)	\
+	g2d->NAME = pitcher_load_function(g2d->dll_handle, #NAME); \
+	if  (!g2d->NAME) { \
+		return -RET_E_NOSYS; \
+	}
 
 struct g2d_format_map {
 	uint32_t format;
@@ -42,6 +50,12 @@ struct g2d_cvrt_t {
 	void *g2d_handle;
 	const struct g2d_format_map *fmt_s;
 	const struct g2d_format_map *fmt_d;
+
+	void *dll_handle;
+	int (*g2d_open)(void **handle);
+	int (*g2d_close)(void *handle);
+	int (*g2d_blitEx)(void *handle, struct g2d_surfaceEx *srcEx, struct g2d_surfaceEx *dstEx);
+	int (*g2d_finish)(void *handle);
 };
 
 const struct g2d_format_map supported_formats[] = {
@@ -122,8 +136,8 @@ static int g2d_cvt_blit(struct g2d_cvrt_t *g2d, struct convert_ctx *ctx)
 	 *       dst.base.top, dst.base.right, dst.base.bottom, dst.base.global_alpha,
 	 *       dst.base.format);
 	 */
-	ret = g2d_blitEx(g2d->g2d_handle, &src, &dst);
-	ret |= g2d_finish(g2d->g2d_handle);
+	ret = g2d->g2d_blitEx(g2d->g2d_handle, &src, &dst);
+	ret |= g2d->g2d_finish(g2d->g2d_handle);
 	if (ret)
 		return -1;
 
@@ -196,10 +210,24 @@ void g2d_free_convert(struct convert_ctx *ctx)
 	g2d = ctx->priv;
 	ctx->priv = NULL;
 	if (g2d) {
-		SAFE_RELEASE(g2d->g2d_handle, g2d_close);
+		SAFE_RELEASE(g2d->g2d_handle, g2d->g2d_close);
+		SAFE_RELEASE(g2d->dll_handle, pitcher_unload_object);
 		SAFE_RELEASE(g2d, pitcher_free);
 	}
 	SAFE_RELEASE(ctx, pitcher_free);
+}
+
+static int g2d_load_function(struct g2d_cvrt_t *g2d)
+{
+	if (!g2d || !g2d->dll_handle)
+		return -RET_E_NULL_POINTER;
+
+	LOAD_FUNC(g2d, g2d_open);
+	LOAD_FUNC(g2d, g2d_close);
+	LOAD_FUNC(g2d, g2d_blitEx);
+	LOAD_FUNC(g2d, g2d_finish);
+
+	return RET_OK;
 }
 
 struct convert_ctx *pitcher_create_g2d_convert(void)
@@ -215,7 +243,15 @@ struct convert_ctx *pitcher_create_g2d_convert(void)
 	if (!g2d)
 		goto error;
 
-	ret = g2d_open(&g2d->g2d_handle);
+	g2d->dll_handle = pitcher_load_object(DEFAULT_G2D);
+	if (!g2d->dll_handle)
+		goto error;
+
+	ret = g2d_load_function(g2d);
+	if (ret)
+		goto error;
+
+	ret = g2d->g2d_open(&g2d->g2d_handle);
 	if (ret < 0)
 		goto error;
 
@@ -225,7 +261,10 @@ struct convert_ctx *pitcher_create_g2d_convert(void)
 
 	return ctx;
 error:
-	SAFE_RELEASE(g2d, pitcher_free);
+	if (g2d) {
+		SAFE_RELEASE(g2d->dll_handle, pitcher_unload_object);
+		SAFE_RELEASE(g2d, pitcher_free);
+	}
 	SAFE_RELEASE(ctx, pitcher_free);
 	return NULL;
 }
