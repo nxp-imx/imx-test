@@ -29,6 +29,9 @@ extern "C"
 
 #ifndef _UAPI__LINUX_IMX_VPU_H
 
+#define V4L2_CID_NON_FRAME		(V4L2_CID_USER_IMX_BASE)
+#define V4L2_CID_DIS_REORDER		(V4L2_CID_USER_IMX_BASE + 1)
+
 #define V4L2_MAX_ROI_REGIONS            8
 struct v4l2_enc_roi_param {
 	struct v4l2_rect rect;

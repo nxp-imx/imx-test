@@ -26,6 +26,7 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			pitcher/vpx_parse.o \
 			pitcher/vc1_parse.o \
 			pitcher/vp6_parse.o \
+			pitcher/platform.o \
 			pitcher/platform_8x.o \
 			pitcher/convert.o \
 			pitcher/sysloadso.o \

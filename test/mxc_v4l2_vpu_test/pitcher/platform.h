@@ -35,19 +35,21 @@ enum PLATFORM_TYPE {
 };
 
 enum INPUT_FRAME_MODE {
-        INPUT_MODE_FRM_LEVEL = 0,
-        INPUT_MODE_NON_FRM_LEVEL,
+	INPUT_MODE_FRM_LEVEL = 0,
+	INPUT_MODE_NON_FRM_LEVEL,
 };
 
 struct platform_t {
-        uint32_t type;
-        int fd;
+	uint32_t type;
+	int fd;
 
-        uint32_t frame_mode;
-        int (*set_decoder_parameter)(void *arg);
-        int (*set_encoder_parameter)(void *arg);
+	uint32_t frame_mode;
+	uint32_t dis_reorder;
+	int (*set_decoder_parameter)(void *arg);
+	int (*set_encoder_parameter)(void *arg);
 };
 
+int set_decoder_parameter(void *arg);
 
 #ifdef __cplusplus
 }

@@ -618,7 +618,8 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"source", 1, "--source <key no>\n\t\t\tset h264 encoder input key number"},
 	{"device", 1, "--device <devnode>\n\t\t\tassign encoder video device node"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
-	{"framemode", 1, "--framemode <level>\n\t\t\tSpecify input frame mode, 0: frame level, 1: non-frame level"},
+	{"framemode", 1, "--framemode <mode>\n\t\t\tSpecify input frame mode, 0: frame level(default), 1: non-frame level"},
+	{"disreorder", 1, "--disreorder <mode>\n\t\t\tEnable disreorder(low latency) mode, 0: no(default), 1: yes"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21,\n\
 		    \r\t\t\ti420, dtrc, dtrc10, P010, nvx2, rfc, rfcx, nv16"},
 	{NULL, 0, NULL},
@@ -1427,9 +1428,10 @@ static int init_decoder_platform(struct decoder_test_t *decoder)
 	    !strcasecmp((const char*)cap.driver, "imx vpu decoder") ||
 	    !strcasecmp((const char*)cap.driver, "amphion-vpu")) {
 		decoder->platform.type = IMX_8X;
-		decoder->platform.set_decoder_parameter = set_decoder_parameter_8x;
+		decoder->platform.set_decoder_parameter = set_decoder_parameter;
 	} else if (!strcasecmp((const char*)cap.driver, "vsi_v4l2")) {
 		decoder->platform.type = IMX_8M;
+		decoder->platform.set_decoder_parameter = set_decoder_parameter;
 	} else {
 		decoder->platform.type = OTHERS;
 	}
@@ -1583,6 +1585,8 @@ static int parse_decoder_option(struct test_node *node,
 		if (fmt == PIX_FMT_NONE)
 			return -RET_E_NOT_SUPPORT;
 		decoder->node.pixelformat = fmt;
+	} else if (!strcasecmp(option->name, "disreorder")) {
+		decoder->platform.dis_reorder = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
