@@ -2754,7 +2754,7 @@ static struct pitcher_buffer *parser_alloc_buffer(void *arg)
 
 static int init_parser_memory(struct parser_test_t *parser)
 {
-	if (parser->node.pixelformat == VPU_PIX_FMT_RV) {
+	if (parser->node.pixelformat == PIX_FMT_RV) {
 		FILE *fp = NULL;
 		size_t size = 0;
 
