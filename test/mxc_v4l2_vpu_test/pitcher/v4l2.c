@@ -548,6 +548,7 @@ static int uninit_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 {
 	if (plane && plane->virt && plane->size)
 		munmap(plane->virt, plane->size);
+	SAFE_CLOSE(plane->dmafd, close);
 
 	return RET_OK;
 }
