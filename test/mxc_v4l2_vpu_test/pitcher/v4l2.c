@@ -265,6 +265,10 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 	}
 	component->buffer_count = req_bufs.count;
 
+	PITCHER_LOG("%s request buffers : %d, memory : %d\n",
+		V4L2_TYPE_IS_OUTPUT(component->type) ? "output" : "capture",
+		req_bufs.count, req_bufs.memory);
+
 	return RET_OK;
 }
 
@@ -393,6 +397,17 @@ static void __qbuf(struct v4l2_component_t *component,
 			v4lbuf.length = buffer->planes[0].size;
 			v4lbuf.m.userptr =
 				(unsigned long)buffer->planes[0].virt;
+		}
+	} else if (component->memory == V4L2_MEMORY_DMABUF) {
+		if (V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
+			for (i = 0; i < v4lbuf.length; i++) {
+				v4lbuf.m.planes[i].m.fd = buffer->planes[i].dmafd;
+				v4lbuf.m.planes[i].length = buffer->planes[i].size;
+				v4lbuf.m.planes[i].data_offset = buffer->planes[i].offset;
+			}
+		} else {
+			v4lbuf.m.fd = buffer->planes[0].dmafd;
+			v4lbuf.length = buffer->planes[0].size;
 		}
 	}
 	v4lbuf.timestamp.tv_sec = -1;
@@ -546,9 +561,17 @@ static int init_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 static int uninit_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
-	if (plane && plane->virt && plane->size)
+	if (!plane)
+		return RET_OK;
+
+	if (plane->virt && plane->size) {
 		munmap(plane->virt, plane->size);
-	SAFE_CLOSE(plane->dmafd, close);
+		plane->virt = NULL;
+	}
+	if (plane->dmafd != -1) {
+		SAFE_CLOSE(plane->dmafd, close);
+		plane->dmafd = -1;
+	}
 
 	return RET_OK;
 }
@@ -599,6 +622,19 @@ static int uninit_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
 	return RET_OK;
 }
 
+static int init_v4l2_dmabuf_plane(struct pitcher_buf_ref *plane,
+				unsigned int index, void *arg)
+{
+	/* same operation as userptr */
+	return init_v4l2_userptr_plane(plane, index, arg);
+}
+
+static int uninit_v4l2_dmabuf_plane(struct pitcher_buf_ref *plane,
+				unsigned int index, void *arg)
+{
+	return RET_OK;
+}
+
 static int __recycle_v4l2_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
@@ -642,6 +678,10 @@ static int __alloc_v4l2_buffer(struct v4l2_component_t *component)
 	case V4L2_MEMORY_USERPTR:
 		desc.init_plane = init_v4l2_userptr_plane;
 		desc.uninit_plane = uninit_v4l2_userptr_plane;
+		break;
+	case V4L2_MEMORY_DMABUF:
+		desc.init_plane = init_v4l2_dmabuf_plane;
+		desc.uninit_plane = uninit_v4l2_dmabuf_plane;
 		break;
 	default:
 		return -RET_E_INVAL;
@@ -1023,6 +1063,44 @@ static int __transfer_output_buffer_mmap(struct pitcher_buffer *src,
 	return RET_OK;
 }
 
+static int __transfer_output_buffer_dmabuf(struct pitcher_buffer *src,
+					struct pitcher_buffer *dst)
+{
+	int i;
+	unsigned long size;
+
+	if (!src || !dst)
+		return -RET_E_NULL_POINTER;
+
+	if (src->count == 1 && dst->count > 1) {
+		unsigned long total = 0;
+		unsigned long bytesused;
+
+		for (i = 0; i < dst->count; i++) {
+			bytesused = src->planes[0].bytesused - total;
+			size = pitcher_get_buffer_plane_size(dst, i);
+			bytesused = min(bytesused, size);
+
+			dst->planes[i].dmafd = src->planes[0].dmafd;
+			dst->planes[i].bytesused = bytesused;
+			dst->planes[i].offset = total;
+			total += bytesused;
+			if (total >= src->planes[0].bytesused)
+				break;
+		}
+	} else if (src->count == dst->count) {
+		for (i = 0; i < dst->count; i++)
+			memcpy(&dst->planes[i], &src->planes[i],
+					sizeof(struct pitcher_buf_ref));
+	} else {
+		return -RET_E_INVAL;
+	}
+
+	dst->priv = pitcher_get_buffer(src);
+	return RET_OK;
+}
+
+
 static int __run_v4l2_output(struct v4l2_component_t *component,
 				struct pitcher_buffer *pbuf)
 {
@@ -1052,6 +1130,9 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 		break;
 	case V4L2_MEMORY_USERPTR:
 		ret =  __transfer_output_buffer_userptr(pbuf, buffer);
+		break;
+	case V4L2_MEMORY_DMABUF:
+		ret = __transfer_output_buffer_dmabuf(pbuf, buffer);
 		break;
 	default:
 		ret = -RET_E_NOT_SUPPORT;

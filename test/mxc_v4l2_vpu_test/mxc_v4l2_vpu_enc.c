@@ -95,6 +95,7 @@ struct camera_test_t {
 	const char *devnode;
 	struct v4l2_component_t capture;
 	unsigned long frame_num;
+	unsigned int trans_type;
 };
 
 struct test_file_t {
@@ -586,6 +587,8 @@ struct mxc_vpu_test_option camera_options[] = {
 	{"size", 2, "--size <width> <height>\n\t\t\tassign camera resolution"},
 	{"framerate", 1, "--framerate <f>\n\t\t\tset frame rate(fps)"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset frame number"},
+	{"transtype", 1, "--transtype <type>\n\t\t\tset buffer type of transfer to sink node,\n\
+			\r\t\t\t1:mmap, 2: userptr(default), 3: onvelay(not support), 4: dmabuf"},
 	{NULL, 0, NULL},
 };
 
@@ -609,7 +612,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
 	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
 	{"nbr", 2, "--nbr <br> <no>\n\t\t\tset encoder new target bitrate since frame <no>, the unit is b"},
-	{"seqhdr", 1, "--seqhdr <br> <no>\n\t\t\tset encoder idr sequence header"},
+	{"seqhdr", 1, "--seqhdr <set>\n\t\t\tset encoder idr sequence header"},
 	{NULL, 0, NULL},
 };
 
@@ -743,6 +746,7 @@ static struct test_node *alloc_camera_node(void)
 	camera->node.init_node = init_camera_node;
 	camera->node.free_node = free_camera_node;
 	camera->capture.chnno = -1;
+	camera->trans_type = V4L2_MEMORY_USERPTR;
 
 	return &camera->node;
 }
@@ -777,6 +781,12 @@ static int parse_camera_option(struct test_node *node,
 		camera->node.framerate = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "framenum")) {
 		camera->frame_num = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "transtype")) {
+		camera->trans_type = strtol(argv[0], NULL, 0);
+		if (camera->trans_type == V4L2_MEMORY_OVERLAY) {
+			PITCHER_ERR("V4L2_MEMORY_OVERLAY not support yet, change to V4L2_MEMORY_USERPTR\n");
+			camera->trans_type = V4L2_MEMORY_USERPTR;
+		}
 	}
 
 	return RET_OK;
@@ -850,7 +860,9 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 		encoder->output.bytesperline = src->bytesperline;
 
 	if (src->type == TEST_TYPE_CAMERA) {
-		encoder->output.memory = V4L2_MEMORY_USERPTR;
+		struct camera_test_t *camera = container_of(src, struct camera_test_t, node);
+
+		encoder->output.memory = camera->trans_type;
 		encoder->node.frame_skip = true;
 	}
 
