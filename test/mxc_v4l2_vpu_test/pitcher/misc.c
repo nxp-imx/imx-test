@@ -94,3 +94,24 @@ long pitcher_get_file_size(const char *filename)
 	return length;
 }
 
+uint32_t pitcher_get_bits_val_le(const uint8_t *data, uint32_t size, uint32_t nr, uint32_t count)
+{
+	uint32_t offset = nr / 8;
+	uint32_t shift = nr % 8;
+	uint32_t bits;
+	uint32_t val = 0;
+	uint32_t nb = 0;
+
+	while (count > 0) {
+		if (offset >= size)
+			break;
+		bits = count > (8 - shift) ? (8 - shift) : count;
+		val |= ((data[offset] >> shift) & ((1 << bits) - 1)) << nb ;
+		nb += bits;
+		count -= bits;
+		offset++;
+		shift = 0;
+	}
+
+	return val;
+}

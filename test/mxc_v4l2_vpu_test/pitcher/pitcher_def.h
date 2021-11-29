@@ -157,6 +157,7 @@ uint64_t pitcher_get_realtime_time(void);
 uint64_t pitcher_get_monotonic_time(void);
 uint64_t pitcher_get_monotonic_raw_time(void);
 long pitcher_get_file_size(const char *filename);
+uint32_t pitcher_get_bits_val_le(const uint8_t *data, uint32_t size, uint32_t nr, uint32_t count);
 void *_pitcher_malloc(size_t size, const char *func, int line);
 void *_pitcher_calloc(size_t nmemb, size_t size, const char *func, int line);
 void *_pitcher_realloc(void *ptr, size_t size, const char *func, int line);
