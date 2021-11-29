@@ -414,6 +414,7 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 
 	chnno = decoder->capture.chnno;
 	if (pitcher_get_status(chnno) == PITCHER_STATE_STOPPED) {
+		decoder->capture.pixelformat = PIX_FMT_NONE;
 		decoder->capture.width = 0;
 		decoder->capture.height = 0;
 		ret = pitcher_start_chn(chnno);
@@ -1543,7 +1544,7 @@ static struct test_node *alloc_decoder_node(void)
 	decoder->node.source = -1;
 	decoder->fd = -1;
 	decoder->node.type = TEST_TYPE_DECODER;
-	decoder->node.pixelformat = PIX_FMT_NV12;
+	decoder->node.pixelformat = PIX_FMT_NONE;
 	decoder->sizeimage = DEFAULT_WIDTH * DEFAULT_HEIGHT;
 
 	decoder->node.init_node = init_decoder_node;
@@ -2126,8 +2127,8 @@ static struct pitcher_buffer *alloc_convert_buffer(void *arg)
 	src_node = nodes[cvrt->node.source];
 	if (!src_node)
 		return NULL;
-	if (cvrt->node.width != src_node->width
-	    || cvrt->node.height != src_node->height)
+
+	if (cvrt->node.width != src_node->width || cvrt->node.height != src_node->height)
 		set_convert_source(&cvrt->node, src_node);
 
 	memset(&desc, 0, sizeof(desc));
@@ -2225,30 +2226,6 @@ static int init_convert_node(struct test_node *node)
 		return -RET_E_NULL_POINTER;
 
 	cvrt = container_of(node, struct convert_test_t, node);
-
-	switch (cvrt->ifmt) {
-	case PIX_FMT_NV12:
-	case PIX_FMT_I420:
-	case PIX_FMT_NV12_8L128:
-	case PIX_FMT_NV12_10BE_8L128:
-	case PIX_FMT_YUYV:
-		break;
-	default:
-		printf("not support convert format %s\n",
-				pitcher_get_format_name(cvrt->ifmt));
-		return -RET_E_NOT_SUPPORT;
-	}
-
-	switch (cvrt->node.pixelformat) {
-	case PIX_FMT_NV12:
-	case PIX_FMT_I420:
-	case PIX_FMT_YUYV:
-		break;
-	default:
-		printf("not support to convert to format %s\n",
-				pitcher_get_format_name(cvrt->node.pixelformat));
-		return -RET_E_NOT_SUPPORT;
-	}
 
 	if (!cvrt->node.width || !cvrt->node.height) {
 		src_node = nodes[cvrt->node.source];
@@ -2372,6 +2349,10 @@ static int set_g2d_cvt_source(struct test_node *node,
 	g2dc->format.width = g2dc->node.width;
 	g2dc->format.height = g2dc->node.height;
 	pitcher_get_pix_fmt_info(&g2dc->format, 0);
+	PITCHER_LOG("set g2d convert source %s %dx%d -> %s\n",
+			pitcher_get_format_name(src->pixelformat),
+			src->width, src->height,
+			pitcher_get_format_name(g2dc->node.pixelformat));
 
 	return RET_OK;
 }
@@ -2410,8 +2391,6 @@ static struct pitcher_buffer *alloc_g2d_cvt_buffer(void *arg)
 			g2dc->node.width != src_node->width ||
 			g2dc->node.height != src_node->height)
 		set_g2d_cvt_source(&g2dc->node, src_node);
-	if (!g2dc->format.size || !g2dc->format.num_planes)
-		return NULL;
 
 	return pitcher_new_dma_buffer(&g2dc->format, recycle_g2d_cvt_buffer, g2dc);
 }
@@ -3424,6 +3403,20 @@ struct test_node *get_test_node(uint32_t key)
 	return nodes[key];
 }
 
+int check_source(int source)
+{
+	if (source < 0 || source >= MAX_NODE_COUNT)
+		return -RET_E_INVAL;
+	if (!nodes[source])
+		return -RET_E_INVAL;
+	if (nodes[source]->pixelformat >= PIX_FMT_NB)
+		return -RET_E_INVAL;
+	if (!nodes[source]->width || !nodes[source]->height)
+		return -RET_E_INVAL;
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	PitcherContext context = NULL;
@@ -3469,8 +3462,7 @@ int main(int argc, char *argv[])
 			continue;
 		nodes[i]->context = context;
 		source = nodes[i]->source;
-		if (source >= 0 && source < MAX_NODE_COUNT && nodes[source] &&
-				nodes[i]->set_source) {
+		if (!check_source(source) && nodes[i]->set_source) {
 			ret = nodes[i]->set_source(nodes[i], nodes[source]);
 			if (ret < 0)
 				goto exit;

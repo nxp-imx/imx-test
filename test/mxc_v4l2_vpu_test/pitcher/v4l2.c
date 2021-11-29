@@ -837,11 +837,13 @@ static int start_v4l2(void *arg)
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
 
-	ret = get_v4l2_fourcc(component);
-	if (ret) {
-		PITCHER_ERR("can't find fourcc for foramt %s\n",
-				pitcher_get_format_name(component->pixelformat));
-		return ret;
+	if (component->pixelformat != PIX_FMT_NONE) {
+		ret = get_v4l2_fourcc(component);
+		if (ret) {
+			PITCHER_ERR("can't find fourcc for foramt %s\n",
+					pitcher_get_format_name(component->pixelformat));
+			return ret;
+		}
 	}
 	ret = __init_v4l2(component);
 	if (ret < 0)
@@ -1279,9 +1281,6 @@ int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt)
 	if (ioctl(fd, VIDIOC_QUERYCAP, &cap) != 0)
 		return FALSE;
 
-	PITCHER_LOG("check v4l2 devcie for %s to %s\n",
-			pitcher_get_format_name(out_fmt),
-			pitcher_get_format_name(cap_fmt));
 	if (is_v4l2_mplane(&cap)) {
 		cap_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		out_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -1313,6 +1312,10 @@ int lookup_v4l2_device_and_open(unsigned int out_fmt, unsigned int cap_fmt)
 		fd = open(devname, O_RDWR | O_NONBLOCK);
 		if (fd < 0)
 			continue;
+		PITCHER_LOG("check v4l2 devcie %s for %s to %s\n",
+				devname,
+				pitcher_get_format_name(out_fmt),
+				pitcher_get_format_name(cap_fmt));
 		if (check_v4l2_device_type(fd, out_fmt, cap_fmt) == TRUE) {
 			PITCHER_LOG("open %s\n", devname);
 			return fd;

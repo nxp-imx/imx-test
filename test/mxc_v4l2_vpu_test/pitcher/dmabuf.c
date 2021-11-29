@@ -264,7 +264,7 @@ struct pitcher_buffer *pitcher_new_dma_buffer(struct pix_fmt_info *format,
 	struct pitcher_buffer_desc desc;
 	uint32_t i;
 
-	if (!format || !format->format || !format->num_planes || !format->size)
+	if (!format || format->format >= PIX_FMT_NB || !format->num_planes || !format->size)
 		return NULL;
 	if (!recycle)
 		return NULL;
