@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,4 +77,3 @@ long pitcher_memory_count(void)
 {
 	return total_count;
 }
-

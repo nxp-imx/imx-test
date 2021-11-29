@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -282,4 +283,3 @@ int pitcher_queue_find(Queue q, queue_callback func, void *arg,
 
 	return -RET_E_NOT_FOUND;
 }
-

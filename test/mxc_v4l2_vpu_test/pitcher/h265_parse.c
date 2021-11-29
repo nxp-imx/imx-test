@@ -15,6 +15,7 @@
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -93,4 +94,3 @@ int h265_parse(Parser p, void *arg)
 {
 	return pitcher_parse_startcode(p, &h265_scode);
 }
-

@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -891,4 +892,3 @@ int pitcher_set_skip(unsigned int src, unsigned int dst,
 			ct.src->name, ct.dst->name, numerator, denominator);
 	return pitcher_set_pipe_skip((Pipe)ct.priv, numerator, denominator);
 }
-

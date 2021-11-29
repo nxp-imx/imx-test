@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1396,4 +1397,3 @@ uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t 
 
 	return size;
 }
-

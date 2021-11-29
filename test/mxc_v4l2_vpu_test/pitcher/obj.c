@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,4 +108,3 @@ unsigned int pitcher_get_obj_refcount(struct pitcher_obj *obj)
 
 	return obj->refcount;
 }
-

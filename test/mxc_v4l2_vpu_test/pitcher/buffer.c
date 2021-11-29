@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -167,4 +168,3 @@ int pitcher_auto_remove_buffer(struct pitcher_buffer *buffer, void *arg, int *de
 
 	return RET_OK;
 }
-

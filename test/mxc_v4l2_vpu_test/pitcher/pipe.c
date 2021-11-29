@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -230,4 +231,3 @@ int pitcher_set_pipe_notify(Pipe p, notify_callback notify)
 
 	return RET_OK;
 }
-

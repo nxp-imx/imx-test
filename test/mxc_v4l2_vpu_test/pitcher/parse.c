@@ -15,6 +15,7 @@
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -418,4 +419,3 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 	PITCHER_LOG("total frame number : %d\n", index);
 	return 0;
 }
-

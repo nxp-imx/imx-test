@@ -15,6 +15,7 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -360,4 +361,3 @@ Pipe pitcher_get_unit_source(Unit u)
 
 	return unit->in;
 }
-

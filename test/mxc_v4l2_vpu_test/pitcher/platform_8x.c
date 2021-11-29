@@ -15,6 +15,7 @@
  *
  * Author Shijie Qin<Shijie.qin@nxp.com>
  */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,4 +42,3 @@ int set_decoder_parameter_8x(void *arg)
 
 	return ret;
 }
-
