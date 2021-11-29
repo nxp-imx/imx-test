@@ -104,7 +104,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		format.fmt.pix_mp.pixelformat = component->fourcc;
 		format.fmt.pix_mp.width = component->width;
 		format.fmt.pix_mp.height = component->height;
-		format.fmt.pix_mp.num_planes = 2;
+		format.fmt.pix_mp.num_planes = pitcher_get_format_num_planes(component->pixelformat);
 		for (i = 0; i < format.fmt.pix_mp.num_planes; i++) {
 			format.fmt.pix_mp.plane_fmt[i].bytesperline =
 							component->bytesperline;

@@ -105,6 +105,7 @@ struct pix_fmt_info {
 
 uint32_t pitcher_get_format_by_name(const char *name);
 uint32_t pitcher_get_format_by_fourcc(uint32_t fourcc);
+uint32_t pitcher_get_format_num_planes(uint32_t format);
 const char *pitcher_get_format_name(uint32_t format);
 const struct pixel_format_desc *pitcher_get_format_desc_by_name(const char *name);
 int pitcher_get_pix_fmt_info(struct pix_fmt_info *info, uint32_t alignment);

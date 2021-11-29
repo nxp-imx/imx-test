@@ -339,6 +339,14 @@ uint32_t pitcher_get_format_by_fourcc(uint32_t fourcc)
 	return PIX_FMT_NONE;
 }
 
+uint32_t pitcher_get_format_num_planes(uint32_t format)
+{
+	if (format >= PIX_FMT_NB)
+		return 0;
+
+	return pix_fmt_descriptors[format].num_planes;
+}
+
 const char *pitcher_get_format_name(uint32_t format)
 {
 	if (format >= PIX_FMT_NB)
