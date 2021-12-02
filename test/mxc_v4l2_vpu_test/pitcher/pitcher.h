@@ -74,6 +74,7 @@ struct pitcher_buffer {
 	unsigned int flags;
 	void *priv;
 	struct pix_fmt_info *format;
+	struct v4l2_rect *crop;
 };
 
 typedef int (*handle_plane)(struct pitcher_buf_ref *plane,

@@ -194,6 +194,33 @@ static int __get_v4l2_min_buffers(int fd, uint32_t type)
 	return ctrl.value;
 }
 
+static int __get_crop(struct v4l2_component_t *component)
+{
+	struct v4l2_selection s;
+	int ret;
+
+	assert(component && component->fd >= 0);
+
+	memset(&s, 0, sizeof(s));
+
+	if (V4L2_TYPE_IS_OUTPUT(component->type))
+		return RET_OK;
+
+	s.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	s.target = V4L2_SEL_TGT_COMPOSE;
+	ret = ioctl(component->fd, VIDIOC_G_SELECTION, &s);
+	if (ret < 0)
+		return -RET_E_INVAL;
+
+	component->crop.left = s.r.left;
+	component->crop.top = s.r.top;
+	component->crop.width = s.r.width;
+	component->crop.height = s.r.height;
+	PITCHER_LOG("crop info, %d %d %d %d\n", s.r.left, s.r.top, s.r.width, s.r.height);
+
+	return RET_OK;
+}
+
 static int __set_crop(struct v4l2_component_t *component)
 {
 	struct v4l2_selection s;
@@ -708,8 +735,10 @@ static int __alloc_v4l2_buffer(struct v4l2_component_t *component)
 			break;
 		buffer->index = i;
 		component->buffers[i] = buffer;
-		if (supported_fmt)
+		if (supported_fmt) {
 			buffer->format = &component->format;
+			buffer->crop = &component->crop;
+		}
 	}
 	component->buffer_count = i;
 	if (!component->buffer_count)
@@ -772,6 +801,7 @@ static int __init_v4l2(struct v4l2_component_t *component)
 	}
 
 	__set_crop(component);
+	__get_crop(component);
 
 	ret = __set_v4l2_fps(component);
 	if (ret < 0) {

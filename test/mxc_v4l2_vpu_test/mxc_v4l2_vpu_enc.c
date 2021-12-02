@@ -126,6 +126,7 @@ struct convert_test_t {
 	int chnno;
 	uint32_t width;
 	uint32_t height;
+	struct v4l2_rect crop;
 	uint32_t ifmt;
 	int end;
 	struct pix_fmt_info format;
@@ -1929,6 +1930,45 @@ static void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
 	}
 }
 
+static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
+{
+	struct test_file_t *file = arg;
+	struct pix_fmt_info *format = buffer->format;
+	struct v4l2_rect *crop = buffer->crop;
+	const struct pixel_format_desc *desc = buffer->format->desc;
+	struct pitcher_buf_ref splane;
+	int w, h, line;
+	int planes_line;
+	int i, j;
+	unsigned long offset;
+
+	for (i = 0; i < format->num_planes; i++) {
+		offset = 0;
+
+		pitcher_get_buffer_plane(buffer, i, &splane);
+		if (crop->width != 0 && crop->height != 0) {
+			w = crop->width;
+			h = crop->height;
+		} else {
+			w = format->width;
+			h = format->height;
+		}
+		if (i) {
+			w >>= desc->log2_chroma_w;
+			h >>= desc->log2_chroma_h;
+		}
+		line = ALIGN(w * desc->comp[i].bpp, 8) >> 3;
+
+		planes_line = format->planes[i].line;
+		for (j = 0; j < h; j++) {
+			fwrite((uint8_t *)splane.virt + offset, 1, line, file->filp);
+			offset += planes_line;
+		}
+	}
+
+	return 0;
+}
+
 static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 {
 	struct test_file_t *file = arg;
@@ -1941,9 +1981,15 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 
 	ofile_insert_header(file, buffer);
 
-	for (i = 0; i < buffer->count; i++)
-		fwrite(buffer->planes[i].virt, 1, buffer->planes[i].bytesused,
-				file->filp);
+	if (buffer->format->format < PIX_FMT_COMPRESSED &&
+	    buffer->format->format != PIX_FMT_RFC &&
+	    buffer->format->format != PIX_FMT_RFCX) {
+		ofile_output_by_line(file, buffer);
+	} else {
+		for (i = 0; i < buffer->count; i++)
+			fwrite(buffer->planes[i].virt, 1, buffer->planes[i].bytesused,
+					file->filp);
+	}
 
 	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
 		file->end = true;
@@ -2080,6 +2126,12 @@ static int set_convert_source(struct test_node *node,
 	cvrt->format.format = cvrt->node.pixelformat;
 	cvrt->format.width = cvrt->node.width;
 	cvrt->format.height = cvrt->node.height;
+	if (src->type == TEST_TYPE_DECODER) {
+		struct decoder_test_t *decoder;
+
+		decoder = container_of(src, struct decoder_test_t, node);
+		memcpy(&cvrt->crop, &decoder->capture.crop, sizeof(cvrt->crop));
+	}
 	pitcher_get_pix_fmt_info(&cvrt->format, 0);
 
 	return RET_OK;
@@ -2203,6 +2255,7 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 			return -RET_E_NOT_READY;
 
 		buffer->format = &cvrt->format;
+		buffer->crop = &cvrt->crop;
 		cvrt->ctx->src = pbuf;
 		cvrt->ctx->dst = buffer;
 		if (cvrt->ctx->convert_frame)
