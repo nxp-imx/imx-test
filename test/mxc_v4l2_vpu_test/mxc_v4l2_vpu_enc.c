@@ -3412,6 +3412,8 @@ int check_source(int source)
 		return -RET_E_INVAL;
 	if (nodes[source]->pixelformat >= PIX_FMT_NB)
 		return -RET_E_INVAL;
+	if (nodes[source]->pixelformat >= PIX_FMT_COMPRESSED)
+		return 0;
 	if (!nodes[source]->width || !nodes[source]->height)
 		return -RET_E_INVAL;
 
