@@ -591,7 +591,7 @@ struct mxc_vpu_test_option camera_options[] = {
 	{"framerate", 1, "--framerate <f>\n\t\t\tset frame rate(fps)"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset frame number"},
 	{"transtype", 1, "--transtype <type>\n\t\t\tset buffer type of transfer to sink node,\n\
-			\r\t\t\t1:mmap, 2: userptr(default), 3: onvelay(not support), 4: dmabuf"},
+			\r\t\t\t1:mmap, 2: userptr, 3: onvelay(not support), 4: dmabuf(default)"},
 	{NULL, 0, NULL},
 };
 
@@ -749,7 +749,7 @@ static struct test_node *alloc_camera_node(void)
 	camera->node.init_node = init_camera_node;
 	camera->node.free_node = free_camera_node;
 	camera->capture.chnno = -1;
-	camera->trans_type = V4L2_MEMORY_USERPTR;
+	camera->trans_type = V4L2_MEMORY_DMABUF;
 
 	return &camera->node;
 }
