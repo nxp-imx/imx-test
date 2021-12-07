@@ -720,7 +720,7 @@ static int __alloc_v4l2_buffer(struct v4l2_component_t *component)
 	component->format.height = component->height;
 	if (component->num_planes == 1)
 		component->format.size = component->sizeimage;
-	component->format.interlaced = component->field == V4L2_FIELD_INTERLACED ? 1 : 0;
+	component->format.interlaced = component->field > V4L2_FIELD_NONE  ? 1 : 0;
 	if (!pitcher_get_pix_fmt_info(&component->format, component->bytesperline))
 		supported_fmt = 1;
 

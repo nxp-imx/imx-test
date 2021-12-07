@@ -34,11 +34,11 @@ extern "C"
 #define VPU_PIX_FMT_SPK				v4l2_fourcc('S', 'P', 'K', '0')
 #define VPU_PIX_FMT_DIVX			v4l2_fourcc('D', 'I', 'V', 'X')
 #define VPU_PIX_FMT_LOGO			v4l2_fourcc('L', 'O', 'G', 'O')
-#ifndef V4L2_PIX_FMT_NV12MT_8L128
-#define V4L2_PIX_FMT_NV12MT_8L128		v4l2_fourcc('N', 'A', '1', '2') /* Y/CbCr 4:2:0 8x128 tiles */
+#ifndef V4L2_PIX_FMT_NV12M_8L128
+#define V4L2_PIX_FMT_NV12M_8L128		v4l2_fourcc('N', 'A', '1', '2') /* Y/CbCr 4:2:0 8x128 tiles */
 #endif
-#ifndef V4L2_PIX_FMT_NV12MT_10BE_8L128
-#define V4L2_PIX_FMT_NV12MT_10BE_8L128		v4l2_fourcc('N', 'T', '1', '2') /* Y/CbCr 4:2:0 10-bit 8x128 tiles */
+#ifndef V4L2_PIX_FMT_NV12M_10BE_8L128
+#define V4L2_PIX_FMT_NV12M_10BE_8L128		v4l2_fourcc_be('N', 'T', '1', '2') /* Y/CbCr 4:2:0 10-bit 8x128 tiles */
 #endif
 
 int set_decoder_parameter_8x(void *arg);
