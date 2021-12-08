@@ -1983,7 +1983,9 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 
 	if (buffer->format->format < PIX_FMT_COMPRESSED &&
 	    buffer->format->format != PIX_FMT_RFC &&
-	    buffer->format->format != PIX_FMT_RFCX) {
+	    buffer->format->format != PIX_FMT_RFCX &&
+	    buffer->format->desc->tile_ws == 0 &&
+	    buffer->format->desc->tile_hs == 0) {
 		ofile_output_by_line(file, buffer);
 	} else {
 		for (i = 0; i < buffer->count; i++)
