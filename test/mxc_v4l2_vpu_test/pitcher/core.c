@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -507,8 +506,10 @@ static int __poll_func(struct pitcher_poll_fd *pfd,
 		else
 			PITCHER_ERR("[%s] want event: 0x%x, but 0x%x\n",
 					chn->name, chn->pfd.events, events);
-		if (events & POLLERR)
+		if ((events & POLLERR) && chn->state == PITCHER_STATE_ACTIVE) {
+			PITCHER_LOG("%s POLLERR\n", chn->name);
 			chn->error = 1;
+		}
 	}
 
 	if (chn->state == PITCHER_STATE_STOPPED)
@@ -781,6 +782,7 @@ void pitcher_set_error(unsigned int chnno)
 	if (!chn)
 		return;
 
+	PITCHER_LOG("%s error\n", chn->name);
 	chn->error = 1;
 }
 

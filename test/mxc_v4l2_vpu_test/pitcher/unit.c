@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +28,7 @@
 #include "unit.h"
 
 #ifndef MAX_UNIT_OUTPUT_COUNT
-#define MAX_UNIT_OUTPUT_COUNT		8
+#define MAX_UNIT_OUTPUT_COUNT		16
 #endif
 
 struct pitcher_unit {

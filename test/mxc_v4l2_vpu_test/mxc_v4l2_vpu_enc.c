@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1061,6 +1060,8 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		profile_id = V4L2_CID_MPEG_VIDEO_VP8_PROFILE;
 		validate_vpx_profile_level(encoder);
 		break;
+	case PIX_FMT_JPEG:
+		return 0;
 	default:
 		return -RET_E_INVAL;
 	}
@@ -1134,6 +1135,8 @@ static int init_encoder_node(struct test_node *node)
 
 	subscribe_event(encoder->fd);
 
+	if (encoder->node.pixelformat == PIX_FMT_JPEG)
+		encoder->node.framerate = 0;
 	encoder->output.desc = pitcher_v4l2_output;
 	encoder->capture.desc = pitcher_v4l2_capture;
 	encoder->capture.fd = encoder->fd;

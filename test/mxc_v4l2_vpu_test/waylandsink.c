@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #ifdef ENABLE_WAYLAND
 #include <unistd.h>
 #include <stdio.h>

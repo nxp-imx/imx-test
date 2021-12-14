@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>

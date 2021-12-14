@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +84,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 			component->fourcc = format.fmt.pix_mp.pixelformat;
 		component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc);
 	}
-	if (!component->width || !component->height) {
+	if (!V4L2_TYPE_IS_OUTPUT(component->type) && (!component->width || !component->height)) {
 		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
 			component->width = format.fmt.pix.width;
 			component->height = format.fmt.pix.height;
@@ -296,6 +295,28 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 	PITCHER_LOG("%s request buffers : %d, memory : %d\n",
 		V4L2_TYPE_IS_OUTPUT(component->type) ? "output" : "capture",
 		req_bufs.count, req_bufs.memory);
+
+	return RET_OK;
+}
+
+static int __rel_v4l2_buffer(struct v4l2_component_t *component)
+{
+	struct v4l2_requestbuffers req_bufs;
+	int fd;
+	int ret;
+
+	assert(component && component->fd >= 0);
+
+	fd = component->fd;
+	memset(&req_bufs, 0, sizeof(req_bufs));
+	req_bufs.type = component->type;
+	req_bufs.memory = component->memory;
+	ret = ioctl(fd, VIDIOC_REQBUFS, &req_bufs);
+	if (ret) {
+		PITCHER_ERR("VIDIOC_REQBUFS 0 fail, error : %s\n",
+				strerror(errno));
+		return -RET_E_INVAL;
+	}
 
 	return RET_OK;
 }
@@ -839,7 +860,7 @@ static int __cleanup_v4l2(struct v4l2_component_t *component)
 		SAFE_RELEASE(component->buffers[i], pitcher_put_buffer);
 	}
 
-	return RET_OK;
+	return __rel_v4l2_buffer(component);
 }
 
 static int get_v4l2_fourcc(struct v4l2_component_t *component)

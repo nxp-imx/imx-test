@@ -15,7 +15,6 @@
  *
  * Author Ming Qian<ming.qian@nxp.com>
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,6 +82,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.num_planes = 1,
 		.comp = {
 			{16, 8},
+		},
+	},
+	[PIX_FMT_YUV444] = {
+		.name = "yuv24",
+		.fourcc = V4L2_PIX_FMT_YUV24,
+		.num_planes = 1,
+		.comp = {
+			{24, 8},
 		},
 	},
 	[PIX_FMT_I420_10LE] = {
