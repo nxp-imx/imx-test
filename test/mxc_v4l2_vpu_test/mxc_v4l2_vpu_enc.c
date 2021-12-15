@@ -166,6 +166,7 @@ struct g2d_cvt_test_t {
 	int chnno;
 	uint32_t ifmt;
 	struct pix_fmt_info format;
+	struct v4l2_rect crop;
 	struct convert_ctx *ctx;
 	unsigned long frame_count;
 	int end;
@@ -1949,7 +1950,7 @@ static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 		offset = 0;
 
 		pitcher_get_buffer_plane(buffer, i, &splane);
-		if (crop->width != 0 && crop->height != 0) {
+		if (crop && crop->width != 0 && crop->height != 0) {
 			w = crop->width;
 			h = crop->height;
 		} else {
@@ -2407,6 +2408,12 @@ static int set_g2d_cvt_source(struct test_node *node,
 	g2dc->format.format = g2dc->node.pixelformat;
 	g2dc->format.width = g2dc->node.width;
 	g2dc->format.height = g2dc->node.height;
+	if (src->type == TEST_TYPE_DECODER) {
+		struct decoder_test_t *decoder;
+
+		decoder = container_of(src, struct decoder_test_t, node);
+		memcpy(&g2dc->crop, &decoder->capture.crop, sizeof(g2dc->crop));
+	}
 	pitcher_get_pix_fmt_info(&g2dc->format, 0);
 	PITCHER_LOG("set g2d convert source %s %dx%d -> %s\n",
 			pitcher_get_format_name(src->pixelformat),
@@ -2513,6 +2520,7 @@ static int g2d_cvt_run(void *arg, struct pitcher_buffer *pbuf)
 			return -RET_E_NOT_READY;
 
 		buffer->format = &g2dc->format;
+		buffer->crop = &g2dc->crop;
 		for (i = 0; i < buffer->format->num_planes; i++)
 			buffer->planes[i].bytesused = buffer->format->planes[i].size;
 		g2dc->ctx->src = pbuf;
