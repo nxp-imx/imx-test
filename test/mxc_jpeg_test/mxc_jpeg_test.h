@@ -35,7 +35,7 @@ static struct pix_fmt_data fmt_data[] = {
 	{
 		.name	= "yuv420",
 		.descr	= "2-planes, Y and UV-interleaved, same as NV12",
-		.fourcc	= V4L2_PIX_FMT_NV12
+		.fourcc	= V4L2_PIX_FMT_NV12M
 	},
 	{
 		.name	= "yuv422",
@@ -225,7 +225,7 @@ void v4l2_s_fmt_cap(int vdev_fd, bool is_mp, const struct encoder_args ea,
 	} else {
 		cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		cap_fmt.fmt.pix_mp.pixelformat = pixelformat;
-		if (pixelformat == V4L2_PIX_FMT_NV12)
+		if (pixelformat == V4L2_PIX_FMT_NV12M)
 			cap_fmt.fmt.pix_mp.num_planes = 2;
 		else
 			cap_fmt.fmt.pix_mp.num_planes = 1;

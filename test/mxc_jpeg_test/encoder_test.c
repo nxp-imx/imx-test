@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 	if (!is_mp) {
 		fread(bufferout_start[0], filesize, 1, testraw);
 	} else { /* multi-planar */
-		if (ea.fourcc != V4L2_PIX_FMT_NV12) {
+		if (ea.fourcc != V4L2_PIX_FMT_NV12M) {
 			fread(bufferout_start[0], filesize, 1, testraw);
 		} else {
 			int expected_size = ea.width * ea.height * 3 / 2;
