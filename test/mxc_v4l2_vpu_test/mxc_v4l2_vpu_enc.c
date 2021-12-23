@@ -63,6 +63,7 @@ struct encoder_test_t {
 	uint32_t qp_min;
 	uint32_t chroma_qp_index_offset;
 	uint32_t bframes;
+	uint32_t quality;
 
 	struct v4l2_enc_roi_param roi;
 	struct v4l2_enc_ipcm_param ipcm;
@@ -618,6 +619,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"nbr", 2, "--nbr <br> <no>\n\t\t\tset encoder new target bitrate since frame <no>, the unit is b"},
 	{"seqhdr", 1, "--seqhdr <set>\n\t\t\tset encoder idr sequence header"},
 	{"cpbsize", 1, "--cpbsize <size>\n\t\t\tset encoder coded picture buffer size, the unit is b"},
+	{"quality", 1, "--quality <quality>\n\t\t\tset jpeg quality"},
 	{NULL, 0, NULL},
 };
 
@@ -1090,6 +1092,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		qp_min_id = V4L2_CID_MPEG_VIDEO_VPX_MIN_QP;
 		break;
 	case PIX_FMT_JPEG:
+		set_ctrl(fd, V4L2_CID_JPEG_COMPRESSION_QUALITY, encoder->quality);
 		return 0;
 	default:
 		return -RET_E_INVAL;
@@ -1293,6 +1296,7 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->bframes = 0;
 	encoder->qp = 25;
 	encoder->target_bitrate = 2 * 1024 * 1024;
+	encoder->quality = 75;
 	encoder->idrhdr = 1;
 	encoder->output.chnno = -1;
 	encoder->capture.chnno = -1;
@@ -1383,6 +1387,8 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->idrhdr = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "cpbsize")) {
 		encoder->cpbsize = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "quality")) {
+		encoder->quality = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
@@ -1854,6 +1860,11 @@ static int init_ifile_node(struct test_node *node)
 	file->format.height = file->node.height;
 	pitcher_get_pix_fmt_info(&file->format, file->alignment);
 	node->bytesperline = file->alignment;
+	if (file->node.pixelformat == PIX_FMT_JPEG) {
+		file->format.size = file->size;
+		file->format.width = file->node.width = 0;
+		file->format.height = file->node.height = 0;
+	}
 
 	ret = pitcher_register_chn(file->node.context, &file->desc, file);
 	if (ret < 0) {
