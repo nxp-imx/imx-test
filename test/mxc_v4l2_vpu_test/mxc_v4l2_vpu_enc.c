@@ -1579,6 +1579,7 @@ static int init_decoder_node(struct test_node *node)
 		return ret;
 	}
 	decoder->output.chnno = ret;
+	pitcher_set_ignore_pollerr(decoder->output.chnno, true);
 
 	return init_decoder_platform(decoder);
 }

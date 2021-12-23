@@ -137,6 +137,7 @@ int pitcher_start_chn(unsigned int chnno);
 int pitcher_stop_chn(unsigned int chnno);
 int pitcher_set_skip(unsigned int src, unsigned int dst,
 			uint32_t numerator, uint32_t denominator);
+void pitcher_set_ignore_pollerr(unsigned int chnno, unsigned int ignore);
 int pitcher_get_buffer_plane(struct pitcher_buffer *buf, int index, struct pitcher_buf_ref *plane);
 unsigned long pitcher_get_buffer_plane_size(struct pitcher_buffer *buf, int index);
 void *pitcher_get_frame_line_vaddr(struct pitcher_buffer *buf, int index, int y);

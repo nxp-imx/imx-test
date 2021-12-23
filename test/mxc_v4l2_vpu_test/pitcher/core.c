@@ -44,6 +44,7 @@ struct pitcher_chn {
 	unsigned int state;
 	struct pitcher_poll_fd pfd;
 	struct pitcher_core *core;
+	unsigned int ignore_pollerr;
 };
 
 struct connect_t {
@@ -503,7 +504,8 @@ static int __poll_func(struct pitcher_poll_fd *pfd,
 					chn->name, chn->pfd.events, events);
 		if ((events & POLLERR) && chn->state == PITCHER_STATE_ACTIVE) {
 			PITCHER_LOG("%s POLLERR\n", chn->name);
-			chn->error = 1;
+			if (!chn->ignore_pollerr)
+				chn->error = 1;
 		}
 	}
 
@@ -888,4 +890,15 @@ int pitcher_set_skip(unsigned int src, unsigned int dst,
 	PITCHER_LOG("<%s, %s> skip %d/%d\n",
 			ct.src->name, ct.dst->name, numerator, denominator);
 	return pitcher_set_pipe_skip((Pipe)ct.priv, numerator, denominator);
+}
+
+void pitcher_set_ignore_pollerr(unsigned int chnno, unsigned int ignore)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return;
+
+	chn->ignore_pollerr = ignore;
 }
