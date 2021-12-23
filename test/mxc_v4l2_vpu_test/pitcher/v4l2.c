@@ -402,7 +402,7 @@ static void __qbuf(struct v4l2_component_t *component,
 	if (!buffer)
 		return;
 
-	if (V4L2_TYPE_IS_OUTPUT(component->type) && !component->enable)
+	if (!component->enable)
 		return;
 
 	fd = component->fd;
@@ -696,6 +696,8 @@ static int __recycle_v4l2_buffer(struct pitcher_buffer *buffer,
 		is_del = true;
 	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
 		is_del = true;
+	if (pitcher_get_buffer_refcount(buffer))
+		is_del = false;
 	if (is_del)
 		component->slots[buffer->index] = NULL;
 
