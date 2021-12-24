@@ -420,7 +420,6 @@ static int __process_chn_stopping(struct pitcher_chn *chn)
 	if (chn->state != PITCHER_STATE_STOPPING)
 		return RET_OK;
 
-	dst = __get_sink_chn(chn->chnno);
 	dst = __get_alive_sink_chn(chn->chnno);
 	if (dst)
 		return RET_OK;
