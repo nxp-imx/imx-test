@@ -439,7 +439,7 @@ int pitcher_get_pix_fmt_info(struct pix_fmt_info *info, uint32_t alignment)
 			w >>= desc->log2_chroma_w;
 			h >>= desc->log2_chroma_h;
 		}
-		line = ALIGN(w * desc->comp[i].bpp, 8) >> 3;
+		line = desc->comp[i].bpp ? ALIGN(w * desc->comp[i].bpp, 8) >> 3 : w;
 		line = ALIGN(line, alignment);
 		pitcher_fill_plane_desc(&info->planes[i], line, h);
 		size += info->planes[i].size;
