@@ -573,6 +573,7 @@ int pitcher_sw_unpack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 		ret = swc_unpack_nvx2(src, dst);
 		break;
 	case PIX_FMT_P010:
+	case PIX_FMT_P012:
 		ret = swc_copy_p0xx(src, dst);
 		break;
 	case PIX_FMT_NV12_10BE_8L128:
@@ -599,6 +600,7 @@ int pitcher_sw_pack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 		ret = swc_pack_i420_10le(src, dst);
 		break;
 	case PIX_FMT_P010:
+	case PIX_FMT_P012:
 		ret = swc_copy_p0xx(src, dst);
 		break;
 	default:
@@ -770,8 +772,8 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 
 	if (!ctx->src->format || !ctx->dst->format)
 		return -RET_E_NULL_POINTER;
-	if (ctx->src->format->width != ctx->dst->format->width ||
-	    ctx->src->format->height != ctx->dst->format->height)
+	if (ctx->src->format->width > ctx->dst->format->width ||
+	    ctx->src->format->height > ctx->dst->format->height)
 		return -RET_E_INVAL;
 	if (ctx->dst->format->interlaced) {
 		PITCHER_ERR("not support to convert to interlaced format\n");
