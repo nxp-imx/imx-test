@@ -2213,9 +2213,9 @@ static int set_convert_source(struct test_node *node,
 		return -RET_E_INVAL;
 
 	cvrt = container_of(node, struct convert_test_t, node);
-	/* width and height have to align to 2 */
-	cvrt->node.width = ALIGN_DOWN(src->width, 0x2);
-	cvrt->node.height = ALIGN_DOWN(src->height, 0x2);
+	/* width and height have to align to 8 */
+	cvrt->node.width = ALIGN(src->width, 8);
+	cvrt->node.height = ALIGN(src->height, 8);
 	/*cvrt->node.bytesperline = src->bytesperline;*/
 	cvrt->ifmt = src->pixelformat;
 
@@ -2230,6 +2230,8 @@ static int set_convert_source(struct test_node *node,
 		memcpy(&cvrt->crop, &decoder->capture.crop, sizeof(cvrt->crop));
 	}
 	pitcher_get_pix_fmt_info(&cvrt->format, 0);
+	cvrt->format.width = src->width;
+	cvrt->format.height = src->height;
 
 	return RET_OK;
 }
