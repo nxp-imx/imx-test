@@ -171,6 +171,18 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 10},
 		},
 	},
+	[PIX_FMT_P012] = {
+		.name = "p012",
+		.fourcc = v4l2_fourcc('P', '0', '1', '2'),
+		.fourcc_nc = v4l2_fourcc('P', 'M', '1', '2'),
+		.num_planes = 2,
+		.log2_chroma_w = 1,
+		.log2_chroma_h = 1,
+		.comp = {
+			{16, 12},
+			{32, 12},
+		},
+	},
 	[PIX_FMT_NVX2] = {
 		.name = "nvx2",
 		.fourcc = v4l2_fourcc('N', 'V', 'X', '2'),
