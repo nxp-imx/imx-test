@@ -21,11 +21,13 @@
 #include "platform_8x.h"
 #include "convert.h"
 
+#define CVRT_MID_FMT16	PIX_FMT_P016
+
 struct sw_cvrt_t {
 	struct pix_fmt_info format;
 	struct pitcher_buffer *mid;
-	struct pix_fmt_info format10;
-	struct pitcher_buffer *mid10;
+	struct pix_fmt_info format16;
+	struct pitcher_buffer *mid16;
 };
 
 static void unpack_tile_2_nv12(uint8_t * src, uint32_t tw, uint32_t x,
@@ -177,7 +179,7 @@ static int swc_unpack_nv12_10be_8l128(struct pitcher_buffer *src,
 			pdata[1] = TILE_POS_TO_ADDR(luma, offset[0],ts, tw, y % th, pos[1]);
 			Y = (GET_U8_BITS(pdata[0], mask[0], 0) << bits[1]) |
 					GET_U8_BITS(pdata[1], mask[1], 8 - bits[1]);
-			py[x] = Y;
+			py[x] = Y << 6;
 
 			if ((y % 2 == 0) && (x % 2 == 0)) {
 				get_10BE_pos(x, pos, bits, mask);
@@ -190,8 +192,8 @@ static int swc_unpack_nv12_10be_8l128(struct pitcher_buffer *src,
 				pdata[1] = TILE_POS_TO_ADDR(chroma, offset[1], ts, tw, (y / 2) % th, pos[1]);
 				V = (GET_U8_BITS(pdata[0], mask[0], 0) << bits[1]) | GET_U8_BITS(pdata[1], mask[1], 8 - bits[1]);
 
-				uv[x] = U;
-				uv[x + 1] = V;
+				uv[x] = U << 6;
+				uv[x + 1] = V << 6;
 			}
 		}
 	}
@@ -329,7 +331,7 @@ static int swc_copy_nv12(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	return 0;
 }
 
-static int swc_pack_p010(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+static int swc_copy_p0xx(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	uint32_t width = src->format->width;
 	uint32_t height = src->format->height;
@@ -337,44 +339,15 @@ static int swc_pack_p010(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	uint16_t *uv;
 	uint16_t *pdst;
 	uint32_t y;
-	uint32_t x;
 
 	for (y = 0; y < height; y++) {
 		py = pitcher_get_frame_line_vaddr(src, 0, y);
 		pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
-		for (x = 0; x < width; x++)
-			pdst[x] = py[x] << 6;
+		memcpy(pdst, py, width * 2);
 		if (y < DIV_ROUND_UP(height, 2)) {
 			uv = pitcher_get_frame_line_vaddr(src, 1, y);
 			pdst = pitcher_get_frame_line_vaddr(dst, 1, y);
-			for (x = 0; x < width; x++)
-				pdst[x] = uv[x] << 6;
-		}
-	}
-
-	return 0;
-}
-
-static int swc_unpack_p010(struct pitcher_buffer *src, struct pitcher_buffer *dst)
-{
-	uint32_t width = src->format->width;
-	uint32_t height = src->format->height;
-	uint16_t *py;
-	uint16_t *uv;
-	uint16_t *psrc;
-	uint32_t y;
-	uint32_t x;
-
-	for (y = 0; y < height; y++) {
-		py = pitcher_get_frame_line_vaddr(dst, 0, y);
-		psrc = pitcher_get_frame_line_vaddr(src, 0, y);
-		for (x = 0; x < width; x++)
-			py[x] = psrc[x] >> 6;
-		if (y < DIV_ROUND_UP(height, 2)) {
-			uv = pitcher_get_frame_line_vaddr(dst, 1, y);
-			psrc = pitcher_get_frame_line_vaddr(src, 1, y);
-			for (x = 0; x < width; x++)
-				uv[x] = psrc[x] >> 6;
+			memcpy(pdst, uv, width * 2);
 		}
 	}
 
@@ -399,7 +372,7 @@ static int swc_unpack_nvx2(struct pitcher_buffer *src, struct pitcher_buffer *ds
 		nr = 0;
 		size = src->format->planes[0].line;
 		for (x = 0; x < width; x++) {
-			py[x] = pitcher_get_bits_val_le(psrc, size, nr, 10);
+			py[x] = pitcher_get_bits_val_le(psrc, size, nr, 10) << 6;
 			nr += 10;
 		}
 		if (y < DIV_ROUND_UP(height, 2)) {
@@ -409,9 +382,35 @@ static int swc_unpack_nvx2(struct pitcher_buffer *src, struct pitcher_buffer *ds
 
 			nr = 0;
 			for (x = 0; x < width; x++) {
-				uv[x] = pitcher_get_bits_val_le(psrc, size, nr, 10);
+				uv[x] = pitcher_get_bits_val_le(psrc, size, nr, 10) << 6;
 				nr += 10;
 			}
+		}
+	}
+
+	return 0;
+}
+
+static int swc_unpack_nv12_10le(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	uint32_t x;
+
+	for (y = 0; y < h; y++) {
+		uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		for (x = 0; x < w; x++)
+			pdst[x] = psrc[x] << 6;
+
+		if (y < DIV_ROUND_UP(h, 2)) {
+			uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 1, y);
+			uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 1, y);
+
+			for (x = 0; x < w; x++)
+				pdst[x] = psrc[x] << 6;
 		}
 	}
 
@@ -429,7 +428,8 @@ static int swc_unpack_i420_10le(struct pitcher_buffer *src, struct pitcher_buffe
 		uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
 		uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
 
-		memcpy(pdst, psrc, w);
+		for (x = 0; x < w; x++)
+			pdst[x] = psrc[x] << 6;
 
 		if (y < DIV_ROUND_UP(h, 2)) {
 			uint16_t *pu = pitcher_get_frame_line_vaddr(src, 1, y);
@@ -437,9 +437,36 @@ static int swc_unpack_i420_10le(struct pitcher_buffer *src, struct pitcher_buffe
 			uint16_t *uv = pitcher_get_frame_line_vaddr(dst, 1, y);
 
 			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
-				uv[x * 2] = pu[x];
-				uv[x * 2 + 1] = pv[x];
+				uv[x * 2] = pu[x] << 6;
+				uv[x * 2 + 1] = pv[x] << 6;
 			}
+		}
+	}
+
+	return 0;
+}
+
+static int swc_pack_nv12_10le(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	uint32_t x;
+
+	for (y = 0; y < h; y++) {
+		uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		memcpy(pdst, psrc, w * 2);
+		for (x = 0; x < w; x++)
+			pdst[x] = psrc[x] >> 6;
+
+		if (y < DIV_ROUND_UP(h, 2)) {
+			uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 1, y);
+			uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 1, y);
+
+			for (x = 0; x < w; x++)
+				pdst[x] = psrc[x] >> 6;
 		}
 	}
 
@@ -452,11 +479,13 @@ static int swc_pack_i420_10le(struct pitcher_buffer *src, struct pitcher_buffer 
 	uint32_t h = src->format->height;
 	uint32_t y;
 	uint32_t x;
+
 	for (y = 0; y < h; y++) {
 		uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
 		uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
 
-		memcpy(pdst, psrc, w * 2);
+		for (x = 0; x < w; x++)
+			pdst[x] = psrc[x] >> 6;
 
 		if (y < DIV_ROUND_UP(h, 2)) {
 			uint16_t *uv = pitcher_get_frame_line_vaddr(src, 1, y);
@@ -464,8 +493,8 @@ static int swc_pack_i420_10le(struct pitcher_buffer *src, struct pitcher_buffer 
 			uint16_t *pv = pitcher_get_frame_line_vaddr(dst, 2, y);
 
 			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
-				pu[x] = uv[x * 2];
-				pv[x] = uv[x * 2 + 1];
+				pu[x] = uv[x * 2] >> 6;
+				pv[x] = uv[x * 2 + 1] >> 6;
 			}
 		}
 	}
@@ -527,13 +556,16 @@ int pitcher_sw_pack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 }
 
 
-int pitcher_sw_unpack_10(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+int pitcher_sw_unpack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	int ret = -RET_E_NOT_SUPPORT;
 
-	assert(dst->format->format == PIX_FMT_NV12_10LE);
+	assert(dst->format->format == PIX_FMT_P016);
 
 	switch (src->format->format) {
+	case PIX_FMT_NV12_10LE:
+		ret = swc_unpack_nv12_10le(src, dst);
+		break;
 	case PIX_FMT_I420_10LE:
 		ret = swc_unpack_i420_10le(src, dst);
 		break;
@@ -541,7 +573,7 @@ int pitcher_sw_unpack_10(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 		ret = swc_unpack_nvx2(src, dst);
 		break;
 	case PIX_FMT_P010:
-		ret = swc_unpack_p010(src, dst);
+		ret = swc_copy_p0xx(src, dst);
 		break;
 	case PIX_FMT_NV12_10BE_8L128:
 		ret = swc_unpack_nv12_10be_8l128(src, dst);
@@ -553,18 +585,21 @@ int pitcher_sw_unpack_10(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	return ret;
 }
 
-int pitcher_sw_pack_10(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+int pitcher_sw_pack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	int ret = -RET_E_NOT_SUPPORT;
 
-	assert(src->format->format == PIX_FMT_NV12_10LE);
+	assert(src->format->format == CVRT_MID_FMT16);
 
 	switch (dst->format->format) {
+	case PIX_FMT_NV12_10LE:
+		ret = swc_pack_nv12_10le(src, dst);
+		break;
 	case PIX_FMT_I420_10LE:
 		ret = swc_pack_i420_10le(src, dst);
 		break;
 	case PIX_FMT_P010:
-		ret = swc_pack_p010(src, dst);
+		ret = swc_copy_p0xx(src, dst);
 		break;
 	default:
 		break;
@@ -573,7 +608,7 @@ int pitcher_sw_pack_10(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	return ret;
 }
 
-int pitcher_sw_cvrt_8_to_10(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+int pitcher_sw_cvrt_8_to_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	uint8_t *p8;
 	uint16_t *p16;
@@ -583,22 +618,22 @@ int pitcher_sw_cvrt_8_to_10(struct pitcher_buffer *src, struct pitcher_buffer *d
 	uint32_t h = src->format->height;
 
 	assert(src->format->format == PIX_FMT_NV12);
-	assert(dst->format->format == PIX_FMT_NV12_10LE);
+	assert(dst->format->format == CVRT_MID_FMT16);
 
 	for (y = 0; y < h; y++) {
 		p8 = pitcher_get_frame_line_vaddr(src, 0, y);
 		p16 = pitcher_get_frame_line_vaddr(dst, 0, y);
 
 		for (x = 0; x < w; x++)
-			p16[x] = p8[x] << 2;
+			p16[x] = p8[x] << 8;
 
 		if (y < DIV_ROUND_UP(h, 2)) {
 			p8 = pitcher_get_frame_line_vaddr(src, 1, y);
 			p16 = pitcher_get_frame_line_vaddr(dst, 1, y);
 
 			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
-				p16[x * 2] = p8[x * 2] << 2;
-				p16[x * 2 + 1] = p8[x * 2 + 1] << 2;
+				p16[x * 2] = p8[x * 2] << 8;
+				p16[x * 2 + 1] = p8[x * 2 + 1] << 8;
 			}
 		}
 	}
@@ -606,7 +641,7 @@ int pitcher_sw_cvrt_8_to_10(struct pitcher_buffer *src, struct pitcher_buffer *d
 	return 0;
 }
 
-int pitcher_sw_cvrt_10_to_8(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+int pitcher_sw_cvrt_16_to_8(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	uint8_t *p8;
 	uint16_t *p16;
@@ -615,7 +650,7 @@ int pitcher_sw_cvrt_10_to_8(struct pitcher_buffer *src, struct pitcher_buffer *d
 	uint32_t w = src->format->width;
 	uint32_t h = src->format->height;
 
-	assert(src->format->format == PIX_FMT_NV12_10LE);
+	assert(src->format->format == CVRT_MID_FMT16);
 	assert(dst->format->format == PIX_FMT_NV12);
 
 	for (y = 0; y < h; y++) {
@@ -623,15 +658,15 @@ int pitcher_sw_cvrt_10_to_8(struct pitcher_buffer *src, struct pitcher_buffer *d
 		p8 = pitcher_get_frame_line_vaddr(dst, 0, y);
 
 		for (x = 0; x < w; x++)
-			p8[x] = p16[x] >> 2;
+			p8[x] = p16[x] >> 8;
 
 		if (y < DIV_ROUND_UP(h, 2)) {
 			p16 = pitcher_get_frame_line_vaddr(src, 1, y);
 			p8 = pitcher_get_frame_line_vaddr(dst, 1, y);
 
 			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
-				p8[x * 2] = p16[x * 2] >> 2;
-				p8[x * 2 + 1] = p16[x * 2 + 1] >> 2;
+				p8[x * 2] = p16[x * 2] >> 8;
+				p8[x * 2 + 1] = p16[x * 2 + 1] >> 8;
 			}
 		}
 	}
@@ -679,33 +714,33 @@ static int pitcher_sw_convert_alloc_mid_buffer(struct convert_ctx *ctx)
 	return 0;
 }
 
-static int pitcher_sw_convert_alloc_mid10_buffer(struct convert_ctx *ctx)
+static int pitcher_sw_convert_alloc_mid16_buffer(struct convert_ctx *ctx)
 {
 	struct sw_cvrt_t *swc = ctx->priv;
 	struct pix_fmt_info format;
 	struct pitcher_buffer_desc desc;
 
 	memset(&format, 0, sizeof(format));
-	format.format = PIX_FMT_NV12_10LE;
+	format.format = CVRT_MID_FMT16;
 	format.width = ctx->src->format->width;
 	format.height = ctx->src->format->height;
 	pitcher_get_pix_fmt_info(&format, 0);
-	if (swc->mid10) {
-		if (!pitcher_compare_format(swc->mid10->format, &format))
+	if (swc->mid16) {
+		if (!pitcher_compare_format(swc->mid16->format, &format))
 			return 0;
-		SAFE_RELEASE(swc->mid10, pitcher_put_buffer);
+		SAFE_RELEASE(swc->mid16, pitcher_put_buffer);
 	}
-	swc->format10 = format;
+	swc->format16 = format;
 
 	desc.init_plane = sw_convert_init_plane;
 	desc.uninit_plane = pitcher_free_plane;
-	desc.plane_count = swc->format10.num_planes;
+	desc.plane_count = swc->format16.num_planes;
 	desc.recycle = pitcher_auto_remove_buffer;
-	desc.arg = &swc->format10;
-	swc->mid10 = pitcher_new_buffer(&desc);
-	if (!swc->mid10)
+	desc.arg = &swc->format16;
+	swc->mid16 = pitcher_new_buffer(&desc);
+	if (!swc->mid16)
 		return -RET_E_NO_MEMORY;
-	swc->mid10->format = &swc->format10;
+	swc->mid16->format = &swc->format16;
 
 	return 0;
 }
@@ -757,11 +792,11 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 		return pitcher_sw_pack(src, dst);
 	}
 
-	if (ctx->src->format->format == PIX_FMT_NV12_10LE && !ctx->src->format->interlaced &&
+	if (ctx->src->format->format == CVRT_MID_FMT16 && !ctx->src->format->interlaced &&
 			ctx->dst->format->desc->comp[0].depth > 8) {
 		src = ctx->src;
 		dst = ctx->dst;
-		return pitcher_sw_pack_10(src, dst);
+		return pitcher_sw_pack_16(src, dst);
 	}
 
 	swc = ctx->priv;
@@ -775,11 +810,11 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 			} else
 				dst = ctx->dst;
 		} else {
-			if (ctx->dst->format->format != PIX_FMT_NV12_10LE) {
-				ret = pitcher_sw_convert_alloc_mid10_buffer(ctx);
+			if (ctx->dst->format->format != CVRT_MID_FMT16) {
+				ret = pitcher_sw_convert_alloc_mid16_buffer(ctx);
 				if (ret)
 					return ret;
-				dst = swc->mid10;
+				dst = swc->mid16;
 			} else
 				dst = ctx->dst;
 		}
@@ -787,13 +822,13 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 		ret = pitcher_sw_convert_alloc_mid_buffer(ctx);
 		if (ret)
 			return ret;
-		ret = pitcher_sw_convert_alloc_mid10_buffer(ctx);
+		ret = pitcher_sw_convert_alloc_mid16_buffer(ctx);
 		if (ret)
 			return ret;
 		if (ctx->src->format->desc->comp[0].depth == 8)
 			dst = swc->mid;
 		else
-			dst = swc->mid10;
+			dst = swc->mid16;
 
 	}
 
@@ -801,7 +836,7 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 	if (src->format->desc->comp[0].depth == 8)
 		ret = pitcher_sw_unpack(src, dst);
 	else
-		ret = pitcher_sw_unpack_10(src, dst);
+		ret = pitcher_sw_unpack_16(src, dst);
 	if (ret)
 		return ret;
 	if (dst == ctx->dst)
@@ -810,11 +845,11 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 	src = dst;
 	if (!pitcher_sw_convert_check_depth(src, ctx->dst)) {
 		if (src->format->desc->comp[0].depth == 8) {
-			dst = swc->mid10;
-			ret = pitcher_sw_cvrt_8_to_10(src, dst);
+			dst = swc->mid16;
+			ret = pitcher_sw_cvrt_8_to_16(src, dst);
 		} else {
 			dst = swc->mid;
-			ret = pitcher_sw_cvrt_10_to_8(src, dst);
+			ret = pitcher_sw_cvrt_16_to_8(src, dst);
 		}
 		if (ret)
 			return ret;
@@ -825,7 +860,7 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 	if (src->format->desc->comp[0].depth == 8)
 		return pitcher_sw_pack(src, dst);
 	else
-		return pitcher_sw_pack_10(src, dst);
+		return pitcher_sw_pack_16(src, dst);
 }
 
 void pitcher_free_sw_convert(struct convert_ctx *cvrt_ctx)
@@ -838,7 +873,7 @@ void pitcher_free_sw_convert(struct convert_ctx *cvrt_ctx)
 	cvrt_ctx->priv = NULL;
 	if (swc) {
 		SAFE_RELEASE(swc->mid, pitcher_put_buffer);
-		SAFE_RELEASE(swc->mid10, pitcher_put_buffer);
+		SAFE_RELEASE(swc->mid16, pitcher_put_buffer);
 	}
 	SAFE_RELEASE(swc, pitcher_free);
 	SAFE_RELEASE(cvrt_ctx, pitcher_free);
