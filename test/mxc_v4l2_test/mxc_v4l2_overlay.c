@@ -142,6 +142,8 @@ mxc_v4l_overlay_test(int timeout)
 	struct fb_var_screeninfo fb0_var;
 	struct mxcfb_loc_alpha l_alpha;
 
+	memset(&ctl, 0, sizeof(ctl));
+
 	if (ioctl(fd_v4l, VIDIOC_OVERLAY, &overlay) < 0) {
 		printf("VIDIOC_OVERLAY start failed\n");
 		retval = TFAIL;
@@ -418,6 +420,12 @@ mxc_v4l_overlay_setup(struct v4l2_format *fmt)
 	struct v4l2_frmsizeenum fsize;
 	struct v4l2_fmtdesc ffmt;
 
+	memset(&parm, 0, sizeof(parm));
+	memset(&ctl, 0, sizeof(ctl));
+	memset(&crop, 0, sizeof(crop));
+	memset(&fsize, 0, sizeof(fsize));
+	memset(&ffmt, 0, sizeof(ffmt));
+
 	printf("sensor supported frame size:\n");
 	fsize.index = 0;
 	while (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &fsize) >= 0) {
@@ -602,6 +610,9 @@ main(int argc, char **argv)
 	struct v4l2_dbg_chip_ident chip;
 
 	print_name(argv);
+
+	memset(&fmt, 0, sizeof(fmt));
+	memset(&chip, 0, sizeof(chip));
 
 	/* for ctrl-c */
 	sigemptyset(&act.sa_mask);
