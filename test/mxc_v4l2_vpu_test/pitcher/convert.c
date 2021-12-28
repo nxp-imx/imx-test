@@ -586,6 +586,57 @@ static int swc_pack_y16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	return 0;
 }
 
+static int swc_unpack_y212(struct pitcher_buffer *src,
+			   struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t x;
+	uint32_t y;
+	uint16_t *yuv;
+	uint16_t *py;
+	uint16_t *uv;
+
+	for (y = 0; y < h; y++) {
+		yuv = pitcher_get_frame_line_vaddr(src, 0, y);
+		py = pitcher_get_frame_line_vaddr(dst, 0, y);
+		if (y % 2 == 0)
+			uv = pitcher_get_frame_line_vaddr(dst, 1, y / 2);
+
+		for (x = 0; x < w; x++) {
+			py[x] = yuv[x * 2];
+			if (y % 2 == 0)
+				uv[x] = yuv[x * 2 + 1];
+		}
+	}
+
+	return 0;
+}
+
+static int swc_pack_y212(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t x;
+	uint32_t y;
+	uint16_t *yuv;
+	uint16_t *py;
+	uint16_t *uv;
+
+	for (y = 0; y < h; y++) {
+		py = pitcher_get_frame_line_vaddr(src, 0, y);
+		uv = pitcher_get_frame_line_vaddr(src, 1, y / 2);
+		yuv = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		for (x = 0; x < w; x++) {
+			yuv[x * 2] = py[x];
+			yuv[x * 2 + 1] = uv[x];
+		}
+	}
+
+	return 0;
+}
+
 int pitcher_sw_unpack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	int ret = -RET_E_NOT_SUPPORT;
@@ -673,6 +724,9 @@ int pitcher_sw_unpack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	case PIX_FMT_Y16:
 		ret = swc_unpack_y16(src, dst);
 		break;
+	case PIX_FMT_Y212:
+		ret = swc_unpack_y212(src, dst);
+		break;
 	default:
 		break;
 	}
@@ -700,6 +754,9 @@ int pitcher_sw_pack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	case PIX_FMT_Y012:
 	case PIX_FMT_Y16:
 		ret = swc_pack_y16(src, dst);
+		break;
+	case PIX_FMT_Y212:
+		ret = swc_pack_y212(src, dst);
 		break;
 	default:
 		break;

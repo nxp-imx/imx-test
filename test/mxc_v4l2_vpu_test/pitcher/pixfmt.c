@@ -296,6 +296,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{16, 16},
 		},
 	},
+	[PIX_FMT_Y212] = {
+		.name = "y212",
+		.fourcc = v4l2_fourcc('Y', '2', '1', '2'),
+		.num_planes = 1,
+		.comp = {
+			{32, 12},
+		},
+	},
 	[PIX_FMT_H264] = {
 		.name = "h264",
 		.fourcc = V4L2_PIX_FMT_H264,
