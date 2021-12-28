@@ -272,6 +272,30 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 8},
 		},
 	},
+	[PIX_FMT_GRAY] = {
+		.name = "gray",
+		.fourcc = V4L2_PIX_FMT_GREY,
+		.num_planes = 1,
+		.comp = {
+			{8, 8},
+		},
+	},
+	[PIX_FMT_Y012] = {
+		.name = "y012",
+		.fourcc = v4l2_fourcc('Y', '0', '1', '2'),
+		.num_planes = 1,
+		.comp = {
+			{16, 12},
+		},
+	},
+	[PIX_FMT_Y16] = {
+		.name = "y16",
+		.fourcc = V4L2_PIX_FMT_Y16,
+		.num_planes = 1,
+		.comp = {
+			{16, 16},
+		},
+	},
 	[PIX_FMT_H264] = {
 		.name = "h264",
 		.fourcc = V4L2_PIX_FMT_H264,

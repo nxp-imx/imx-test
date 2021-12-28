@@ -258,6 +258,49 @@ static int swc_pack_i420(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	return 0;
 }
 
+static int swc_unpack_gray(struct pitcher_buffer *src,
+			   struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	uint32_t x;
+
+	for (y = 0; y < h; y++) {
+		uint8_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint8_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		memcpy(pdst, psrc, w);
+
+		if (y < DIV_ROUND_UP(h, 2)) {
+			uint8_t *uv = pitcher_get_frame_line_vaddr(dst, 1, y);
+
+			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
+				uv[x * 2] = 128;
+				uv[x * 2 + 1] = 128;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int swc_pack_gray(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+
+	for (y = 0; y < h; y++) {
+		uint8_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint8_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		memcpy(pdst, psrc, w);
+	}
+
+	return 0;
+}
+
 static int swc_unpack_yuyv(struct pitcher_buffer *src,
 			   struct pitcher_buffer *dst)
 {
@@ -502,6 +545,47 @@ static int swc_pack_i420_10le(struct pitcher_buffer *src, struct pitcher_buffer 
 	return 0;
 }
 
+static int swc_unpack_y16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+	uint32_t x;
+
+	for (y = 0; y < h; y++) {
+		uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		memcpy(pdst, psrc, w * 2);
+
+		if (y < DIV_ROUND_UP(h, 2)) {
+			uint16_t *uv = pitcher_get_frame_line_vaddr(dst, 1, y);
+
+			for (x = 0; x < DIV_ROUND_UP(w, 2); x++) {
+				uv[x * 2] = 128 << 8;
+				uv[x * 2 + 1] = 128 << 8;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int swc_pack_y16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t w = src->format->width;
+	uint32_t h = src->format->height;
+	uint32_t y;
+
+	for (y = 0; y < h; y++) {
+		uint16_t *psrc = pitcher_get_frame_line_vaddr(src, 0, y);
+		uint16_t *pdst = pitcher_get_frame_line_vaddr(dst, 0, y);
+
+		memcpy(pdst, psrc, w * 2);
+	}
+	return 0;
+}
+
 int pitcher_sw_unpack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	int ret = -RET_E_NOT_SUPPORT;
@@ -522,6 +606,9 @@ int pitcher_sw_unpack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 		break;
 	case PIX_FMT_NV12:
 		ret = swc_copy_nv12(src, dst);
+		break;
+	case PIX_FMT_GRAY:
+		ret = swc_unpack_gray(src, dst);
 		break;
 	default:
 		break;
@@ -547,6 +634,9 @@ int pitcher_sw_pack(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 		break;
 	case PIX_FMT_NV12:
 		ret = swc_copy_nv12(src, dst);
+		break;
+	case PIX_FMT_GRAY:
+		ret = swc_pack_gray(src, dst);
 		break;
 	default:
 		break;
@@ -579,6 +669,10 @@ int pitcher_sw_unpack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	case PIX_FMT_NV12_10BE_8L128:
 		ret = swc_unpack_nv12_10be_8l128(src, dst);
 		break;
+	case PIX_FMT_Y012:
+	case PIX_FMT_Y16:
+		ret = swc_unpack_y16(src, dst);
+		break;
 	default:
 		break;
 	}
@@ -602,6 +696,10 @@ int pitcher_sw_pack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	case PIX_FMT_P010:
 	case PIX_FMT_P012:
 		ret = swc_copy_p0xx(src, dst);
+		break;
+	case PIX_FMT_Y012:
+	case PIX_FMT_Y16:
+		ret = swc_pack_y16(src, dst);
 		break;
 	default:
 		break;
