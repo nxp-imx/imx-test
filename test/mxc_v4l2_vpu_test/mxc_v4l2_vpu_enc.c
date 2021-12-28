@@ -321,7 +321,8 @@ static int change_encoder_dynamically(struct v4l2_component_t *component)
 	if (encoder->force_key && frame_count == encoder->force_key)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME, 1);
 
-	if (encoder->bitrate_mode && encoder->new_bitrate && frame_count == encoder->nbr_no)
+	if (encoder->bitrate_mode == V4L2_MPEG_VIDEO_BITRATE_MODE_CBR &&
+			encoder->new_bitrate && frame_count == encoder->nbr_no)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->new_bitrate);
 
 	return 0;
@@ -598,7 +599,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"profile", 1, "--profile <profile>\n\t\t\tset h264 profile, 0 : baseline, 2 : main, 4 : high"},
 	{"level", 1, "--level <level>\n\t\t\tset h264 level, 0~15, 14:level_5_0(default)"},
 	{"gop", 1, "--gop <gop>\n\t\t\tset group of picture"},
-	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default)"},
+	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default), 2:constant quality 0xf:constant qp"},
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
 	{"qprange", 2, "--qprange <qp_min> <qp_max>\n\t\t\tset quantizer parameter range, 0~51"},
 	{"chroma_qp_offset", 1, "--chroma_qp_offset <offset>\n\t\t\tset h264/h265 chroma qp index offset, -12~12"},
@@ -1097,17 +1098,18 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	set_ctrl(fd, profile_id, encoder->profile);
 	if (level_id)
 		set_ctrl(fd, level_id, encoder->level);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
-	if (encoder->bitrate_mode) {
-		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE, 1);
-		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 1);
-	} else {
+	if (encoder->bitrate_mode == 0xf) {
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE, 0);
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 0);
+	} else {
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE, 1);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 1);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
 	}
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->target_bitrate);
-	if (encoder->peak_bitrate)
-		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK, encoder->peak_bitrate);
+	if (!encoder->peak_bitrate)
+		encoder->peak_bitrate = encoder->target_bitrate;
+	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK, encoder->peak_bitrate);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
 	set_ctrl(fd, qp_i_id, encoder->qp);
