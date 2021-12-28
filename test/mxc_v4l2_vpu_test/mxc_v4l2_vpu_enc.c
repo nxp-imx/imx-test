@@ -2041,6 +2041,8 @@ static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 			w = format->width;
 			h = format->height;
 		}
+		w = ALIGN(w, 1 << desc->log2_chroma_w);
+		h = ALIGN(h, 1 << desc->log2_chroma_h);
 		if (i) {
 			w >>= desc->log2_chroma_w;
 			h >>= desc->log2_chroma_h;
