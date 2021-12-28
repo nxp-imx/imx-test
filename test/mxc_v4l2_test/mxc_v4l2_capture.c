@@ -147,11 +147,20 @@ int v4l_capture_setup(void)
         struct v4l2_control ctrl;
         struct v4l2_streamparm parm;
 	struct v4l2_crop crop;
-        int fd_v4l = 0;
-		struct v4l2_mxc_dest_crop of;
+	struct v4l2_mxc_dest_crop of;
 	struct v4l2_dbg_chip_ident chip;
 	struct v4l2_frmsizeenum fsize;
 	struct v4l2_fmtdesc ffmt;
+	int fd_v4l = 0;
+
+	memset(&fmt, 0, sizeof(fmt));
+	memset(&ctrl, 0, sizeof(ctrl));
+	memset(&parm, 0, sizeof(parm));
+	memset(&crop, 0, sizeof(crop));
+	memset(&of, 0, sizeof(of));
+	memset(&chip, 0, sizeof(chip));
+	memset(&fsize, 0, sizeof(fsize));
+	memset(&ffmt, 0, sizeof(ffmt));
 
         if ((fd_v4l = open(g_v4l_device, O_RDWR, 0)) < 0)
         {
@@ -306,6 +315,7 @@ int v4l_capture_test(int fd_v4l, const char * file)
                 return -1;
         }
 
+	memset(&fmt, 0, sizeof(fmt));
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0)
         {
