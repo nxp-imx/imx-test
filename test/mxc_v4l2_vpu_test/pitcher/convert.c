@@ -710,6 +710,19 @@ static int pitcher_sw_convert_alloc_mid10_buffer(struct convert_ctx *ctx)
 	return 0;
 }
 
+int pitcher_sw_convert_check_depth(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+{
+	uint32_t src_depth = src->format->desc->comp[0].depth;
+	uint32_t dst_depth = dst->format->desc->comp[0].depth;
+
+	if (src_depth == 8 && dst_depth == 8)
+		return TRUE;
+	if (src_depth > 8 && dst_depth > 8)
+		return TRUE;
+
+	return FALSE;
+}
+
 int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 {
 	struct pitcher_buffer *src;
@@ -752,7 +765,7 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 	}
 
 	swc = ctx->priv;
-	if (ctx->src->format->desc->comp[0].depth == ctx->dst->format->desc->comp[0].depth) {
+	if (pitcher_sw_convert_check_depth(ctx->src, ctx->dst)) {
 		if (ctx->dst->format->desc->comp[0].depth == 8) {
 			if (ctx->dst->format->format != PIX_FMT_NV12) {
 				ret = pitcher_sw_convert_alloc_mid_buffer(ctx);
@@ -795,7 +808,7 @@ int pitcher_sw_convert_frame(struct convert_ctx *ctx)
 		return 0;
 
 	src = dst;
-	if (src->format->desc->comp[0].depth != ctx->dst->format->desc->comp[0].depth) {
+	if (!pitcher_sw_convert_check_depth(src, ctx->dst)) {
 		if (src->format->desc->comp[0].depth == 8) {
 			dst = swc->mid10;
 			ret = pitcher_sw_cvrt_8_to_10(src, dst);
