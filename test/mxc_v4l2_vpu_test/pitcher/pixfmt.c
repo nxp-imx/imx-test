@@ -79,7 +79,7 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{16, 8},
 		},
 	},
-	[PIX_FMT_YUV444] = {
+	[PIX_FMT_YUV24] = {
 		.name = "yuv24",
 		.fourcc = V4L2_PIX_FMT_YUV24,
 		.num_planes = 1,
@@ -302,6 +302,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.num_planes = 1,
 		.comp = {
 			{32, 12},
+		},
+	},
+	[PIX_FMT_Y312] = {
+		.name = "y312",
+		.fourcc = v4l2_fourcc('Y', '3', '1', '2'),
+		.num_planes = 1,
+		.comp = {
+			{48, 12},
 		},
 	},
 	[PIX_FMT_H264] = {
