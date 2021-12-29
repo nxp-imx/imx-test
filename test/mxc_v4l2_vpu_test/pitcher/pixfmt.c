@@ -216,6 +216,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.fourcc = v4l2_fourcc('R', 'F', 'C', 'X'),
 		.num_planes = 1,
 	},
+	[PIX_FMT_RGB24] = {
+		.name = "rgb888",
+		.fourcc = V4L2_PIX_FMT_RGB24,
+		.num_planes = 1,
+		.comp = {
+			{24, 8},
+		},
+	},
 	[PIX_FMT_RGB565] = {
 		.name = "rgb565",
 		.fourcc = V4L2_PIX_FMT_RGB565,
@@ -248,6 +256,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 8},
 		},
 	},
+	[PIX_FMT_BGR24] = {
+		.name = "bgr",
+		.fourcc = V4L2_PIX_FMT_BGR24,
+		.num_planes = 1,
+		.comp = {
+			{24, 8},
+		},
+	},
 	[PIX_FMT_BGR32] = {
 		.name = "bgr32",
 		.fourcc = V4L2_PIX_FMT_BGR32,
@@ -258,7 +274,7 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 	},
 	[PIX_FMT_ARGB] = {
 		.name = "argb",
-		.fourcc = V4L2_PIX_FMT_ABGR32,
+		.fourcc = V4L2_PIX_FMT_ARGB32,
 		.num_planes = 1,
 		.comp = {
 			{32, 8},
@@ -270,6 +286,30 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.num_planes = 1,
 		.comp = {
 			{32, 8},
+		},
+	},
+	[PIX_FMT_ABGR] = {
+		.name = "abgr",
+		.fourcc = V4L2_PIX_FMT_ABGR32,
+		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
+	[PIX_FMT_B312] = {
+		.name = "b312",
+		.fourcc = v4l2_fourcc('B', '3', '1', '2'),
+		.num_planes = 1,
+		.comp = {
+			{48, 12},
+		},
+	},
+	[PIX_FMT_B412] = {
+		.name = "b412",
+		.fourcc = v4l2_fourcc('B', '4', '1', '2'),
+		.num_planes = 1,
+		.comp = {
+			{64, 12},
 		},
 	},
 	[PIX_FMT_GRAY] = {
