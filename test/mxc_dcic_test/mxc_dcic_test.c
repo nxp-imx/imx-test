@@ -473,6 +473,7 @@ int main(int argc, char **argv)
 	fb0 = mmap(0, g_fb0_size,PROT_READ | PROT_WRITE, MAP_SHARED, fd_fb0, 0);
 	if (fb0 == MAP_FAILED) {
 		printf("\nError: failed to map framebuffer device 0 to memory.\n");
+		retval = TFAIL;
 		goto err2;
 	}
 
