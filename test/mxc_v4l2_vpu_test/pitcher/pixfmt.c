@@ -527,3 +527,72 @@ int pitcher_compare_format(struct pix_fmt_info *src, struct pix_fmt_info *dst)
 
 	return 0;
 }
+
+int pitcher_copy_buffer_data(struct pitcher_buffer *src,
+			     struct pitcher_buffer *dst)
+{
+	struct pitcher_buf_ref splane;
+	struct pitcher_buf_ref dplane;
+	struct v4l2_rect *crop;
+	const struct pixel_format_desc *desc;
+	uint32_t w, h, line;
+	uint32_t i, j;
+	void *psrc;
+	void *pdst;
+	unsigned long bytesused;
+
+	if (!src || !src->format || !dst || !dst->format ||
+	    src->format->format != dst->format->format)
+		return -RET_E_INVAL;
+	if (src->format->tile_ws || src->format->tile_hs)
+		return -RET_E_NOT_SUPPORT;
+	if (src->format->format >= PIX_FMT_COMPRESSED) {
+		pitcher_get_buffer_plane(src, 0, &splane);
+		pitcher_get_buffer_plane(dst, 0, &dplane);
+
+		if (dplane.size < splane.bytesused)
+			return -RET_E_INVAL;
+		memcpy(dplane.virt, splane.virt, splane.bytesused);
+		dst->planes[0].bytesused = splane.bytesused;
+		return RET_OK;
+	}
+
+	crop = src->crop;
+	desc = src->format->desc;
+	for (i = 0; i < src->format->num_planes; i++) {
+		pitcher_get_buffer_plane(src, i, &splane);
+		pitcher_get_buffer_plane(dst, i, &dplane);
+		if (crop && crop->width != 0 && crop->height != 0) {
+			w = crop->width;
+			h = crop->height;
+		} else {
+			w = src->format->width;
+			h = src->format->height;
+		}
+		w = min(w, dst->format->width);
+		h = min(h, dst->format->height);
+		w = ALIGN(w, 1 << desc->log2_chroma_w);
+		h = ALIGN(h, 1 << desc->log2_chroma_h);
+		if (i) {
+			w >>= desc->log2_chroma_w;
+			h >>= desc->log2_chroma_h;
+		}
+		line = ALIGN(w * desc->comp[i].bpp, 8) >> 3;
+
+		psrc = splane.virt;
+		pdst = dplane.virt;
+		bytesused = 0;
+		for (j = 0; j < h; j++) {
+			memcpy(pdst, psrc, line);
+			psrc += src->format->planes[i].line;
+			pdst += dst->format->planes[i].line;
+			bytesused += dst->format->planes[i].line;
+		}
+		if (i < dst->count)
+			dst->planes[i].bytesused = bytesused;
+		else
+			dst->planes[dst->count - 1].bytesused += bytesused;
+	}
+
+	return RET_OK;
+}

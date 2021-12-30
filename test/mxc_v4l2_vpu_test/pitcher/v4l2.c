@@ -1075,6 +1075,9 @@ static int __transfer_output_buffer_mmap(struct pitcher_buffer *src,
 	if (!src || !dst)
 		return -RET_E_NULL_POINTER;
 
+	if (pitcher_copy_buffer_data(src, dst) == RET_OK)
+		return RET_OK;
+
 	if (src->count == 1 && dst->count > 1) {
 		unsigned long total = 0;
 		unsigned long bytesused;
@@ -1175,6 +1178,14 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 	if (!buffer)
 		return -RET_E_NOT_READY;
 
+	if (pbuf->format && buffer->format) {
+		if (pbuf->format->format != buffer->format->format) {
+			PITCHER_ERR("format is not matched, %s to %s\n",
+					pitcher_get_format_name(pbuf->format->format),
+					pitcher_get_format_name(buffer->format->format));
+			return -RET_E_INVAL;
+		}
+	}
 	switch (component->memory) {
 	case V4L2_MEMORY_MMAP:
 		ret = __transfer_output_buffer_mmap(pbuf, buffer);
