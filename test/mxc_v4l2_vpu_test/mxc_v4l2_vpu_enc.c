@@ -75,6 +75,7 @@ struct encoder_test_t {
 	uint32_t new_bitrate;
 	uint32_t nbr_no;
 	uint32_t idrhdr;
+	uint32_t cpbsize;
 
 	const char *devnode;
 };
@@ -619,6 +620,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
 	{"nbr", 2, "--nbr <br> <no>\n\t\t\tset encoder new target bitrate since frame <no>, the unit is b"},
 	{"seqhdr", 1, "--seqhdr <set>\n\t\t\tset encoder idr sequence header"},
+	{"cpbsize", 1, "--cpbsize <size>\n\t\t\tset encoder coded picture buffer size, the unit is b"},
 	{NULL, 0, NULL},
 };
 
@@ -1038,6 +1040,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	int level_id = 0;
 	int qp_i_id, qp_p_id, qp_b_id;
 	int qp_max_id, qp_min_id;
+	int cpbsize_id = 0;
 
 	qp_i_id = qp_p_id = qp_b_id = 0;
 	qp_max_id = qp_min_id = 0;
@@ -1063,6 +1066,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		qp_b_id = V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP;
 		qp_max_id = V4L2_CID_MPEG_VIDEO_H264_MAX_QP;
 		qp_min_id = V4L2_CID_MPEG_VIDEO_H264_MIN_QP;
+		cpbsize_id = V4L2_CID_MPEG_VIDEO_H264_CPB_SIZE;
 		validate_h264_profile_level(encoder);
 		break;
 	case PIX_FMT_H265:
@@ -1073,6 +1077,8 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		qp_b_id = V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_QP;
 		qp_max_id = V4L2_CID_MPEG_VIDEO_HEVC_MAX_QP;
 		qp_min_id = V4L2_CID_MPEG_VIDEO_HEVC_MIN_QP;
+		/* No HEVC cpbsize v4l2-control, use H264  */
+		cpbsize_id = V4L2_CID_MPEG_VIDEO_H264_CPB_SIZE;
 		validate_h265_profile_level(encoder);
 		break;
 	case PIX_FMT_VP8:
@@ -1117,6 +1123,9 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	if (encoder->ipcm.enable)
 		set_encoder_ipcm(fd, &encoder->ipcm);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER, encoder->idrhdr);
+
+	if (encoder->cpbsize)
+		set_ctrl(fd, cpbsize_id, encoder->cpbsize);
 
 	return RET_OK;
 }
@@ -1368,6 +1377,8 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->nbr_no = strtol(argv[1], NULL, 0);
 	} else if (!strcasecmp(option->name, "seqhdr")) {
 		encoder->idrhdr = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "cpbsize")) {
+		encoder->cpbsize = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
