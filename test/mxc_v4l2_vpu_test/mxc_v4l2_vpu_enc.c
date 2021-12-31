@@ -64,6 +64,8 @@ struct encoder_test_t {
 	uint32_t target_bitrate;
 	uint32_t peak_bitrate;
 	uint32_t qp;
+	uint32_t qp_max;
+	uint32_t qp_min;
 	uint32_t bframes;
 
 	struct v4l2_enc_roi_param roi;
@@ -606,6 +608,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"gop", 1, "--gop <gop>\n\t\t\tset group of picture"},
 	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default)"},
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
+	{"qprange", 2, "--qprange <qp_min> <qp_max>\n\t\t\tset quantizer parameter range, 0~51"},
 	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is b"},
 	{"peak", 1, "--peak <br>\n\t\t\tset encoder peak bitrate, the unit is b"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
@@ -1033,6 +1036,11 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	int fd;
 	int profile_id = 0;
 	int level_id = 0;
+	int qp_i_id, qp_p_id, qp_b_id;
+	int qp_max_id, qp_min_id;
+
+	qp_i_id = qp_p_id = qp_b_id = 0;
+	qp_max_id = qp_min_id = 0;
 
 	if (!encoder || encoder->fd < 0)
 		return -RET_E_INVAL;
@@ -1050,16 +1058,30 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	case PIX_FMT_H264:
 		profile_id = V4L2_CID_MPEG_VIDEO_H264_PROFILE;
 		level_id = V4L2_CID_MPEG_VIDEO_H264_LEVEL;
+		qp_i_id = V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP;
+		qp_p_id = V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP;
+		qp_b_id = V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP;
+		qp_max_id = V4L2_CID_MPEG_VIDEO_H264_MAX_QP;
+		qp_min_id = V4L2_CID_MPEG_VIDEO_H264_MIN_QP;
 		validate_h264_profile_level(encoder);
 		break;
 	case PIX_FMT_H265:
 		profile_id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
 		level_id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
+		qp_i_id = V4L2_CID_MPEG_VIDEO_HEVC_I_FRAME_QP;
+		qp_p_id = V4L2_CID_MPEG_VIDEO_HEVC_P_FRAME_QP;
+		qp_b_id = V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_QP;
+		qp_max_id = V4L2_CID_MPEG_VIDEO_HEVC_MAX_QP;
+		qp_min_id = V4L2_CID_MPEG_VIDEO_HEVC_MIN_QP;
 		validate_h265_profile_level(encoder);
 		break;
 	case PIX_FMT_VP8:
 		profile_id = V4L2_CID_MPEG_VIDEO_VP8_PROFILE;
 		validate_vpx_profile_level(encoder);
+		qp_i_id = V4L2_CID_MPEG_VIDEO_VPX_I_FRAME_QP;
+		qp_p_id = V4L2_CID_MPEG_VIDEO_VPX_P_FRAME_QP;
+		qp_max_id = V4L2_CID_MPEG_VIDEO_VPX_MAX_QP;
+		qp_min_id = V4L2_CID_MPEG_VIDEO_VPX_MIN_QP;
 		break;
 	case PIX_FMT_JPEG:
 		return 0;
@@ -1082,9 +1104,14 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK, encoder->peak_bitrate);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, encoder->qp);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP, encoder->qp);
-	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP, encoder->qp);
+	set_ctrl(fd, qp_i_id, encoder->qp);
+	set_ctrl(fd, qp_p_id, encoder->qp);
+	if (qp_b_id)
+		set_ctrl(fd, qp_b_id, encoder->qp);
+	if (encoder->qp_min)
+		set_ctrl(fd, qp_min_id, encoder->qp_min);
+	if (encoder->qp_max)
+		set_ctrl(fd, qp_max_id, encoder->qp_max);
 	if (encoder->roi.enable)
 		set_encoder_roi(fd, &encoder->roi);
 	if (encoder->ipcm.enable)
@@ -1304,6 +1331,9 @@ static int parse_encoder_option(struct test_node *node,
 		encoder->bitrate_mode = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "qp")) {
 		encoder->qp = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "qp_range")) {
+		encoder->qp_min = strtol(argv[0], NULL, 0);
+		encoder->qp_max = strtol(argv[1], NULL, 0);
 	} else if (!strcasecmp(option->name, "bitrate")) {
 		encoder->target_bitrate = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "peak")) {
