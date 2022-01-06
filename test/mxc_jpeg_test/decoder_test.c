@@ -82,6 +82,10 @@ int main(int argc, char *argv[])
 	 */
 	fread(bufferout_start[0], filesize, 1, testjpg);
 	fclose(testjpg);
+	if (is_mp)
+		bufferout.m.planes[0].bytesused = filesize;
+	else
+		bufferout.bytesused = filesize;
 
 	/* Activate streaming for capture/output */
 	v4l2_streamon(fd, is_mp);

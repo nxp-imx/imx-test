@@ -83,9 +83,11 @@ int main(int argc, char *argv[])
 	 */
 	if (!is_mp) {
 		fread(bufferout_start[0], filesize, 1, testraw);
+		bufferout.bytesused = filesize;
 	} else { /* multi-planar */
 		if (ea.fourcc != V4L2_PIX_FMT_NV12M) {
 			fread(bufferout_start[0], filesize, 1, testraw);
+			bufferout.m.planes[0].bytesused = filesize;
 		} else {
 			int expected_size = ea.width * ea.height * 3 / 2;
 			int luma_size = ea.width * ea.height;
@@ -101,9 +103,11 @@ int main(int argc, char *argv[])
 			}
 			/* read luma */
 			fread(bufferout_start[0], luma_size, 1, testraw);
+			bufferout.m.planes[0].bytesused = luma_size;
 			/* read chroma */
 			fseek(testraw, 0, luma_size + 1);
 			fread(bufferout_start[1], chroma_size, 1, testraw);
+			bufferout.m.planes[1].bytesused = chroma_size;
 		}
 	}
 	fclose(testraw);
