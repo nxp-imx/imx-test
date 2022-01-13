@@ -421,6 +421,8 @@ int pitcher_loop_add_task(Loop l, struct pitcher_timer_task *task)
 	if (!node)
 		return -RET_E_NO_MEMORY;
 
+	if (!task->interval)
+		task->interval = LOOP_TIMEOUT_DEFAULT;
 	node->key = (unsigned long)task;
 	node->tv = pitcher_get_monotonic_raw_time();
 	node->timeout = task->interval;
