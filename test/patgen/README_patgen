@@ -1,0 +1,132 @@
+Patgen Description
+
+patgen is a simple pattern generator designed to build and run on Linux
+platforms and embedded Linux platforms. Requires standard c library. To run
+the default font needs to be a symbolically linked to the run directory.
+GPL font, K1FS-1.2, is included as the default. "DejaVuSansMono.ttf" has
+also been tested. The DejaVu font can be found in /usr/share/fonts/truetype
+on yocto systems or in /usr/share/fonts/truetype/dejavu on ubuntu systems.
+
+patgen is not intended to replace other GPU and VPU media tests. It is
+intended to provide tools to isolate and debug display and camera issues.
+
+./patgen.exe [-0 stuck zero 0xaarrbbgg][-1 stuck one 0xaarrbbgg]
+[-a alpha percent ] [-border] [-b, -bpc 1-8 bit per color]
+[-c xRGB pixel value 0xrrggbb] [-d] [-fb frame buffer device file]
+[-footer] [-grid] [-header] [-h, -help] [-i, -intensity percent]
+[-max_i max_intensity percent] [-min_i min_intensity percent]
+[-o outname name prefix] [-p pattern] [-pix_fmt pixel format]
+[-range range] [-steps steps for colorbar/graybar]
+[-r rotation 0,90,180,or 270 degrees] [-stride stride in pixels]
+[-v verbose mode] [-vs -vsize widthxheight pixels]
+
+usage:
+	-0 -zero Force stuck zero [1-hot stuck zero pattern 0xaarrbbgg]
+
+	-1 -one Force stuck one [1-hot stuck one patter 0xaarrbbgg]
+
+	-a -alpha [alpha (%)]
+		Sets the alpha value. Default is 100.0%
+
+	-border
+		Adds a border to the pattern
+
+	-b -bpc bits per color [bits per color 1-8]
+
+	-c -color Default color[RGB color in hex 0xaarrbbgg]
+		Sets the color default for the fill and graybars
+
+	-d -debug [level]
+		Sets the debug level
+
+	-fb [frame buffer device] Name of the framebuffer device file
+
+	-footer
+		Adds footer text to the pattern border
+
+	-grid Enables 10%//5% overlay grid
+
+	-header
+		Adds header text to the pattern border
+
+	-h -help
+		Shows usage
+
+	-i -intensity [intensity (%)]
+		Sets the color intensity for the colorbar, fill, graybars,
+		and hsv patterns. Default is 100.0%
+
+	-max_i[maximum intensity (%)]
+		Sets the maximum intensity for the colorbar/graybar pattern.
+			Default is 100.0%
+
+	-min_i [minimum intensity (%)] 
+		Sets the minimum intensity for the colorbar/graybar pattern.
+			Default is 0.0%
+
+	-o -outname [prefix string]
+		Adds a prefix to the default pattern name
+
+	-p -pattern [pattern]
+		Select the type pattern to generate:
+		checker		creates a checkerboard pattern using -size
+
+		circle		Draws circle with a background fill
+		colorbar	Vertical color bars
+		colorbar2	Alternate colors bars
+		colorcheck	24 color checker
+		fill		Fill the pattern with -color at -intensity).
+		font		Pattern with some sample text from the fonts in use.
+		graybar		11 shaded bars, the default is white bars from
+				100% to 0%. The -color, -steps, -min_i, and max_i
+				parameters can be used with this pattern.
+		gradient	Creates eight horizontal gradient bars: magenta, yellow,
+				cyan, white, red, green, blue and white.
+		vgradient	Creates eight four vertical gradient bars: magenta, yellow,
+				cyan, white, red, green, blue, and white.
+		hsv		Creates an HSV color transition gradient. The
+				-i sets the V (value) for HSV.
+		shapes		Draw test shapes with a background fill
+		logo		Draw an NXP logo
+		test		Creates a testcard like pattern.
+		wheel		Creates an HSV color wheel. The -i sets the V
+				(value) for HSV.
+
+		16m_colors	Creates an 4096x4096 color burst of 16
+				million colors.
+
+	-pix_fmt
+		Supported formats are:
+		bgra     32 bits per pixel RGB
+		rgb565le 16 bits per pixel RGB
+		yuv420p  12 bits per pixel YUV (3 planes Y, U and V)
+		yuv444p  24 bits per pixel YUV (3 planes Y, U and V)
+		yuva444  32 bits per pixel YUV (1 plane  Y, U, V, and A YUVA)
+		yuv444   24 bits per pixel YUV (1 plane  Y, U and V YUV)
+		yuvj444p 24 bits per pixel YUV full color range (1 plane  Y, U and V YUV)
+		yuvy422  16 bits per pixel YUV (1 plane  Y, U, Y, and V YUYV)
+		nv12     12 bits per pixel YUV (2 planes Y and UV)
+
+	-range - YUV color range
+		Sets the color range 0/1 = limited/full
+
+	-r -rotation [rotation (degrees)] rotates the final image to 0, 90, 180, or 270
+
+	-size  -checker_size [size (pixels)]
+
+	-space - YUV color space
+		 0 is bt.601
+
+	-steps [steps]
+		Sets the number steps in the graybar pattern
+
+	-stride [stride (pixels)] Sets the stride if it is larger the width
+
+		Sets the size of the checker board squares in pixels
+
+	-v -verbose
+		Echos the command parameters
+
+	-vs -vsize [WxH (pixelsXlines)] Sets the width and height of the output.
+		Default is 640x480
+
