@@ -66,6 +66,7 @@ struct encoder_test_t {
 	uint32_t qp;
 	uint32_t qp_max;
 	uint32_t qp_min;
+	uint32_t chroma_qp_index_offset;
 	uint32_t bframes;
 
 	struct v4l2_enc_roi_param roi;
@@ -610,6 +611,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default)"},
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
 	{"qprange", 2, "--qprange <qp_min> <qp_max>\n\t\t\tset quantizer parameter range, 0~51"},
+	{"chroma_qp_offset", 1, "--chroma_qp_offset <offset>\n\t\t\tset h264/h265 chroma qp index offset, -12~12"},
 	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is b"},
 	{"peak", 1, "--peak <br>\n\t\t\tset encoder peak bitrate, the unit is b"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
@@ -1041,6 +1043,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	int qp_i_id, qp_p_id, qp_b_id;
 	int qp_max_id, qp_min_id;
 	int cpbsize_id = 0;
+	int chroma_offset_id = 0;
 
 	qp_i_id = qp_p_id = qp_b_id = 0;
 	qp_max_id = qp_min_id = 0;
@@ -1066,6 +1069,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		qp_b_id = V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP;
 		qp_max_id = V4L2_CID_MPEG_VIDEO_H264_MAX_QP;
 		qp_min_id = V4L2_CID_MPEG_VIDEO_H264_MIN_QP;
+		chroma_offset_id = V4L2_CID_MPEG_VIDEO_H264_CHROMA_QP_INDEX_OFFSET;
 		cpbsize_id = V4L2_CID_MPEG_VIDEO_H264_CPB_SIZE;
 		validate_h264_profile_level(encoder);
 		break;
@@ -1077,7 +1081,8 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 		qp_b_id = V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_QP;
 		qp_max_id = V4L2_CID_MPEG_VIDEO_HEVC_MAX_QP;
 		qp_min_id = V4L2_CID_MPEG_VIDEO_HEVC_MIN_QP;
-		/* No HEVC cpbsize v4l2-control, use H264  */
+		/* No HEVC cpbsize and chroma_qp_index_offset v4l2-control, use H264  */
+		chroma_offset_id = V4L2_CID_MPEG_VIDEO_H264_CHROMA_QP_INDEX_OFFSET;
 		cpbsize_id = V4L2_CID_MPEG_VIDEO_H264_CPB_SIZE;
 		validate_h265_profile_level(encoder);
 		break;
@@ -1112,6 +1117,8 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
 	set_ctrl(fd, qp_i_id, encoder->qp);
 	set_ctrl(fd, qp_p_id, encoder->qp);
+	if (encoder->chroma_qp_index_offset)
+		set_ctrl(fd, chroma_offset_id, encoder->chroma_qp_index_offset);
 	if (qp_b_id)
 		set_ctrl(fd, qp_b_id, encoder->qp);
 	if (encoder->qp_min)
@@ -1343,6 +1350,8 @@ static int parse_encoder_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "qp_range")) {
 		encoder->qp_min = strtol(argv[0], NULL, 0);
 		encoder->qp_max = strtol(argv[1], NULL, 0);
+	}  else if (!strcasecmp(option->name, "chroma_qp_offset")) {
+		encoder->chroma_qp_index_offset = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "bitrate")) {
 		encoder->target_bitrate = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "peak")) {
