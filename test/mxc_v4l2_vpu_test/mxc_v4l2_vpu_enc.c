@@ -337,6 +337,7 @@ static int is_encoder_output_finish(struct v4l2_component_t *component)
 
 	encoder = container_of(component, struct encoder_test_t, output);
 
+
 	if (is_source_end(encoder->output.chnno))
 		flush_enc(component);
 
@@ -348,6 +349,10 @@ static int is_encoder_output_finish(struct v4l2_component_t *component)
 		is_end = true;
 		if (!component->frame_count)
 			force_exit();
+	}
+
+	if (!is_end && pitcher_get_status(encoder->capture.chnno) == PITCHER_STATE_STOPPED) {
+		pitcher_start_chn(encoder->capture.chnno);
 	}
 
 	return is_end;
@@ -871,6 +876,9 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 
 		encoder->output.memory = camera->trans_type;
 		encoder->node.frame_skip = true;
+	}
+	if (src->type == TEST_TYPE_DECODER) {
+		encoder->output.memory = V4L2_MEMORY_DMABUF;
 	}
 
 	return RET_OK;
@@ -3388,11 +3396,8 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 		return -RET_E_NULL_POINTER;
 
 	schn = src->get_source_chnno(src);
-	dchn = dst->get_sink_chnno(dst);
 	if (schn < 0)
 		return RET_OK;
-	if (dchn < 0)
-		return -RET_E_INVAL;
 
 	PITCHER_LOG("connect <%d, %d>\n", src->key, dst->key);
 	if (dst->set_source) {
@@ -3401,6 +3406,16 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 			return ret;
 	}
 
+	if (dst->get_sink_chnno(dst) < 0) {
+		if (dst->init_node) {
+			ret = dst->init_node(dst);
+			if (ret < 0)
+				return ret;
+		}
+	}
+	dchn = dst->get_sink_chnno(dst);
+	if (dchn < 0)
+		return -RET_E_INVAL;
 	ret = pitcher_connect(schn, dchn);
 	if (ret < 0)
 		return ret;
@@ -3473,8 +3488,6 @@ static int check_ctrl_ready(void *arg, int *is_end)
 		if (schn < 0)
 			continue;
 		dchn = dst->get_sink_chnno(dst);
-		if (dchn < 0)
-			continue;
 		if (pitcher_get_source(dchn) != schn) {
 			ret = connect_node(src, dst);
 
@@ -3588,11 +3601,8 @@ int main(int argc, char *argv[])
 			continue;
 		nodes[i]->context = context;
 		source = nodes[i]->source;
-		if (!check_source(source) && nodes[i]->set_source) {
-			ret = nodes[i]->set_source(nodes[i], nodes[source]);
-			if (ret < 0)
-				goto exit;
-		}
+		if (source >= 0 && source < MAX_NODE_COUNT && nodes[source])
+			continue;
 
 		if (nodes[i]->init_node) {
 			ret = nodes[i]->init_node(nodes[i]);

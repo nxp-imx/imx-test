@@ -766,7 +766,7 @@ unsigned int pitcher_is_error(unsigned int chnno)
 
 	chn = __find_chn(chnno);
 	if (!chn)
-		return 1;
+		return 0;
 
 	return chn->error;
 }
