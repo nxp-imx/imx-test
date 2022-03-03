@@ -10,11 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-/*
- * pitcher/loadso.h
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #ifndef _PITCHER_LOADSO_H
 #define _PITCHER_LOADSO_H
 #ifdef __cplusplus

@@ -9,13 +9,8 @@
  *
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
- */
-/*
- * vc1_parse.c
  *
  * for VC1_L / VC1_G, support WMV3 only
- *
- * Author Shijie Qin<Shijie.qin@nxp.com>
  */
 #include <stdio.h>
 #include <stdlib.h>

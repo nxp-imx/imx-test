@@ -10,11 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-/*
- * pitcher/pixfmt.h
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #ifndef _PITCHER_PIXFMT_H
 #define _PITCHER_PIXFMT_H
 #ifdef __cplusplus

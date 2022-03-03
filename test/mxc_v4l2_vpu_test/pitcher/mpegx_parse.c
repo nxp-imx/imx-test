@@ -10,13 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-/*
- * mpegx_parse.c
- *
- * for mpeg4 / mpeg2 / xivd / avs / Divx4/5/6(unsupport Divx3)
- *
- * Author Shijie Qin<Shijie.qin@nxp.com>
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

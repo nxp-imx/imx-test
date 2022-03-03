@@ -10,11 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-/*
- * misc.c
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>

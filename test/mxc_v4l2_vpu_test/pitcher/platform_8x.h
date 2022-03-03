@@ -11,12 +11,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
-/*
- * platform_8x.h
- *
- * Author Shijie Qin<Shijie.qin@nxp.com>
- */
 #ifndef _INCLUDE_PLATFORM_8X_H
 #define _INCLUDE_PLATFORM_8X_H
 #ifdef __cplusplus

@@ -10,11 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-/*
- * convert.c
- *
- * Author Shijie Qin<Shijie.qin@nxp.com>
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

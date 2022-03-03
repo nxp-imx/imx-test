@@ -11,12 +11,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
-/*
- * pitcher_v4l2.h
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #ifndef _INCLUDE_PITCHER_V4L2_H
 #define _INCLUDE_PITCHER_V4L2_H
 #ifdef __cplusplus

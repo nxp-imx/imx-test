@@ -11,12 +11,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
-/*
- * parse.h
- *
- * Author Shijie Qin<Shijie.qin@nxp.com>
- */
 #ifndef _INCLUDE_PARSE_H
 #define _INCLUDE_PARSE_H
 

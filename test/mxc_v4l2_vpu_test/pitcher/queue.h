@@ -11,12 +11,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
-/*
- * queue.h
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #ifndef _INCLUDE_QUEUE_H
 #define _INCLUDE_QUEUE_H
 #ifdef __cplusplus

@@ -1,5 +1,6 @@
 /*
  * Copyright(c) 2021 NXP. All rights reserved.
+ * Copyright (C) 2014 Collabora Ltd.
  *
  */
 /*
@@ -9,11 +10,6 @@
  *
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
- */
-/*
- * waylandsink.c
- *
- * Author Ming Qian<ming.qian@nxp.com>
  */
 #ifdef ENABLE_WAYLAND
 #include <unistd.h>

@@ -10,11 +10,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-/*
- * mxc_v4l2_vpu_enc.h
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #ifndef _MXC_V4L2_VPU_ENC_H
 #define _MXC_V4L2_VPU_ENC_H
 #ifdef __cplusplus

@@ -11,12 +11,6 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
-
-/*
- * obj.h
- *
- * Author Ming Qian<ming.qian@nxp.com>
- */
 #ifndef _INCLUDE_OBJ_H
 #define _INCLUDE_OBJ_H
 #ifdef __cplusplus
