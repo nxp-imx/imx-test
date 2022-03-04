@@ -347,7 +347,8 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	}
 	ret = ioctl(fd, VIDIOC_DQBUF, &v4lbuf);
 	if (ret) {
-		if (errno == EPIPE) {
+		if (errno == EPIPE ||
+		    (V4L2_TYPE_IS_CAPTURE(component->type) && component->eos_received)) {
 			PITCHER_LOG("dqbuf : EPIPE\n");
 			component->end = true;
 			return NULL;
@@ -1017,6 +1018,8 @@ static int check_v4l2_ready(void *arg, int *is_end)
 
 	if (V4L2_TYPE_IS_OUTPUT(component->type) && component->seek)
 		return false;
+	if (V4L2_TYPE_IS_CAPTURE(component->type) && component->eos_received)
+		return true;
 
 	__clear_error_buffers(component);
 	for (i = 0; i < component->buffer_count; i++) {

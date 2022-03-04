@@ -363,11 +363,6 @@ static int is_encoder_capture_finish(struct v4l2_component_t *component)
 	if (!component)
 		return true;
 
-	if (component->eos_received) {
-		component->eos_received = false;
-		return true;
-	}
-
 	return is_force_exit();
 }
 
@@ -520,12 +515,6 @@ static int is_decoder_capture_finish(struct v4l2_component_t *component)
 {
 	if (!component)
 		return true;
-
-	if (component->eos_received) {
-		if (!component->resolution_change)
-			component->eos_received = false;
-		return true;
-	}
 
 	return is_force_exit();
 }
