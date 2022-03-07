@@ -1136,6 +1136,9 @@ static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 		return ret;
 	}
 	g_num_planes = fmt.fmt.pix_mp.num_planes;
+	video_ch[ch_id].cap_fmt    = fmt.fmt.pix_mp.pixelformat;
+	video_ch[ch_id].out_width  = fmt.fmt.pix_mp.width;
+	video_ch[ch_id].out_height = fmt.fmt.pix_mp.height;
 
 	memset(&parm, 0, sizeof(parm));
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
