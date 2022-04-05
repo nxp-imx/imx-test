@@ -44,8 +44,13 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "rgb24",
-		.descr	= "packed RGB",
+		.descr	= "packed RGB (obsolete)",
 		.fourcc	= V4L2_PIX_FMT_RGB24
+	},
+	{
+		.name	= "bgr24",
+		.descr	= "packed BGR",
+		.fourcc	= V4L2_PIX_FMT_BGR24
 	},
 	{
 		.name	= "yuv444",
@@ -59,8 +64,13 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "argb",
-		.descr	= "packed ARGB",
+		.descr	= "packed ARGB (obsolete)",
 		.fourcc	= V4L2_PIX_FMT_ARGB32
+	},
+	{
+		.name	= "abgr",
+		.descr	= "packed ABGR",
+		.fourcc	= V4L2_PIX_FMT_ABGR32
 	},
 };
 
@@ -68,7 +78,7 @@ void print_usage(char *str)
 {
 	int i;
 
-	printf("Usage: %s -d </dev/videoX> -f <FILENAME.rgb> ", str);
+	printf("Usage: %s -d </dev/videoX> -f <FILENAME> ", str);
 	printf("-w <width> -h <height> ");
 	printf("-p <pixel_format> ");
 	printf("[-n <iterations>] ");
