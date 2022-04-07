@@ -172,7 +172,7 @@ static void global_registry_handler(void *data, struct wl_registry *registry,
 		wlc->dmabuf = wl_registry_bind(registry,
 				id,
 				&zwp_linux_dmabuf_v1_interface,
-				version);
+				min(version, 3));
 		zwp_linux_dmabuf_v1_add_listener(wlc->dmabuf, &dmabuf_listener, wlc);
 	}
 }
