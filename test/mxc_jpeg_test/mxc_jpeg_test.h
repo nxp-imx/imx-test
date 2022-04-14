@@ -23,6 +23,7 @@ struct encoder_args {
 	int fourcc;
 	int hexdump;
 	int num_iter;
+	int quality;
 };
 
 struct pix_fmt_data {
@@ -91,6 +92,7 @@ void print_usage(char *str)
 	printf("Optional arguments:\n");
 	printf("\t-x: print a hexdump of the result\n");
 	printf("\t-n: number of iterations for enqueue/dequeue loop\n");
+	printf("\t-q: quality factor 1..100, for encoder only\n");
 }
 
 
@@ -112,7 +114,8 @@ int parse_args(int argc, char **argv, struct encoder_args *ea)
 	memset(ea, 0, sizeof(struct encoder_args));
 	opterr = 0;
 	ea->num_iter = 1;
-	while ((c = getopt(argc, argv, "+d:f:w:h:p:xn:")) != -1)
+	ea->quality = -1;
+	while ((c = getopt(argc, argv, "+d:f:w:h:p:xn:q:")) != -1)
 		switch (c) {
 		case 'd':
 			ea->video_device = optarg;
@@ -142,6 +145,13 @@ int parse_args(int argc, char **argv, struct encoder_args *ea)
 			ea->num_iter = strtol(optarg, 0, 0);
 			if (ea->num_iter < 1) {
 				fprintf(stderr, "Need at least 1 iteration\n");
+				goto print_usage_and_exit;
+			}
+			break;
+		case 'q':
+			ea->quality = strtol(optarg, 0, 0);
+			if (ea->quality <= 0 || ea->quality > 100) {
+				fprintf(stderr, "Quality factor must be between 1..100\n");
 				goto print_usage_and_exit;
 			}
 			break;

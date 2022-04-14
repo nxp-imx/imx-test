@@ -50,6 +50,17 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	if (ea.quality != -1) {
+		struct v4l2_control argp;
+
+		argp.id = V4L2_CID_JPEG_COMPRESSION_QUALITY;
+		argp.value = ea.quality;
+		if (ioctl(fd, VIDIOC_S_CTRL, &argp)) {
+			perror("VIDIOC_S_CTRL quality");
+			exit(1);
+		}
+	}
+
 	testraw = fopen(ea.test_file, "rb");
 	if (!testraw) {
 		fprintf(stderr, "Could not open input raw file %s\n",
