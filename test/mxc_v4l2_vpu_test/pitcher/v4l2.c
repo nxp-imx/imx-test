@@ -468,6 +468,8 @@ static void __qbuf(struct v4l2_component_t *component,
 	component->slots[buffer->index] = buffer;
 	if (V4L2_TYPE_IS_OUTPUT(component->type))
 		component->frame_count++;
+
+	pitcher_set_ignore_pollerr(component->chnno, false);
 }
 
 static int __streamon_v4l2(struct v4l2_component_t *component)
