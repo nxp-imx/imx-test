@@ -34,6 +34,7 @@
 #include "pitcher/dmabuf.h"
 #include "mxc_v4l2_vpu_enc.h"
 
+#define STRING(x)		#x
 #define VERSION_MAJOR		2
 #define VERSION_MINOR		1
 
@@ -3558,7 +3559,9 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	printf("mxc_v4l2_vpu_test.out V%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
+	printf("mxc_v4l2_vpu_test.out V%d.%d, SHA: %s %s\n",
+		VERSION_MAJOR, VERSION_MINOR,
+		GIT_SHA, GIT_COMMIT_DATE);
 
 	if (argc < 2 || !strcasecmp("help", argv[1]))
 		return show_help(argc, argv);

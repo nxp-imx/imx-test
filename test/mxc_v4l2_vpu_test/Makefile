@@ -57,6 +57,9 @@ endif
 endif
 endif
 
+GIT_SHA=`git -C . rev-parse --short=12 HEAD`
+GIT_COMMIT_DATE=`TZ=UTC-8 git -C . show --quiet --date='format-local:\"%F %T\"' --format='%cd'`
+CFLAGS += -DGIT_SHA="\"$(GIT_SHA)\"" -DGIT_COMMIT_DATE="$(GIT_COMMIT_DATE)"
 LDFLAGS += -ldl -lpthread
 COPY = README
 endif
