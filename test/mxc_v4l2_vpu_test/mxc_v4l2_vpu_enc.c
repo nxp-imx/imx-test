@@ -1191,7 +1191,6 @@ static int init_encoder_node(struct test_node *node)
 	encoder->capture.pixelformat = encoder->node.pixelformat;
 	encoder->capture.width = encoder->node.width;
 	encoder->capture.height = encoder->node.height;
-	encoder->capture.framerate = encoder->node.framerate;
 	encoder->capture.sizeimage =
 		encoder->output.width * encoder->output.height;
 	encoder->capture.bytesperline = encoder->node.width;
