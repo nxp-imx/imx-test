@@ -179,7 +179,7 @@ int check_video_device(uint32_t devInstance,
 	int lErr;
 	struct v4l2_capability cap;
 
-	fd = open(devName, O_RDWR);
+	fd = open(devName, O_RDWR | O_NONBLOCK);
 	if (fd < 0)
 		return -1;
 	lErr = ioctl(fd, VIDIOC_QUERYCAP, &cap);
@@ -1230,9 +1230,7 @@ void test_streamout(component_t * pComponent)
 	struct zvapp_v4l_buf_info *stAppV4lBuf;
 	struct v4l2_buffer stV4lBuf;
 	struct v4l2_plane stV4lPlanes[3];
-	fd_set rd_fds;
-	fd_set evt_fds;
-	struct timeval tv;
+	struct pollfd pfd;
 	int r;
 	struct v4l2_event evt;
 	unsigned int i;
@@ -1368,25 +1366,18 @@ STREAMOUT_START:
 		/***********************************************
 		** DQBUF, get buffer from driver
 		***********************************************/
-		FD_ZERO(&rd_fds);
-		FD_ZERO(&evt_fds);
-		FD_SET(pComponent->hDev, &rd_fds);
-		FD_SET(pComponent->hDev, &evt_fds);
-
-		// Timeout
-		tv.tv_sec = 1;
-		tv.tv_usec = 0;
-
-		r = select(pComponent->hDev + 1, &rd_fds, NULL, &evt_fds, &tv);
+		pfd.fd = pComponent->hDev;
+		pfd.events = POLLIN | POLLRDNORM | POLLPRI;
+		r = poll(&pfd, 1, 1000);
 
 		if (-1 == r) {
-			fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+			fprintf(stderr, "%s() poll errno(%d)\n", __FUNCTION__, errno);
 			continue;
 		} else if (0 == r) {
-			printf("\nstream out: select readable dev timeout.\n");
+			printf("\nstream out: poll readable dev timeout.\n");
 			continue;
 		} else {
-			if (FD_ISSET(pComponent->hDev, &evt_fds)) {
+			if (pfd.revents & POLLPRI) {
 				memset(&evt, 0, sizeof(struct v4l2_event));
 				lErr = ioctl(pComponent->hDev, VIDIOC_DQEVENT, &evt);
 				if (lErr) {
@@ -1411,7 +1402,12 @@ STREAMOUT_START:
 				}
 			}
 
-			if (!FD_ISSET(pComponent->hDev, &rd_fds))
+			if (pfd.revents & POLLERR) {
+				printf("POLLERR is triggerred\n");
+				g_unCtrlCReceived = 1;
+				goto FUNC_END;
+			}
+			if (!(pfd.revents & (POLLIN | POLLRDNORM)))
 				continue;
 		}
 
@@ -1445,6 +1441,10 @@ STREAMOUT_START:
 				}
 			}
 		} else {
+			if (errno == EPIPE) {
+				printf("EPIPE is called\n");
+				break;
+			}
 			if (errno != EAGAIN) {
 				printf("\r%s()  DQBUF failed(%d) errno(%d)\n",
 				       __FUNCTION__, lErr, errno);
@@ -1533,8 +1533,7 @@ void test_streamin(component_t * pComponent)
 	struct v4l2_buffer *pstV4lBuf = NULL;
 	struct v4l2_decoder_cmd v4l2cmd;
 
-	fd_set fds;
-	struct timeval tv;
+	struct pollfd pfd;
 	int r;
 
 	unsigned int i;
@@ -1678,20 +1677,22 @@ STREAMIN_START:
 		}
 
 		if (!buf_avail) {
-			FD_ZERO(&fds);
-			FD_SET(pComponent->hDev, &fds);
+			pfd.fd = pComponent->hDev;
+			pfd.events = POLLOUT | POLLWRNORM;
 
-			// Timeout
-			tv.tv_sec = 2;
-			tv.tv_usec = 0;
-
-			r = select(pComponent->hDev + 1, NULL, &fds, NULL, &tv);
+			r = poll(&pfd, 1, 2000);
 
 			if (-1 == r) {
-				fprintf(stderr, "%s() select errno(%d)\n", __FUNCTION__, errno);
+				fprintf(stderr, "%s() poll errno(%d)\n", __FUNCTION__, errno);
 				continue;
 			}
 			if (0 == r) {
+				printf("\nstream in: poll writable dev timeout.\n");
+				continue;
+			}
+
+			if (pfd.revents & POLLERR) {
+				usleep(10);
 				continue;
 			}
 
@@ -2128,7 +2129,7 @@ Or reference the usage manual.\n\
 			goto FUNC_END;
 		}
 	}
-	component[nCmdIdx].hDev = open(component[nCmdIdx].szDevName, O_RDWR);
+	component[nCmdIdx].hDev = open(component[nCmdIdx].szDevName, O_RDWR | O_NONBLOCK);
 	if (component[nCmdIdx].hDev <= 0) {
 		printf("%s() error: Unable to Open %s.\n", __FUNCTION__,
 		       component[nCmdIdx].szDevName);
