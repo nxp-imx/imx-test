@@ -47,6 +47,7 @@ extern "C"{
 #include <string.h>
 #include <malloc.h>
 #include <getopt.h>
+#include <time.h>
 
 #include "ginger_rgb_800x600.c"
 #include "fsl_rgb_480x360.c"
@@ -84,10 +85,11 @@ extern "C"{
 #define ALLOW_COLLISIONS	0
 #define NO_COLLISIONS		1
 
-#define NUM_TESTS		18
+#define NUM_TESTS		20
 
 #define ARRAY_SIZE(x)	(sizeof(x)/sizeof(x[0]))
 
+#define block_size 100
 __u32 pwrdown_delay = 0;
 __u32 scheme = UPDATE_SCHEME_QUEUE_AND_MERGE;
 int test_map[NUM_TESTS];
@@ -117,6 +119,9 @@ const char *dithering_name[5] = {
 	"Ordered",
 	"No Dithering, quantization only",
 };
+
+struct timespec time1 = {0, 0};
+struct timespec time2 = {0, 0};
 
 void memset_dword(void *s, int c, size_t count)
 {
@@ -2356,6 +2361,123 @@ static int test_aa(void)
 	return retval;
 }
 
+static int test_partial_screen_update(void)
+{
+	int retval = TPASS;
+	int wave_mode;
+	float temp;
+	int move_x0 = 100;
+	int move_y0 = 100;
+	int move_x = 100;
+	int move_y = 100;
+
+	if (use_reagl)
+		wave_mode =  WAVEFORM_MODE_GLR16;
+	else if (use_reagld)
+		wave_mode =  WAVEFORM_MODE_GLD16;
+	else
+		wave_mode = WAVEFORM_MODE_DU;
+
+	printf("This is a Power AN case: partial_screen_update, the screen will be refreshed per 800ms\n");
+	printf("wave_mode %d\n", wave_mode);
+	printf("White screen\n");
+	memset(fb, 0xFF, screen_info.xres_virtual*screen_info.yres*screen_info.bits_per_pixel/8);
+	update_to_display(0, 0, screen_info.xres, screen_info.yres,
+		wave_mode, TRUE, 0);
+
+	draw_rectangle(fb, move_x, move_y, block_size, block_size, 0x0000);
+	update_to_display(move_x, move_y, block_size, block_size, wave_mode, TRUE, 0);
+
+	for (int loop = 0 ; loop < 5; loop++) {
+		printf("partial screen update loop : %d/5\n", (loop+1));
+		for (int i = 0; i < 25; i++){
+			clock_gettime(CLOCK_REALTIME, &time1);
+			draw_rectangle(fb, move_x, move_y, block_size, block_size, 0xFFFF);
+			update_to_display(move_x, move_y, block_size, block_size, wave_mode, TRUE, 0);
+			move_x = move_x0 + (i % 5) * 100;
+			move_y = move_y0 + (i / 5) * 100;
+			draw_rectangle(fb, move_x, move_y, block_size, block_size, 0x0000);
+			update_to_display(move_x, move_y, block_size, block_size, wave_mode, TRUE, 0);
+			clock_gettime(CLOCK_REALTIME, &time2);
+			/* Keep a 800ms fresh time for all images*/
+			/* Measure the actual processing time*/
+			temp = (time2.tv_sec - time1.tv_sec)*1000 + (time2.tv_nsec - time1.tv_nsec) / 1000000;
+			/* Calculate rounding difference between processing time and 800ms*/
+			temp = 800 - (int)temp;
+			/* Ensure that the total refresh time is 800ms*/
+			usleep(temp * 1000);
+
+		}
+
+	}
+
+	return retval;
+}
+
+static int test_page_flip(void)
+{
+	int y;
+	int retval;
+	int wave_mode;
+	float temp;
+
+	if (use_reagl)
+		wave_mode =  WAVEFORM_MODE_GLR16;
+	else if (use_reagld)
+		wave_mode =  WAVEFORM_MODE_GLD16;
+	else
+		wave_mode = WAVEFORM_MODE_AUTO;
+
+	printf("This is a Power AN case: test_page_flip, the screen will be refreshed per 800ms\n ");
+	printf("wave_mode %d\n", wave_mode);
+	printf("White screen\n");
+	memset(fb, 0xFF, screen_info.xres_virtual*screen_info.yres_virtual*screen_info.bits_per_pixel/8);
+	update_to_display(0, 0, screen_info.xres, screen_info.yres,
+	WAVEFORM_MODE_DU, TRUE, 0);
+
+	copy_image_to_buffer(0, 0, 800, 600, colorbar_rgb_800x600,
+		BUFFER_OVERLAY, &screen_info);
+	copy_image_to_buffer(0, 0, 800, 600, ginger_rgb_800x600, BUFFER_FB,
+		&screen_info);
+	update_to_display(0, 0, 800, 600, wave_mode, TRUE, 0);
+
+	printf("Panned to colorbar\n");
+	screen_info.yoffset = screen_info.yres;
+	retval = ioctl(fd_fb, FBIOPAN_DISPLAY, &screen_info);
+	if (retval < 0) {
+		printf("Pan fail!\n");
+	}
+
+	sleep(1);
+
+	for (int loop = 0 ; loop < 5; loop++){
+		printf("page flip loop : %d/5\n", (loop+1));
+		for (y = 0; (y + screen_info.yres <= screen_info.yres * 2) &&
+		(y + screen_info.yres <= screen_info.yres_virtual); y+=50) {
+			clock_gettime(CLOCK_REALTIME, &time1);
+			screen_info.yoffset = y;
+			retval = ioctl(fd_fb, FBIOPAN_DISPLAY, &screen_info);
+			if (retval < 0) {
+				printf("Pan fail!\n");
+				break;
+			}
+			update_to_display(0, 0, screen_info.xres, screen_info.yres,
+				wave_mode, TRUE, 0);
+			clock_gettime(CLOCK_REALTIME, &time2);
+			/* Keep a 800ms fresh time for all images*/
+			/* Measure the actual processing time*/
+			temp = (time2.tv_sec - time1.tv_sec)*1000 + (time2.tv_nsec - time1.tv_nsec) / 1000000;
+			/* Calculate rounding difference between processing time and 800ms*/
+			temp = 800 - (int)temp;
+			/* Ensure that the total refresh time is 800ms*/
+			usleep(temp * 1000);
+
+		}
+	}
+
+	return retval;
+}
+
 void usage(char *app)
 {
 	printf("EPDC framebuffer driver test program.\n");
@@ -2403,6 +2525,8 @@ void usage(char *app)
 	printf("16 - Dithering Y8->Y4 Test\n");
 	printf("17 - Hardware Dithering Test\n");
 	printf("18 - Advanced Algorithm Test\n");
+	printf("19 - Power AN case: Partial Screen Update Test\n");
+	printf("20 - Power AN case: Page Flip Test\n");
 }
 
 int parse_test_nums(char *num_str)
@@ -2656,6 +2780,8 @@ main(int argc, char **argv)
 	testfunc_array[15] = &test_dithering_y8_y4;
 	testfunc_array[16] = &test_hw_dithering;
 	testfunc_array[17] = &test_aa;
+	testfunc_array[18] = &test_partial_screen_update;
+	testfunc_array[19] = &test_page_flip;
 
 	for (i = 0; i < NUM_TESTS; i++)
 		if (test_map[i])
