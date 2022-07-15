@@ -407,6 +407,7 @@ int pitcher_get_pix_fmt_info(struct pix_fmt_info *info, uint32_t alignment)
 	uint32_t h;
 	uint32_t i;
 	uint32_t size = 0;
+	uint32_t align;
 
 	if (!info)
 		return -RET_E_NULL_POINTER;
@@ -428,14 +429,19 @@ int pitcher_get_pix_fmt_info(struct pix_fmt_info *info, uint32_t alignment)
 	for (i = 0; i < desc->num_planes; i++) {
 		w = ALIGN(info->width, al_w);
 		h = ALIGN(info->height, al_h);
+		align = alignment;
 		if (i) {
 			if (desc->tile_hs)
 				h = ALIGN(info->height, al_h << desc->log2_chroma_h);
 			w >>= desc->log2_chroma_w;
 			h >>= desc->log2_chroma_h;
+			align >>= desc->log2_chroma_w;
+			align = desc->comp[i].bpp ? ALIGN(align * desc->comp[i].bpp, 8) >> 3 : align;
 		}
+		if (!align)
+			align = 1;
 		line = desc->comp[i].bpp ? ALIGN(w * desc->comp[i].bpp, 8) >> 3 : w;
-		line = ALIGN(line, alignment);
+		line = ALIGN(line, align);
 		pitcher_fill_plane_desc(&info->planes[i], line, h);
 		size += info->planes[i].size;
 	}
