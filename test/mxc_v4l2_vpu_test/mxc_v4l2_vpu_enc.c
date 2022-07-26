@@ -2039,6 +2039,9 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 	if (!buffer)
 		return -RET_E_NOT_READY;
 
+	if (!buffer->count || !buffer->planes || !buffer->planes[0].bytesused)
+		goto exit;
+
 	ofile_insert_header(file, buffer);
 
 	if (buffer->format->format < PIX_FMT_COMPRESSED &&
@@ -2053,9 +2056,10 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 					file->filp);
 	}
 
+	file->frame_count++;
+exit:
 	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
 		file->end = true;
-	file->frame_count++;
 
 	return RET_OK;
 }
