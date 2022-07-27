@@ -435,8 +435,7 @@ int pitcher_get_pix_fmt_info(struct pix_fmt_info *info, uint32_t alignment)
 				h = ALIGN(info->height, al_h << desc->log2_chroma_h);
 			w >>= desc->log2_chroma_w;
 			h >>= desc->log2_chroma_h;
-			align >>= desc->log2_chroma_w;
-			align = desc->comp[i].bpp ? ALIGN(align * desc->comp[i].bpp, 8) >> 3 : align;
+			align = DIV_ROUND_UP((align * desc->comp[i].bpp) >> desc->log2_chroma_w, desc->comp[0].bpp);
 		}
 		if (!align)
 			align = 1;
