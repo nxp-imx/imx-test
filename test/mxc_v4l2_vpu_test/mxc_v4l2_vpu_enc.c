@@ -24,6 +24,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <execinfo.h>
 #include "pitcher/pitcher_def.h"
 #include "pitcher/pitcher.h"
 #include "pitcher/pitcher_v4l2.h"
@@ -220,6 +221,27 @@ int is_termination(void)
 	return g_exit;
 }
 
+#define DUMP_STACK_DEPTH_MAX 16
+void dump_backtrace(void)
+{
+	void *stack_trace[DUMP_STACK_DEPTH_MAX] = {0};
+	char **stack_strings = NULL;
+	int stack_depth = 0;
+	int i;
+
+	stack_depth = backtrace(stack_trace, DUMP_STACK_DEPTH_MAX);
+	PITCHER_LOG("backtrace() returned %d addresses\n", stack_depth);
+	stack_strings = (char **)backtrace_symbols(stack_trace, stack_depth);
+	if (stack_strings == NULL) {
+		PITCHER_ERR("backtrace_symbols\n");
+		return;
+	}
+
+	for (i =0; i < stack_depth; i++)
+		PITCHER_LOG("[%2d] %s\n", i, stack_strings[i]);
+	free(stack_strings);
+}
+
 static void sig_handler(int sign)
 {
 	switch (sign) {
@@ -229,6 +251,10 @@ static void sig_handler(int sign)
 		break;
 	case SIGALRM:
 		break;
+	case SIGSEGV:
+		PITCHER_ERR("Segmentation fault\n");
+		dump_backtrace();
+		exit(-1);
 	}
 }
 
@@ -3561,6 +3587,7 @@ int main(int argc, char *argv[])
 
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
+	signal(SIGSEGV, sig_handler);
 
 	printf("mxc_v4l2_vpu_test.out V%d.%d, SHA: %s %s\n",
 		VERSION_MAJOR, VERSION_MINOR,

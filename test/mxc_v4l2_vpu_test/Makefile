@@ -63,6 +63,6 @@ mxc_v4l2_vpu_test.out = $(mxc_v4l2_vpu_enc.out)
 GIT_SHA=`git -C . rev-parse --short=12 HEAD`
 GIT_COMMIT_DATE=`TZ=UTC-8 git -C . show --quiet --date='format-local:\"%F %T\"' --format='%cd'`
 CFLAGS += -DGIT_SHA="\"$(GIT_SHA)\"" -DGIT_COMMIT_DATE="$(GIT_COMMIT_DATE)"
-LDFLAGS += -ldl -lpthread
+LDFLAGS += -ldl -lpthread -rdynamic
 COPY = README
 endif
