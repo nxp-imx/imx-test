@@ -62,8 +62,8 @@ int main(int argc, char *argv[])
 
 	is_mp = v4l2_query_caps(fd);
 
-	v4l2_s_fmt_out(fd, is_mp, ea, filesize, V4L2_PIX_FMT_JPEG);
-	v4l2_s_fmt_cap(fd, is_mp, ea, ea.fourcc);
+	v4l2_s_fmt_out(fd, is_mp, &ea, filesize, V4L2_PIX_FMT_JPEG);
+	v4l2_s_fmt_cap(fd, is_mp, &ea, ea.fourcc);
 
 	v4l2_reqbufs(fd, is_mp);
 
@@ -80,7 +80,9 @@ int main(int argc, char *argv[])
 	 * the output buffer is given to the device for processing,
 	 * typically for display, hence the name "output", decoding in this case
 	 */
-	fread(bufferout_start[0], filesize, 1, testjpg);
+	if (fread(bufferout_start[0], filesize, 1, testjpg) != 1)
+		exit(1);
+
 	fclose(testjpg);
 	if (is_mp)
 		bufferout.m.planes[0].bytesused = filesize;
@@ -101,7 +103,7 @@ int main(int argc, char *argv[])
 	 * in the capture buffer
 	 */
 	printf("Writing capture buffer payload to %s\n", outfile);
-	v4l2_fwrite_payload(is_mp, outfile, &bufferin, bufferin_start);
+	v4l2_fwrite_cap_payload(fd, is_mp, outfile, &bufferin, bufferin_start, 8);
 
 	/* Deactivate streaming for capture/output */
 	v4l2_streamoff(fd, is_mp);
