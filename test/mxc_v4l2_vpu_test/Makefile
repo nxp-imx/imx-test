@@ -31,7 +31,8 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			pitcher/platform_8x.o \
 			pitcher/convert.o \
 			pitcher/sysloadso.o \
-			dmanode.o
+			dmanode.o \
+			pitcher/bitstream.o
 
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/linux/dma-heap.h))
 CFLAGS += -DENABLE_DMA_HEAP

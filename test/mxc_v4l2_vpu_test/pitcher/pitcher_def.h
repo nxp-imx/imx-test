@@ -134,6 +134,7 @@ enum {
 	printf(_TAG""fmt, ##arg)
 
 #define PITCHER_ERR(...)	__PITCHER_LOG(__VA_ARGS__)
+#define PITCHER_DBG(...)
 
 #define MAXPATHLEN	255
 

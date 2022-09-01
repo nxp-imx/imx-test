@@ -38,6 +38,7 @@ struct pitcher_parser {
 	unsigned int format;
 	struct pitcher_frame *cur_frame;
 	unsigned long number;
+	unsigned long frame_cnt;
 	char *virt;
 	unsigned long size;
 	unsigned long offset;

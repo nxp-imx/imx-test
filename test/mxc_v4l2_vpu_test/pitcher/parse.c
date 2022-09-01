@@ -69,7 +69,7 @@ void pitcher_parser_push(Parser p, struct pitcher_frame *frame)
 		return;
 
 	list_add_tail(&frame->list, &parser->queue);
-	parser->number++;
+	parser->frame_cnt++;
 }
 
 struct pitcher_frame *pitcher_parser_cur_frame(Parser p)
@@ -180,8 +180,9 @@ void pitcher_parser_show(Parser p)
 		return;
 
 	list_for_each_entry_safe(frame, tmp, &parser->queue, list) {
+
 		PITCHER_LOG("[%d] size:%ld, offset:0x%x(%d)\n", frame->idx, frame->size, frame->offset, frame->offset);
-		 PITCHER_LOG("0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
+		PITCHER_LOG("0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
 						parser->virt[frame->offset],
 						parser->virt[frame->offset+1],
 						parser->virt[frame->offset+2],
@@ -190,7 +191,7 @@ void pitcher_parser_show(Parser p)
 						parser->virt[frame->offset+5],
 						parser->virt[frame->offset+6],
 						parser->virt[frame->offset+7]);
-		 size += frame->size;
+		size += frame->size;
 	}
 	PITCHER_LOG("total size: 0x%x\n", size);
 }
@@ -392,6 +393,10 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 			start = end;
 			end = -1;
 		}
+		if (parser->number > 0 && parser->frame_cnt >= parser->number) {
+			PITCHER_LOG("specified maximum frame number parsed: %ld\n", parser->frame_cnt);
+			goto end;
+		}
 	}
 
 	end = parser->size;
@@ -405,6 +410,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 		start = end;
 	}
 
+end:
 	if (priv) {
 		pitcher_free(priv);
 		priv = NULL;
