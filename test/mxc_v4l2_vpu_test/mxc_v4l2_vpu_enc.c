@@ -1269,17 +1269,6 @@ static int init_encoder_node(struct test_node *node)
 		encoder->capture.height = encoder->output.crop.height;
 
 	ret = pitcher_register_chn(encoder->node.context,
-				&encoder->output.desc,
-				&encoder->output);
-	if (ret < 0) {
-		PITCHER_ERR("regisger %s fail\n", encoder->capture.desc.name);
-		SAFE_CLOSE(encoder->capture.chnno, pitcher_unregister_chn);
-		SAFE_CLOSE(encoder->fd, close);
-		return ret;
-	}
-	encoder->output.chnno = ret;
-
-	ret = pitcher_register_chn(encoder->node.context,
 				&encoder->capture.desc,
 				&encoder->capture);
 	if (ret < 0) {
@@ -1289,6 +1278,17 @@ static int init_encoder_node(struct test_node *node)
 		return ret;
 	}
 	encoder->capture.chnno = ret;
+
+	ret = pitcher_register_chn(encoder->node.context,
+				&encoder->output.desc,
+				&encoder->output);
+	if (ret < 0) {
+		PITCHER_ERR("regisger %s fail\n", encoder->capture.desc.name);
+		SAFE_CLOSE(encoder->capture.chnno, pitcher_unregister_chn);
+		SAFE_CLOSE(encoder->fd, close);
+		return ret;
+	}
+	encoder->output.chnno = ret;
 
 	return set_encoder_parameters(encoder);
 }
