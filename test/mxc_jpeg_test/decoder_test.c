@@ -65,6 +65,11 @@ int main(int argc, char *argv[])
 	v4l2_s_fmt_out(fd, is_mp, &ea, filesize, V4L2_PIX_FMT_JPEG);
 	v4l2_s_fmt_cap(fd, is_mp, &ea, ea.fourcc);
 
+	if (ea.crop_w != 0 && ea.crop_h != 0) {
+		printf("Cropping is not supported for the decoder\n");
+		exit(1);
+	}
+
 	v4l2_reqbufs(fd, is_mp);
 
 	v4l2_querybuf_cap(fd, is_mp, &bufferin);

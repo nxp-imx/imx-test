@@ -19,6 +19,8 @@ struct encoder_args {
 	char *test_file;
 	int width; /* requested resolution, actual picture size */
 	int height;
+	int crop_w; /* requested crop resolution */
+	int crop_h;
 	int w_padded; /* driver accepted resolution, buffer size with padding */
 	int h_padded;
 	char *fmt;
@@ -95,6 +97,7 @@ void print_usage(char *str)
 	printf("\t-x: print a hexdump of the result\n");
 	printf("\t-n: number of iterations for enqueue/dequeue loop\n");
 	printf("\t-q: quality factor 1..100, for encoder only\n");
+	printf("\t-W <crop width> -H <crop height> (optional, supported only for encoder)\n");
 }
 
 
@@ -117,7 +120,7 @@ int parse_args(int argc, char **argv, struct encoder_args *ea)
 	opterr = 0;
 	ea->num_iter = 1;
 	ea->quality = -1;
-	while ((c = getopt(argc, argv, "+d:f:w:h:p:xn:q:")) != -1)
+	while ((c = getopt(argc, argv, "+d:f:w:h:W:H:p:xn:q:")) != -1)
 		switch (c) {
 		case 'd':
 			ea->video_device = optarg;
@@ -130,6 +133,12 @@ int parse_args(int argc, char **argv, struct encoder_args *ea)
 			break;
 		case 'h':
 			ea->height = strtol(optarg, 0, 0);
+			break;
+		case 'W':
+			ea->crop_w = strtol(optarg, 0, 0);
+			break;
+		case 'H':
+			ea->crop_h = strtol(optarg, 0, 0);
 			break;
 		case 'p':
 			ea->fourcc = get_fourcc(optarg);
@@ -614,7 +623,7 @@ void v4l2_fwrite_plane_no_padding(void *buf_start, __u32 buf_size,
 		fwrite(buf_ptr, bytesperline_no_padding, 1, fout);
 		buf_ptr = (char *)buf_ptr + bytesperline;
 		if (buf_ptr > buf_start + buf_size) {
-			perror("Got past the buffer end while writing the payload");
+			printf("Got past the buffer end while writing the payload\n");
 			break;
 		}
 	}
@@ -694,7 +703,7 @@ void v4l2_fwrite_cap_payload(int vdev_fd, bool is_mp, const char *filename,
 		printf("\tVIDIOC_G_SELECTION CAP (%d x %d) => (%d x %d)\n", w, h, w_crop, h_crop);
 
 		if (w < w_crop || h < h_crop) {
-			perror("Crop region bigger than whole buffer");
+			printf("Crop region bigger than whole buffer\n");
 			return;
 		}
 	}
