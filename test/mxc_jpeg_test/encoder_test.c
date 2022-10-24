@@ -77,6 +77,20 @@ int main(int argc, char *argv[])
 	v4l2_s_fmt_out(fd, is_mp, &ea, filesize, ea.fourcc);
 	v4l2_s_fmt_cap(fd, is_mp, &ea, V4L2_PIX_FMT_JPEG);
 
+	if (ea.crop_w != 0 && ea.crop_h != 0) {
+		struct v4l2_selection sel = {
+			.type = V4L2_BUF_TYPE_VIDEO_OUTPUT,
+			.target = V4L2_SEL_TGT_CROP,
+		};
+		sel.r.width = ea.crop_w;
+		sel.r.height = ea.crop_h;
+		if (ioctl(fd, VIDIOC_S_SELECTION, &sel)) {
+			perror("VIDIOC_S_SELECTION OUT");
+			exit(-1);
+		}
+		printf("VIDIOC_S_SELECTION OUT (%d x %d)\n", sel.r.width, sel.r.height);
+	}
+
 	v4l2_reqbufs(fd, is_mp);
 
 	v4l2_querybuf_cap(fd, is_mp, &bufferin);
