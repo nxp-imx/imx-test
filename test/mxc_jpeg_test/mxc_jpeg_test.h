@@ -39,8 +39,13 @@ struct pix_fmt_data {
 static struct pix_fmt_data fmt_data[] = {
 	{
 		.name	= "yuv420",
-		.descr	= "2-planes, Y and UV-interleaved, same as NV12",
+		.descr	= "2-planes, Y and UV-interleaved, same as NV12M",
 		.fourcc	= V4L2_PIX_FMT_NV12M
+	},
+	{
+		.name	= "yuv420s",
+		.descr	= "2-planes, Y and UV-interleaved, contiguous, same as NV12",
+		.fourcc	= V4L2_PIX_FMT_NV12
 	},
 	{
 		.name	= "yuv422",
@@ -243,7 +248,7 @@ void v4l2_s_fmt_out(int vdev_fd, bool is_mp, struct encoder_args *ea,
 	}
 
 	if (out_fmt.fmt.pix_mp.pixelformat != pixelformat) {
-		printf("VIDIOC_S_FMT requested fourcc %d, got %d",
+		printf("VIDIOC_S_FMT requested fourcc %d, got %d\n",
 		       out_fmt.fmt.pix_mp.pixelformat, pixelformat);
 		exit(1);
 	}
@@ -255,7 +260,7 @@ void v4l2_s_fmt_out(int vdev_fd, bool is_mp, struct encoder_args *ea,
 	ea->w_padded = out_fmt.fmt.pix_mp.width;
 	ea->h_padded = out_fmt.fmt.pix_mp.height;
 	printf("VIDIOC_S_FMT OUT requested (%d x %d), got (%d x %d)\n",
-	       ea->width, ea->height, ea->h_padded, ea->h_padded);
+	       ea->width, ea->height, ea->w_padded, ea->h_padded);
 
 	if (ea->w_padded != ea->width || ea->h_padded != ea->height) {
 		struct v4l2_selection sel = {
@@ -312,7 +317,7 @@ void v4l2_s_fmt_cap(int vdev_fd, bool is_mp, struct encoder_args *ea,
 	ea->w_padded = cap_fmt.fmt.pix_mp.width;
 	ea->h_padded = cap_fmt.fmt.pix_mp.height;
 	printf("VIDIOC_S_FMT CAP requested (%d x %d), got (%d x %d)\n",
-	       ea->width, ea->height, ea->h_padded, ea->h_padded);
+	       ea->width, ea->height, ea->w_padded, ea->h_padded);
 
 	if (ea->w_padded != ea->width || ea->h_padded != ea->height) {
 		struct v4l2_selection sel = {
@@ -630,15 +635,35 @@ void v4l2_fwrite_plane_no_padding(void *buf_start, __u32 buf_size,
 }
 
 /* writhe the buffer line-by-line, without padding */
-void v4l2_fwrite_payload_no_padding(bool is_mp, const char *filename,
+void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fmt,
+				    const char *filename,
 				    struct v4l2_buffer *buf, void *buf_start[],
-				    int bytesperline[], int bytesperline_no_padding[],
-				    int h_crop)
+				    int w_crop, int h_crop)
 {
 	int plane;
 	FILE *fout;
+	int bytesperline[2];
+	int bytesperline_no_padding[2];
 
 	fout = fopen(filename, "wb");
+
+	bytesperline[0] = cap_fmt->fmt.pix_mp.plane_fmt[0].bytesperline;
+	bytesperline_no_padding[0] = bytesperline[0] * w_crop / cap_fmt->fmt.pix.width;
+	printf("\tplane[0] bytesperline %d, bytesperline_no_padding %d\n",
+	       bytesperline[0], bytesperline_no_padding[0]);
+
+	if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12M ||
+	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12) {
+		bytesperline[1] = bytesperline[0] / 2;
+		bytesperline_no_padding[1] = bytesperline_no_padding[0] / 2;
+		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12)
+			printf("\tpseudo-plane[1] ");
+		else
+			printf("\tplane[1] ");
+		printf("bytesperline %d, bytesperline_no_padding %d\n",
+		       bytesperline[1], bytesperline_no_padding[1]);
+	}
+
 	if (!is_mp) {
 		printf("\tSingle plane payload: %d bytes\n", buf->bytesused);
 		v4l2_fwrite_plane_no_padding(buf_start[0], buf->bytesused,
@@ -654,6 +679,18 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const char *filename,
 						     bytesperline_no_padding[plane],
 						     h_crop, fout);
 		}
+		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12) {
+			int pseudo_plane0_size = buf->m.planes[0].bytesused * 2 / 3;
+			int pseudo_plane1_size = buf->m.planes[0].bytesused * 1 / 3;
+
+			printf("\tPseudo-Plane %d payload: %d bytes\n", 1,
+			       pseudo_plane1_size);
+			v4l2_fwrite_plane_no_padding((char *)buf_start[0] + pseudo_plane0_size,
+						     pseudo_plane1_size,
+						     bytesperline[1],
+						     bytesperline_no_padding[1],
+						     h_crop, fout);
+		}
 	}
 	fclose(fout);
 }
@@ -663,8 +700,6 @@ void v4l2_fwrite_cap_payload(int vdev_fd, bool is_mp, const char *filename,
 {
 	struct v4l2_format cap_fmt;
 	int w, h, w_crop, h_crop;
-	int bytesperline[2];
-	int bytesperline_no_padding[2];
 
 	if (!is_mp)
 		cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -707,21 +742,7 @@ void v4l2_fwrite_cap_payload(int vdev_fd, bool is_mp, const char *filename,
 			return;
 		}
 	}
-
-	bytesperline[0] = cap_fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
-	bytesperline_no_padding[0] = bytesperline[0] * w_crop / w;
-	printf("\tplane[0] bytesperline %d, bytesperline_no_padding %d\n",
-	       bytesperline[0], bytesperline_no_padding[0]);
-
-	if (cap_fmt.fmt.pix_mp.num_planes > 1 &&
-	    cap_fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_NV12M) {
-		bytesperline[1] = bytesperline[0] / 2;
-		bytesperline_no_padding[1] = bytesperline_no_padding[0] / 2;
-		printf("\tplane[1] bytesperline %d, bytesperline_no_padding %d\n",
-		       bytesperline[1], bytesperline_no_padding[1]);
-	}
-	v4l2_fwrite_payload_no_padding(is_mp, filename, buf, buf_start,
-				       bytesperline, bytesperline_no_padding, h_crop);
+	v4l2_fwrite_payload_no_padding(is_mp, &cap_fmt, filename, buf, buf_start, w_crop, h_crop);
 }
 
 /* print all payload, including paddings */
