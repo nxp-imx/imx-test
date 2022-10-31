@@ -454,9 +454,8 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 		}
 
 		sync_decoder_node_info(decoder);
-		PITCHER_LOG("decoder fmt : %s\n",
-				pitcher_get_format_name(decoder->node.pixelformat));
-		PITCHER_LOG("decoder capture : %d x %d, count = %ld\n",
+		PITCHER_LOG("decoder capture: %s %d x %d, count = %ld\n",
+			pitcher_get_format_name(decoder->capture.pixelformat),
 			decoder->capture.width, decoder->capture.height,
 			decoder->capture.frame_count);
 		decoder->capture.resolution_change = false;
@@ -2070,7 +2069,8 @@ static int ofile_run(void *arg, struct pitcher_buffer *buffer)
 
 	ofile_insert_header(file, buffer);
 
-	if (buffer->format->format < PIX_FMT_COMPRESSED &&
+	if (buffer->format &&
+	    buffer->format->format < PIX_FMT_COMPRESSED &&
 	    buffer->format->format != PIX_FMT_RFC &&
 	    buffer->format->format != PIX_FMT_RFCX &&
 	    buffer->format->desc->tile_ws == 0 &&

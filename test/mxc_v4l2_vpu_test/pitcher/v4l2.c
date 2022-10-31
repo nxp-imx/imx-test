@@ -131,6 +131,10 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		component->field = format.fmt.pix_mp.field;
 	}
 	component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc);
+	if (V4L2_TYPE_IS_CAPTURE(component->type) && (!component->width || !component->height))
+		PITCHER_ERR("invalid capture fmt: %s %d x %d\n",
+			    pitcher_get_format_name(component->pixelformat),
+			    component->width, component->height);
 
 	return RET_OK;
 }
