@@ -98,6 +98,8 @@ struct v4l2_component_t {
 	int resolution_change;
 	uint32_t field;
 	struct pix_fmt_info format;
+	int fixed_timestamp;
+	struct timeval timestamp;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;

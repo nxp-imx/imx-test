@@ -1523,6 +1523,9 @@ static int init_decoder_platform(struct decoder_test_t *decoder)
 	    !strcasecmp((const char*)cap.driver, "amphion-vpu")) {
 		decoder->platform.type = IMX_8X;
 		decoder->platform.set_decoder_parameter = set_decoder_parameter;
+		decoder->output.fixed_timestamp = 1;
+		decoder->output.timestamp.tv_sec = -1;
+		decoder->output.timestamp.tv_usec = 234568;	//-765432000
 	} else if (!strcasecmp((const char*)cap.driver, "vsi_v4l2")) {
 		decoder->platform.type = IMX_8M;
 		decoder->platform.set_decoder_parameter = set_decoder_parameter;

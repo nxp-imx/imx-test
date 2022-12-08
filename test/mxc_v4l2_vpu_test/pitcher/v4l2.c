@@ -469,6 +469,8 @@ static void __qbuf(struct v4l2_component_t *component,
 		}
 	}
 	v4lbuf.timestamp.tv_sec = -1;
+	if (component->fixed_timestamp)
+		v4lbuf.timestamp = component->timestamp;
 	ret = ioctl(fd, VIDIOC_QBUF, &v4lbuf);
 	if (ret) {
 		PITCHER_ERR("(%s)qbuf fail, error: %s\n",
