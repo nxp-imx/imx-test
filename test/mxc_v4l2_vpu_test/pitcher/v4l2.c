@@ -136,6 +136,15 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 			    pitcher_get_format_name(component->pixelformat),
 			    component->width, component->height);
 
+	pitcher_set_preferred_fourcc(component->chnno, component->fourcc);
+	PITCHER_LOG("%s s_fmt %c%c%c%c %dx%d\n",
+		    component->desc.name,
+		    component->fourcc,
+		    component->fourcc >> 8,
+		    component->fourcc >> 16,
+		    component->fourcc >> 24,
+		    component->width, component->height);
+
 	return RET_OK;
 }
 
@@ -867,22 +876,27 @@ static int __cleanup_v4l2(struct v4l2_component_t *component)
 	return __rel_v4l2_buffer(component);
 }
 
-static int get_v4l2_fourcc(struct v4l2_component_t *component)
+static int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferred_fourcc)
 {
 	struct v4l2_fmtdesc fmt_desc;
+	int found = 0;
 
 	fmt_desc.type = component->type;
 	fmt_desc.index = 0;
 
 	while (!v4l2_enum_fmt(component->fd, &fmt_desc)) {
 		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat) == component->pixelformat) {
-			component->fourcc = fmt_desc.pixelformat;
-			return RET_OK;
+			if (!found || fmt_desc.pixelformat == preferred_fourcc)
+				component->fourcc = fmt_desc.pixelformat;
+			found = 1;
 		}
 		fmt_desc.index++;
 	}
 
-	return -RET_E_NOT_SUPPORT;
+	if (!found)
+		return -RET_E_NOT_SUPPORT;
+
+	return RET_OK;
 }
 
 static int start_v4l2(void *arg)
@@ -894,13 +908,21 @@ static int start_v4l2(void *arg)
 		return -RET_E_INVAL;
 
 	if (component->pixelformat != PIX_FMT_NONE) {
-		ret = get_v4l2_fourcc(component);
+		uint32_t preferred_fourcc = 0;
+
+		if (component->memory == V4L2_MEMORY_DMABUF) {
+			int source = pitcher_get_source(component->chnno);
+
+			preferred_fourcc = pitcher_get_preferred_fourcc(source);
+		}
+		ret = get_v4l2_fourcc(component, preferred_fourcc);
 		if (ret) {
 			PITCHER_ERR("can't find fourcc for foramt %s\n",
 					pitcher_get_format_name(component->pixelformat));
 			return ret;
 		}
 	}
+
 	ret = __init_v4l2(component);
 	if (ret < 0)
 		return ret;

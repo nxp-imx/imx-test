@@ -45,6 +45,7 @@ struct pitcher_chn {
 	struct pitcher_poll_fd pfd;
 	struct pitcher_core *core;
 	unsigned int ignore_pollerr;
+	uint32_t preferred_fourcc;
 };
 
 struct connect_t {
@@ -900,4 +901,26 @@ void pitcher_set_ignore_pollerr(unsigned int chnno, unsigned int ignore)
 		return;
 
 	chn->ignore_pollerr = ignore;
+}
+
+void pitcher_set_preferred_fourcc(unsigned int chnno, uint32_t fourcc)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return;
+
+	chn->preferred_fourcc = fourcc;
+}
+
+uint32_t pitcher_get_preferred_fourcc(unsigned int chnno)
+{
+	struct pitcher_chn *chn;
+
+	chn = __find_chn(chnno);
+	if (!chn)
+		return 0;
+
+	return chn->preferred_fourcc;
 }

@@ -37,7 +37,7 @@
 
 #define STRING(x)		#x
 #define VERSION_MAJOR		2
-#define VERSION_MINOR		1
+#define VERSION_MINOR		2
 
 #define MAX_NODE_COUNT		32
 #define DEFAULT_FMT		PIX_FMT_NV12
