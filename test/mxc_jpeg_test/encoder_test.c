@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 			exit(1);
 		bufferout.bytesused = filesize;
 	} else { /* multi-planar */
-		if (ea.fourcc != V4L2_PIX_FMT_NV12M) {
+		if (ea.fourcc != V4L2_PIX_FMT_NV12M && ea.fourcc != V4L2_PIX_FMT_P012M) {
 			if (fread(bufferout_start[0], filesize, 1, testraw) != 1)
 				exit(1);
 			bufferout.m.planes[0].bytesused = filesize;
@@ -120,8 +120,14 @@ int main(int argc, char *argv[])
 			int expected_size = ea.width * ea.height * 3 / 2;
 			int luma_size = ea.w_padded * ea.h_padded;
 			int chroma_size = ea.w_padded * ea.h_padded / 2;
+			if (ea.fourcc == V4L2_PIX_FMT_P012M) { /* 12bit precision*/
+				expected_size_padded *= 2;
+				expected_size *= 2;
+				luma_size *= 2;
+				chroma_size *= 2;
+			}
 
-			printf("%d x %d NV12 expected size %d/%d, actual filesize is %ld\n",
+			printf("%d x %d NV12M/P012M expected size %d/%d, actual filesize is %ld\n",
 			       ea.width, ea.height, expected_size, expected_size_padded, filesize);
 
 			if (filesize != expected_size_padded) {

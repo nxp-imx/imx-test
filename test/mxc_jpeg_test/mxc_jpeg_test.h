@@ -48,9 +48,24 @@ static struct pix_fmt_data fmt_data[] = {
 		.fourcc	= V4L2_PIX_FMT_NV12
 	},
 	{
+		.name	= "yuv420-12",
+		.descr	= "2-planes, Y and UV-interleaved, non-contiguous, 12-bit",
+		.fourcc	= V4L2_PIX_FMT_P012M
+	},
+	{
+		.name	= "yuv420s-12",
+		.descr	= "2-planes, Y and UV-interleaved, contiguous, 12-bit",
+		.fourcc	= V4L2_PIX_FMT_P012
+	},
+	{
 		.name	= "yuv422",
 		.descr	= "packed YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV
+	},
+	{
+		.name	= "yuv422-12",
+		.descr	= "packed YUYV",
+		.fourcc	= V4L2_PIX_FMT_Y212
 	},
 	{
 		.name	= "rgb24",
@@ -63,14 +78,29 @@ static struct pix_fmt_data fmt_data[] = {
 		.fourcc	= V4L2_PIX_FMT_BGR24
 	},
 	{
+		.name	= "bgr24-12",
+		.descr	= "packed BGR",
+		.fourcc	= V4L2_PIX_FMT_B312
+	},
+	{
 		.name	= "yuv444",
 		.descr	= "packed YUV",
 		.fourcc	= V4L2_PIX_FMT_YUV24
 	},
 	{
+		.name	= "yuv444-12",
+		.descr	= "packed YUV 12bit",
+		.fourcc	= V4L2_PIX_FMT_Y312
+	},
+	{
 		.name	= "gray",
-		.descr	= "Y8 or Y12 or Single Component",
+		.descr	= "Y8 Single Component",
 		.fourcc	= V4L2_PIX_FMT_GREY
+	},
+	{
+		.name	= "gray-12",
+		.descr	= "Y12 Single Component",
+		.fourcc	= V4L2_PIX_FMT_Y012
 	},
 	{
 		.name	= "argb",
@@ -81,6 +111,11 @@ static struct pix_fmt_data fmt_data[] = {
 		.name	= "abgr",
 		.descr	= "packed ABGR",
 		.fourcc	= V4L2_PIX_FMT_ABGR32
+	},
+	{
+		.name	= "abgr-12",
+		.descr	= "packed ABGR 12-bit",
+		.fourcc	= V4L2_PIX_FMT_B412
 	},
 };
 
@@ -292,7 +327,8 @@ void v4l2_s_fmt_cap(int vdev_fd, bool is_mp, struct encoder_args *ea,
 	} else {
 		cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		cap_fmt.fmt.pix_mp.pixelformat = pixelformat;
-		if (pixelformat == V4L2_PIX_FMT_NV12M)
+		if (pixelformat == V4L2_PIX_FMT_NV12M ||
+		    pixelformat == V4L2_PIX_FMT_P012M)
 			cap_fmt.fmt.pix_mp.num_planes = 2;
 		else
 			cap_fmt.fmt.pix_mp.num_planes = 1;
@@ -653,10 +689,13 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fm
 	       bytesperline[0], bytesperline_no_padding[0]);
 
 	if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12M ||
-	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12) {
+	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012M ||
+	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012) {
 		bytesperline[1] = bytesperline[0] / 2;
 		bytesperline_no_padding[1] = bytesperline_no_padding[0] / 2;
-		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12)
+		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+		    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12)
 			printf("\tpseudo-plane[1] ");
 		else
 			printf("\tplane[1] ");
@@ -679,7 +718,8 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fm
 						     bytesperline_no_padding[plane],
 						     h_crop, fout);
 		}
-		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12) {
+		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+		    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012) {
 			int pseudo_plane0_size = buf->m.planes[0].bytesused * 2 / 3;
 			int pseudo_plane1_size = buf->m.planes[0].bytesused * 1 / 3;
 
