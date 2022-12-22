@@ -395,7 +395,10 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 			PITCHER_LOG("LAST BUFFER, flags = 0x%x, bytesused = %ld\n", v4lbuf.flags, buffer->planes[0].bytesused);
 			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
 		}
-		if (buffer->planes[0].bytesused)
+		if (v4lbuf.flags & V4L2_BUF_FLAG_ERROR)
+			buffer->flags |= PITCHER_BUFFER_FLAG_ERROR;
+
+		if (buffer->planes[0].bytesused && !(buffer->flags & PITCHER_BUFFER_FLAG_ERROR))
 			component->frame_count++;
 	}
 
@@ -477,6 +480,7 @@ static void __qbuf(struct v4l2_component_t *component,
 				component->desc.name, strerror(errno));
 		SAFE_RELEASE(buffer->priv, pitcher_put_buffer);
 		component->errors[buffer->index] = pitcher_get_buffer(buffer);
+		pitcher_set_ignore_pollerr(component->chnno, false);
 		return;
 	}
 
@@ -1016,6 +1020,7 @@ static void __check_v4l2_events(struct v4l2_component_t *component)
 	case V4L2_EVENT_EOS:
 		PITCHER_LOG("Receive EOS, fd = %d\n", component->fd);
 		component->eos_received = true;
+		pitcher_set_ignore_pollerr(component->chnno, true);
 		break;
 	case V4L2_EVENT_SOURCE_CHANGE:
 		PITCHER_LOG("Receive Source Change, fd = %d\n", component->fd);
@@ -1266,7 +1271,7 @@ static int run_v4l2(void *arg, struct pitcher_buffer *pbuf)
 
 	if (V4L2_TYPE_IS_OUTPUT(component->type))
 		component->buffers[buffer->index] = pitcher_get_buffer(buffer);
-	else
+	else if (!(buffer->flags & PITCHER_BUFFER_FLAG_ERROR))
 		pitcher_push_back_output(component->chnno, buffer);
 
 	if (buffer->flags & PITCHER_BUFFER_FLAG_LAST) {
