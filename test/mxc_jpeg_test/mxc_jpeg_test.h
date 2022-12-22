@@ -31,7 +31,7 @@ struct encoder_args {
 };
 
 struct pix_fmt_data {
-	char name[10];
+	char name[20];
 	char descr[80];
 	int fourcc;
 };
