@@ -37,7 +37,7 @@
 
 #define STRING(x)		#x
 #define VERSION_MAJOR		2
-#define VERSION_MINOR		2
+#define VERSION_MINOR		3
 
 #define MAX_NODE_COUNT		32
 #define DEFAULT_FMT		PIX_FMT_NV12
@@ -416,8 +416,7 @@ static void sync_decoder_node_info(struct decoder_test_t *decoder)
 		switch_fmt_to_tile(&decoder->node.pixelformat);
 		if (decoder->capture.format.format != decoder->node.pixelformat) {
 			decoder->capture.format.format = decoder->node.pixelformat;
-			pitcher_get_pix_fmt_info(&decoder->capture.format,
-					decoder->capture.bytesperline);
+			pitcher_get_pix_fmt_info(&decoder->capture.format, 0);
 		}
 	}
 }
@@ -2031,6 +2030,8 @@ static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 	unsigned long offset;
 
 	for (i = 0; i < format->num_planes; i++) {
+		uint32_t left;
+		uint32_t top;
 		offset = 0;
 
 		pitcher_get_buffer_plane(buffer, i, &splane);
@@ -2048,10 +2049,17 @@ static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 			h >>= desc->log2_chroma_h;
 		}
 		line = ALIGN(w * desc->comp[i].bpp, 8) >> 3;
+		left = crop->left;
+		top = crop->top;
+		if (i) {
+			left >>= desc->log2_chroma_w;
+			top >>= desc->log2_chroma_h;
+		}
 
 		planes_line = format->planes[i].line;
+		offset = planes_line * top;
 		for (j = 0; j < h; j++) {
-			fwrite((uint8_t *)splane.virt + offset, 1, line, file->filp);
+			fwrite((uint8_t *)splane.virt + offset + left, 1, line, file->filp);
 			offset += planes_line;
 		}
 	}
