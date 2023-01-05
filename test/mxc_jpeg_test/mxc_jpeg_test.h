@@ -49,12 +49,12 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "yuv420-12",
-		.descr	= "2-planes, Y and UV-interleaved, non-contiguous, 12-bit",
+		.descr	= "2-planes, Y and UV-interleaved, non-contiguous, 12-bit precision",
 		.fourcc	= V4L2_PIX_FMT_P012M
 	},
 	{
 		.name	= "yuv420s-12",
-		.descr	= "2-planes, Y and UV-interleaved, contiguous, 12-bit",
+		.descr	= "2-planes, Y and UV-interleaved, contiguous, 12-bit precision",
 		.fourcc	= V4L2_PIX_FMT_P012
 	},
 	{
@@ -64,7 +64,7 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "yuv422-12",
-		.descr	= "packed YUYV",
+		.descr	= "packed YUYV, 12-bit precision",
 		.fourcc	= V4L2_PIX_FMT_Y212
 	},
 	{
@@ -79,7 +79,7 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "bgr24-12",
-		.descr	= "packed BGR",
+		.descr	= "packed BGR, 12-bit precision",
 		.fourcc	= V4L2_PIX_FMT_B312
 	},
 	{
@@ -89,7 +89,7 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "yuv444-12",
-		.descr	= "packed YUV 12bit",
+		.descr	= "packed YUV, 12-bit precision",
 		.fourcc	= V4L2_PIX_FMT_Y312
 	},
 	{
@@ -114,7 +114,7 @@ static struct pix_fmt_data fmt_data[] = {
 	},
 	{
 		.name	= "abgr-12",
-		.descr	= "packed ABGR 12-bit",
+		.descr	= "packed ABGR, 12-bit precision",
 		.fourcc	= V4L2_PIX_FMT_B412
 	},
 };
@@ -130,7 +130,7 @@ void print_usage(char *str)
 	printf("[-x]\n");
 	printf("Supported pixel formats:\n");
 	for (i = 0; i < sizeof(fmt_data) / sizeof(*fmt_data); i++)
-		printf("\t%8s: %s\n",
+		printf("\t%20s: %s\n",
 		       fmt_data[i].name,
 		       fmt_data[i].descr);
 	printf("Optional arguments:\n");
