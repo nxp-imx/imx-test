@@ -78,9 +78,9 @@ static struct pix_fmt_data fmt_data[] = {
 		.fourcc	= V4L2_PIX_FMT_BGR24
 	},
 	{
-		.name	= "bgr24-12",
+		.name	= "bgr48-12",
 		.descr	= "packed BGR, 12-bit precision",
-		.fourcc	= V4L2_PIX_FMT_B312
+		.fourcc	= V4L2_PIX_FMT_BGR48_12
 	},
 	{
 		.name	= "yuv444",
@@ -90,7 +90,7 @@ static struct pix_fmt_data fmt_data[] = {
 	{
 		.name	= "yuv444-12",
 		.descr	= "packed YUV, 12-bit precision",
-		.fourcc	= V4L2_PIX_FMT_Y312
+		.fourcc	= V4L2_PIX_FMT_YUV48_12
 	},
 	{
 		.name	= "gray",
@@ -113,9 +113,9 @@ static struct pix_fmt_data fmt_data[] = {
 		.fourcc	= V4L2_PIX_FMT_ABGR32
 	},
 	{
-		.name	= "abgr-12",
+		.name	= "abgr64-12",
 		.descr	= "packed ABGR, 12-bit precision",
-		.fourcc	= V4L2_PIX_FMT_B412
+		.fourcc	= V4L2_PIX_FMT_ABGR64_12
 	},
 };
 
