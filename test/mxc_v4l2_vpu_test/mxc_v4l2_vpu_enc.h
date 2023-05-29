@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2021 NXP. All rights reserved.
+ * Copyright(c) 2023 NXP. All rights reserved.
  *
  */
 /*
@@ -29,6 +29,9 @@ enum {
 	TEST_TYPE_DECODER,
 	TEST_TYPE_PARSER,
 	TEST_TYPE_SINK,
+#ifdef ENABLE_MM_PARSE
+	TEST_TYPE_MM_EXTRACTOR,
+#endif
 };
 
 struct test_node {
@@ -75,6 +78,14 @@ int parse_dmanode_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[]);
 struct test_node *alloc_dmanode(void);
+
+#ifdef ENABLE_MM_PARSE
+extern struct mxc_vpu_test_option mm_extractor_options[];
+int parse_mm_extractor_option(struct test_node *node,
+				struct mxc_vpu_test_option *option,
+				char *argv[]);
+struct test_node *alloc_mm_extractor_node(void);
+#endif
 
 #ifdef __cplusplus
 }

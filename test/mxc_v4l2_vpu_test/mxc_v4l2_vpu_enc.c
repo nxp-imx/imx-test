@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2021 NXP
+ * Copyright 2018-2023 NXP
  *
  */
 /*
@@ -200,10 +200,7 @@ static void force_exit(void)
 
 static int terminate(void)
 {
-	g_exit++;
-
-	if (g_exit >= 3)
-		force_exit();
+	force_exit();
 
 	return 0;
 }
@@ -1464,7 +1461,8 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 	case PIX_FMT_VP9:
 	case PIX_FMT_VP6:
 	case PIX_FMT_AVS:
-	case PIX_FMT_RV:
+	case PIX_FMT_RV30:
+	case PIX_FMT_RV40:
 	case PIX_FMT_SPK:
 	case PIX_FMT_DIVX:
 		break;
@@ -2913,7 +2911,7 @@ static struct pitcher_buffer *parser_alloc_buffer(void *arg)
 
 static int init_parser_memory(struct parser_test_t *parser)
 {
-	if (parser->node.pixelformat == PIX_FMT_RV) {
+	if (parser->node.pixelformat == PIX_FMT_RV30 || parser->node.pixelformat == PIX_FMT_RV40) {
 		FILE *fp = NULL;
 		size_t size = 0;
 
@@ -3195,6 +3193,15 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.parse_option = parse_parser_option,
 		.alloc_node = alloc_parser_node,
 	},
+#ifdef ENABLE_MM_PARSE
+	{
+		.subcmd = "media",
+		.option = mm_extractor_options,
+		.type = TEST_TYPE_MM_EXTRACTOR,
+		.parse_option = parse_mm_extractor_option,
+		.alloc_node = alloc_mm_extractor_node,
+	},
+#endif
 	{
 		.subcmd = "dma",
 		.type = TEST_TYPE_CONVERT,

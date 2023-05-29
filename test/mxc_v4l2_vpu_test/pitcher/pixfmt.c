@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2021 NXP. All rights reserved.
+ * Copyright(c) 2023 NXP. All rights reserved.
  *
  */
 /*
@@ -422,9 +422,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.fourcc = VPU_PIX_FMT_SPK,
 		.num_planes = 1,
 	},
-	[PIX_FMT_RV] = {
-		.name = "rv",
-		.fourcc = VPU_PIX_FMT_RV,
+	[PIX_FMT_RV30] = {
+		.name = "rv30",
+		.fourcc = v4l2_fourcc('R', 'V', '3', '0'),
+		.num_planes = 1,
+	},
+	[PIX_FMT_RV40] = {
+		.name = "rv40",
+		.fourcc = v4l2_fourcc('R', 'V', '4', '0'),
 		.num_planes = 1,
 	},
 	[PIX_FMT_JPEG] = {

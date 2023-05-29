@@ -110,3 +110,23 @@ uint32_t pitcher_get_bits_val_le(const uint8_t *data, uint32_t size, uint32_t nr
 
 	return val;
 }
+
+uint32_t pitcher_bytestream_get_be(uint8_t *bs, uint32_t bytes)
+{
+	uint32_t val = 0;
+
+	for (uint32_t i = 0; i < bytes; i++)
+		val = (val << 8) | bs[i];
+
+	return val;
+}
+
+void pitcher_bytestream_set_be(uint8_t *bs, uint32_t val, uint32_t bytes)
+{
+	uint8_t *pdata = bs + bytes - 1;
+
+	for (uint32_t i = 0; i < bytes; i++) {
+		*pdata-- = (val & 0xff);
+		val >>= 8;
+	}
+}

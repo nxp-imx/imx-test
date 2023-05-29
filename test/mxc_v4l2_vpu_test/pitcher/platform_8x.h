@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2021 NXP
+ * Copyright 2018-2023 NXP
  *
  */
 
@@ -23,7 +23,6 @@ extern "C"
 
 #define VPU_PIX_FMT_AVS				v4l2_fourcc('A', 'V', 'S', '0')
 #define VPU_PIX_FMT_ASP				v4l2_fourcc('A', 'S', 'P', '0')
-#define VPU_PIX_FMT_RV				v4l2_fourcc('R', 'V', '0', '0')
 #define VPU_PIX_FMT_VP6				v4l2_fourcc('V', 'P', '6', '0')
 #define VPU_PIX_FMT_SPK				v4l2_fourcc('S', 'P', 'K', '0')
 #define VPU_PIX_FMT_DIVX			v4l2_fourcc('D', 'I', 'V', 'X')

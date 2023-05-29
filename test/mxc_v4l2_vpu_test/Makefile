@@ -34,6 +34,11 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			dmanode.o \
 			pitcher/bitstream.o
 
+ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/imx-mm/parser/fsl_parser.h))
+CFLAGS += -DENABLE_MM_PARSE
+mxc_v4l2_vpu_enc.out += media_extractor.o
+endif
+
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/linux/dma-heap.h))
 CFLAGS += -DENABLE_DMA_HEAP
 endif

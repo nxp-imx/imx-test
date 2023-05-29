@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2021 NXP. All rights reserved.
+ * Copyright(c) 2023 NXP. All rights reserved.
  *
  */
 /*
@@ -73,7 +73,8 @@ enum pixel_format {
 	PIX_FMT_H263,
 	PIX_FMT_AVS,
 	PIX_FMT_SPK,
-	PIX_FMT_RV,
+	PIX_FMT_RV30,
+	PIX_FMT_RV40,
 	PIX_FMT_JPEG,
 
 	PIX_FMT_NB,

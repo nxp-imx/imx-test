@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2021 NXP
+ * Copyright 2018-2023 NXP
  *
  */
 
@@ -43,6 +43,7 @@ struct platform_t {
 	int (*set_encoder_parameter)(void *arg);
 };
 
+uint32_t get_platform_type(void);
 int set_decoder_parameter(void *arg);
 
 #ifdef __cplusplus

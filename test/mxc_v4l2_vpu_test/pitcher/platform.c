@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 NXP
+ * Copyright 2023 NXP
  *
  */
 /*
@@ -14,12 +14,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include "pitcher.h"
 #include "pitcher_v4l2.h"
 #include "pitcher_def.h"
 #include "platform.h"
 #include "platform_8x.h"
 
+uint32_t get_platform_type(void)
+{
+	FILE *f = fopen("/sys/devices/soc0/soc_id", "r");
+	char buf[32];
+	int ret;
+
+	ret = fread(buf, 1, sizeof(buf), f);
+	if (!ret)
+		return OTHERS;
+	if (!strncmp(buf, "i.MX8QM", 7) || !strncmp(buf, "i.MX8QXP", 8))
+		return IMX_8X;
+	return IMX_8M;
+}
 
 int set_decoder_parameter(void *arg)
 {

@@ -165,6 +165,9 @@ long pitcher_memory_count(void);
 #define pitcher_realloc(ptr, size) \
 		_pitcher_realloc(ptr, size, __func__, __LINE__);
 
+uint32_t pitcher_bytestream_get_be(uint8_t *bs, uint32_t bytes);
+void pitcher_bytestream_set_be(uint8_t *bs, uint32_t val, uint32_t bytes);
+
 #ifdef __cplusplus
 }
 #endif
