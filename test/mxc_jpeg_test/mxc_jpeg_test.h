@@ -583,6 +583,7 @@ void v4l2_qbuf_dqbuf_loop(int vdev_fd, int n, struct v4l2_buffer *buf_cap,
 	struct timeval start, end;
 	time_t usecs;
 	double fps;
+	struct timeval tv_start, tv_end;
 
 	/*
 	 * repeatedly enqueue/dequeue 1 output buffer and 1 capture buffer,
@@ -593,6 +594,7 @@ void v4l2_qbuf_dqbuf_loop(int vdev_fd, int n, struct v4l2_buffer *buf_cap,
 	for (i = 0; i < n; i++) {
 		printf("Iteration #%d\n", i);
 		printf("\tQBUF IN\n");
+		gettimeofday(&tv_start, 0);
 		if (ioctl(vdev_fd, VIDIOC_QBUF, buf_cap) < 0) {
 			perror("VIDIOC_QBUF IN");
 			exit(1);
@@ -613,13 +615,18 @@ void v4l2_qbuf_dqbuf_loop(int vdev_fd, int n, struct v4l2_buffer *buf_cap,
 			perror("VIDIOC_DQBUF IN");
 			exit(1);
 		}
-
+		gettimeofday(&tv_end, 0);
 		/*
 		 * use capture and output buffer timestamps to measure
 		 * performance with as little overhead as possible
 		 */
-		start = buf_out->timestamp;
-		end = buf_cap->timestamp;
+		if (buf_out->timestamp.tv_sec == 0 || buf_cap->timestamp.tv_sec == 0) {
+			start = tv_start;
+			end = tv_end;
+		} else {
+			start = buf_out->timestamp;
+			end = buf_cap->timestamp;
+		}
 		usecs = 1000000 * (end.tv_sec - start.tv_sec) +
 				end.tv_usec - start.tv_usec;
 		if (!usecs)
