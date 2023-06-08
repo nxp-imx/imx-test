@@ -34,6 +34,7 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			dmanode.o \
 			pitcher/bitstream.o
 
+ifneq ($(PLATFORM), zebu)
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/imx-mm/parser/fsl_parser.h))
 CFLAGS += -DENABLE_MM_PARSE
 mxc_v4l2_vpu_enc.out += media_extractor.o
@@ -60,6 +61,7 @@ mxc_v4l2_vpu_enc.out += waylandsink.o \
 			wayland-generated-protocols/linux-dmabuf-unstable-v1-protocol.o
 CFLAGS += -DENABLE_WAYLAND
 LDFLAGS += -lwayland-client
+endif
 endif
 endif
 endif
