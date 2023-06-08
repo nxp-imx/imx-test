@@ -2611,8 +2611,10 @@ static int g2d_cvt_run(void *arg, struct pitcher_buffer *pbuf)
 
 		if (!g2dc->ctx)
 			g2dc->ctx = pitcher_create_g2d_convert();
-		if (!g2dc->ctx)
+		if (!g2dc->ctx) {
+			g2dc->end = true;
 			return -RET_E_INVAL;
+		}
 
 		buffer = pitcher_get_idle_buffer(g2dc->chnno);
 		if (!buffer)

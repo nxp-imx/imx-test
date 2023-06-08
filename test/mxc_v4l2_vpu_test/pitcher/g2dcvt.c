@@ -26,6 +26,7 @@
 #include "loadso.h"
 
 #define DEFAULT_G2D	"/usr/lib/libg2d.so"
+#define DEFAULT_G2D_2	"/usr/lib/libg2d.so.2"
 #define LOAD_FUNC(g2d, NAME)	\
 	g2d->NAME = pitcher_load_function(g2d->dll_handle, #NAME); \
 	if  (!g2d->NAME) { \
@@ -239,6 +240,8 @@ struct convert_ctx *pitcher_create_g2d_convert(void)
 		goto error;
 
 	g2d->dll_handle = pitcher_load_object(DEFAULT_G2D);
+	if (!g2d->dll_handle)
+		g2d->dll_handle = pitcher_load_object(DEFAULT_G2D_2);
 	if (!g2d->dll_handle)
 		goto error;
 

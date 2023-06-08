@@ -92,7 +92,7 @@ struct wayland_buffer_link {
 static struct wl_videoformat wl_formats[] = {
 	{WL_SHM_FORMAT_YUYV,   DRM_FORMAT_YUYV,   PIX_FMT_YUYV,    0},
 	{WL_SHM_FORMAT_NV12,   DRM_FORMAT_NV12,   PIX_FMT_NV12,    0},
-	{WL_SHM_FORMAT_YUV420, DRM_FORMAT_YUV420, PIX_FMT_I420,  0},
+	{WL_SHM_FORMAT_YUV420, DRM_FORMAT_YUV420, PIX_FMT_I420,    0},
 };
 
 static uint32_t pixel_foramt_to_wl_dmabuf_format(uint32_t format)
@@ -342,7 +342,7 @@ exit:
 
 static void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 {
-	if (wlc->tid >= 0) {
+	if (wlc->tid != -1) {
 		pthread_join(wlc->tid, NULL);
 		wlc->tid = -1;
 	}
@@ -371,6 +371,14 @@ static void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
 	wl_surface_damage(wlc->video_surface_wrapper, 0 ,0 , wlc->node.width, wlc->node.height);
 	wl_surface_commit(wlc->video_surface_wrapper);
 	wl_display_flush(wlc->display);
+}
+
+static int free_input_buffer(unsigned long item, void *arg)
+{
+	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
+
+	pitcher_put_buffer(link->buffer);
+	return 1;
 }
 
 static int free_buffer_link(unsigned long item, void *arg)
@@ -479,8 +487,12 @@ static int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 	wl_buffer = link->wbuf;
 	pitcher_end_cpu_access(link->buffer, 1, 1);
 
-	while (wlc->redraw_pending)
+	while (wlc->redraw_pending && !wlc->end)
 		pthread_cond_wait(&wlc->redraw_wait, &wlc->render_lock);
+	if (wlc->end) {
+		pitcher_put_buffer(link->buffer);
+		return RET_OK;
+	}
 
 	wlc->redraw_pending = 1;
 	frame_callback = wl_surface_frame(wlc->video_surface_wrapper);
@@ -516,6 +528,8 @@ static void *wl_thread_run(void *arg)
 		pthread_mutex_unlock(&wlc->render_lock);
 		if (ret)
 			usleep(100);
+		if (is_force_exit() && wlc->end)
+			break;
 	}
 
 	wlc->done = true;
@@ -551,8 +565,13 @@ static int wayland_sink_start(void *arg)
 	wl_registry_add_listener(wlc->registry, &registry_listener, wlc);
 	wl_display_dispatch(wlc->display);
 	wl_display_roundtrip(wlc->display);
-	if (!wlc->compositor || !wlc->shell || !wlc->dmabuf)
+	if (!wlc->compositor || !wlc->dmabuf || !wlc->shell)
 		goto error;
+	if (wlc->format_pixel_2_wl(wlc->format.format) == DRM_FORMAT_INVALID) {
+		PITCHER_ERR("wayland sink doesn't support format %s\n",
+				pitcher_get_format_name(wlc->format.format));
+		goto error;
+	}
 
 	ret = pthread_create(&wlc->pid, NULL, wl_thread_run, wlc);
 	if (ret)
@@ -569,12 +588,14 @@ static int wayland_sink_start(void *arg)
 	if (!wlc->video_surface_wrapper)
 		goto error;
 
-	wlc->shell_surface = wl_shell_get_shell_surface(wlc->shell, wlc->video_surface);
-	if (!wlc->shell_surface)
-		goto error;
+	if (wlc->shell) {
+		wlc->shell_surface = wl_shell_get_shell_surface(wlc->shell, wlc->video_surface);
+		if (!wlc->shell_surface)
+			goto error;
 
-	wl_shell_surface_set_toplevel(wlc->shell_surface);
-	wl_shell_surface_add_listener(wlc->shell_surface, &shell_surface_listener, NULL);
+		wl_shell_surface_set_toplevel(wlc->shell_surface);
+		wl_shell_surface_add_listener(wlc->shell_surface, &shell_surface_listener, NULL);
+	}
 
 	if (wlc->fps)
 		wlc->interval = NSEC_PER_SEC / wlc->fps;
@@ -583,8 +604,9 @@ static int wayland_sink_start(void *arg)
 
 	return RET_OK;
 error:
+	pitcher_set_error(wlc->chnno);
 	wlc->end = true;
-	if (wlc->pid >= 0) {
+	if (wlc->pid != -1) {
 		pthread_join(wlc->pid, NULL);
 		wlc->pid = -1;
 	}
@@ -661,7 +683,13 @@ static int wayland_sink_stop(void *arg)
 	if (!wlc)
 		return -RET_E_INVAL;
 
-	if (wlc->pid >= 0) {
+	if (wlc->pid != -1) {
+		pthread_mutex_lock(&wlc->render_lock);
+		if (wlc->redraw_pending) {
+			wlc->redraw_pending = 0;
+			pthread_cond_signal(&wlc->redraw_wait);
+		}
+		pthread_mutex_unlock(&wlc->render_lock);
 		pthread_join(wlc->pid, NULL);
 		wlc->pid = -1;
 	}
@@ -670,6 +698,7 @@ static int wayland_sink_stop(void *arg)
 	wayland_sink_uninit_display(wlc);
 	pthread_mutex_unlock(&wlc->render_lock);
 
+	pitcher_queue_enumerate(wlc->queue, free_input_buffer, NULL);
 	SAFE_RELEASE(wlc->queue, pitcher_destroy_queue);
 	pitcher_queue_enumerate(wlc->links, free_buffer_link, NULL);
 	SAFE_RELEASE(wlc->links, pitcher_destroy_queue);
@@ -801,6 +830,9 @@ struct test_node *alloc_wayland_sink_node(void)
 	wlc->node.free_node = free_wayland_sink_node;
 	wlc->node.get_sink_chnno = get_wayland_sink_chnno;
 	wlc->node.set_source = set_wayland_sink_source;
+
+	wlc->pid = -1;
+	wlc->tid = -1;
 
 	return &wlc->node;
 }
