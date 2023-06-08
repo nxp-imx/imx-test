@@ -95,7 +95,7 @@ static struct wl_videoformat wl_formats[] = {
 	{WL_SHM_FORMAT_YUV420, DRM_FORMAT_YUV420, PIX_FMT_I420,    0},
 };
 
-static uint32_t pixel_foramt_to_wl_dmabuf_format(uint32_t format)
+uint32_t pixel_foramt_to_wl_dmabuf_format(uint32_t format)
 {
 	int i;
 
@@ -109,7 +109,7 @@ static uint32_t pixel_foramt_to_wl_dmabuf_format(uint32_t format)
 	return DRM_FORMAT_INVALID;
 }
 
-static uint32_t wl_dmabuf_format_to_pixel_format(uint32_t dma_format)
+uint32_t wl_dmabuf_format_to_pixel_format(uint32_t dma_format)
 {
 	int i;
 
@@ -129,14 +129,14 @@ struct mxc_vpu_test_option waylandsink_options[] = {
 	{NULL, 0, NULL},
 };
 
-static void dmabuf_format (void *data,
+void dmabuf_format (void *data,
 		struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf,
 		uint32_t format)
 {
 }
 
 
-static void dmabuf_modifier (void *data,
+void dmabuf_modifier (void *data,
 		struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1,
 		uint32_t format,
 		uint32_t modifier_hi,
@@ -155,7 +155,7 @@ static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
 	dmabuf_modifier,
 };
 
-static void global_registry_handler(void *data, struct wl_registry *registry,
+void global_registry_handler(void *data, struct wl_registry *registry,
 		uint32_t id, const char *interface, uint32_t version)
 {
 	struct wayland_sink_test_t *wlc = data;
@@ -177,7 +177,7 @@ static void global_registry_handler(void *data, struct wl_registry *registry,
 	}
 }
 
-static void global_registry_remover(void *data, struct wl_registry *registry, uint32_t id)
+void global_registry_remover(void *data, struct wl_registry *registry, uint32_t id)
 {
 }
 
@@ -186,18 +186,18 @@ static const struct wl_registry_listener registry_listener = {
 	global_registry_remover
 };
 
-static void handle_ping(void *data,
+void handle_ping(void *data,
 		struct wl_shell_surface *shell_surface, uint32_t serial)
 {
 }
 
-static void handle_configure(void *data,
+void handle_configure(void *data,
 		struct wl_shell_surface *shell_surface,
 		uint32_t edges, int32_t width, int32_t height)
 {
 }
 
-static void handle_popup_done(void *data, struct wl_shell_surface *shell_surface)
+void handle_popup_done(void *data, struct wl_shell_surface *shell_surface)
 {
 }
 
@@ -207,7 +207,7 @@ static const struct wl_shell_surface_listener shell_surface_listener = {
 	handle_popup_done
 };
 
-static void redraw(void *data, struct wl_callback *callback, uint32_t time)
+void redraw(void *data, struct wl_callback *callback, uint32_t time)
 {
 	struct wayland_sink_test_t *wlc = data;
 
@@ -222,7 +222,7 @@ static const struct wl_callback_listener frame_listener = {
 	redraw
 };
 
-static void buffer_release(void *data, struct wl_buffer *wl_buffer)
+void buffer_release(void *data, struct wl_buffer *wl_buffer)
 {
 	struct wayland_buffer_link *link = data;
 
@@ -235,7 +235,7 @@ static const struct wl_buffer_listener buffer_listener = {
 	buffer_release
 };
 
-static void create_succeeded(void *data,
+void create_succeeded(void *data,
 		struct zwp_linux_buffer_params_v1 *params,
 		struct wl_buffer *new_buffer)
 {
@@ -248,7 +248,7 @@ static void create_succeeded(void *data,
 	pthread_mutex_unlock(&d->lock);
 }
 
-static void create_failed (void *data,
+void create_failed (void *data,
 		struct zwp_linux_buffer_params_v1 *params)
 {
 	create_succeeded(data, params, NULL);
@@ -259,7 +259,7 @@ static const struct zwp_linux_buffer_params_v1_listener params_listener = {
 	create_failed
 };
 
-static void *wl_display_thread_run(void *arg)
+void *wl_display_thread_run(void *arg)
 {
 	struct wayland_sink_test_t *wlc = arg;
 
@@ -272,7 +272,7 @@ static void *wl_display_thread_run(void *arg)
 	return NULL;
 }
 
-static struct wl_buffer *wl_linux_dmabuf_construct_wl_buffer(
+struct wl_buffer *wl_linux_dmabuf_construct_wl_buffer(
 		struct wayland_sink_test_t *wlc,
 		struct pitcher_buffer *buffer)
 {
@@ -340,7 +340,7 @@ exit:
 	return data.wbuf;
 }
 
-static void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
+void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 {
 	if (wlc->tid != -1) {
 		pthread_join(wlc->tid, NULL);
@@ -355,7 +355,7 @@ static void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 	SAFE_RELEASE(wlc->display, wl_display_disconnect);
 }
 
-static void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
+void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
 {
 	struct wl_callback *frame_callback;
 
@@ -373,7 +373,7 @@ static void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
 	wl_display_flush(wlc->display);
 }
 
-static int free_input_buffer(unsigned long item, void *arg)
+int free_input_buffer(unsigned long item, void *arg)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 
@@ -381,7 +381,7 @@ static int free_input_buffer(unsigned long item, void *arg)
 	return 1;
 }
 
-static int free_buffer_link(unsigned long item, void *arg)
+int free_buffer_link(unsigned long item, void *arg)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 
@@ -389,7 +389,7 @@ static int free_buffer_link(unsigned long item, void *arg)
 	return 1;
 }
 
-static int compare_buffer_link(unsigned long item, unsigned long key)
+int compare_buffer_link(unsigned long item, unsigned long key)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 	struct pitcher_buffer *buffer = (struct pitcher_buffer *)key;
@@ -399,7 +399,7 @@ static int compare_buffer_link(unsigned long item, unsigned long key)
 	return 0;
 }
 
-static int get_buffer_link(unsigned long item, void *arg)
+int get_buffer_link(unsigned long item, void *arg)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 	struct wayland_buffer_link **pp = arg;
@@ -410,7 +410,7 @@ static int get_buffer_link(unsigned long item, void *arg)
 	return 0;
 }
 
-static struct wayland_buffer_link *find_buffer_link(struct wayland_sink_test_t *wlc,
+struct wayland_buffer_link *find_buffer_link(struct wayland_sink_test_t *wlc,
 					struct pitcher_buffer *buffer)
 {
 	struct wayland_buffer_link *link = NULL;
@@ -430,7 +430,7 @@ static struct wayland_buffer_link *find_buffer_link(struct wayland_sink_test_t *
 	return link;
 }
 
-static int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
+int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
 					struct pitcher_buffer *buffer)
 {
 	struct wayland_buffer_link *link;
@@ -453,7 +453,7 @@ static int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
 	return ret;
 }
 
-static struct wayland_buffer_link *get_last_buffer(struct wayland_sink_test_t *wlc)
+struct wayland_buffer_link *get_last_buffer(struct wayland_sink_test_t *wlc)
 {
 	unsigned long item;
 	int ret;
@@ -465,7 +465,7 @@ static struct wayland_buffer_link *get_last_buffer(struct wayland_sink_test_t *w
 	return (struct wayland_buffer_link *)item;
 }
 
-static int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
+int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 {
 	struct wayland_buffer_link *link = get_last_buffer(wlc);
 	struct wl_buffer *wl_buffer;
@@ -517,7 +517,7 @@ static int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 	return RET_OK;
 }
 
-static void *wl_thread_run(void *arg)
+void *wl_thread_run(void *arg)
 {
 	struct wayland_sink_test_t *wlc = arg;
 	int ret;
@@ -538,7 +538,7 @@ static void *wl_thread_run(void *arg)
 	return NULL;
 }
 
-static int wayland_sink_start(void *arg)
+int wayland_sink_start(void *arg)
 {
 	struct wayland_sink_test_t *wlc = arg;
 	int ret;
@@ -616,7 +616,7 @@ error:
 	return -RET_E_INVAL;
 }
 
-static int wayland_sink_checkready(void *arg, int *is_end)
+int wayland_sink_checkready(void *arg, int *is_end)
 {
 	struct wayland_sink_test_t *wlc = arg;
 
@@ -645,7 +645,7 @@ static int wayland_sink_checkready(void *arg, int *is_end)
 	return true;
 }
 
-static int wayland_sink_run(void *arg, struct pitcher_buffer *buffer)
+int wayland_sink_run(void *arg, struct pitcher_buffer *buffer)
 {
 	struct wayland_sink_test_t *wlc = arg;
 	int ret;
@@ -676,7 +676,7 @@ static int wayland_sink_run(void *arg, struct pitcher_buffer *buffer)
 	return RET_OK;
 }
 
-static int wayland_sink_stop(void *arg)
+int wayland_sink_stop(void *arg)
 {
 	struct wayland_sink_test_t *wlc = arg;
 
@@ -706,7 +706,7 @@ static int wayland_sink_stop(void *arg)
 	return 0;
 }
 
-static int init_wayland_sink_node(struct test_node *node)
+int init_wayland_sink_node(struct test_node *node)
 {
 	struct wayland_sink_test_t *wlc;
 
@@ -730,7 +730,7 @@ static int init_wayland_sink_node(struct test_node *node)
 	return RET_OK;
 }
 
-static void free_wayland_sink_node(struct test_node *node)
+void free_wayland_sink_node(struct test_node *node)
 {
 	struct wayland_sink_test_t *wlc;
 
@@ -745,7 +745,7 @@ static void free_wayland_sink_node(struct test_node *node)
 	SAFE_RELEASE(wlc, pitcher_free);
 }
 
-static int set_wayland_sink_source(struct test_node *node, struct test_node *src)
+int set_wayland_sink_source(struct test_node *node, struct test_node *src)
 {
 	struct wayland_sink_test_t *wlc;
 
@@ -766,7 +766,7 @@ static int set_wayland_sink_source(struct test_node *node, struct test_node *src
 	return RET_OK;
 }
 
-static int get_wayland_sink_chnno(struct test_node *node)
+int get_wayland_sink_chnno(struct test_node *node)
 {
 	struct wayland_sink_test_t *wlc;
 	struct test_node *src_node;

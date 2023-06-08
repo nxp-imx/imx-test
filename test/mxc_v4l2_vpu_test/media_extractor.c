@@ -579,7 +579,7 @@ static struct mme_pixel_format_mapping mme_pixel_format_mappings[] = {
 	{VIDEO_TYPE_UNKNOWN,           0, PIX_FMT_NONE}
 };
 
-static uint32_t mme_get_pixel_foramt(uint32 decoder_type, uint32 sub_type)
+uint32_t mme_get_pixel_foramt(uint32 decoder_type, uint32 sub_type)
 {
 	struct mme_pixel_format_mapping *fmt = &mme_pixel_format_mappings[0];
 
@@ -652,7 +652,7 @@ int mme_get_next_sample(struct mm_extractor_test_t *mme)
 	return ret;
 }
 
-static int get_mme_chnno(struct test_node *node)
+int get_mme_chnno(struct test_node *node)
 {
 	struct mm_extractor_test_t *mme;
 
@@ -663,7 +663,7 @@ static int get_mme_chnno(struct test_node *node)
 	return mme->chnno;
 }
 
-static int mme_recycle_buffer(struct pitcher_buffer *buffer, void *arg, int *del)
+int mme_recycle_buffer(struct pitcher_buffer *buffer, void *arg, int *del)
 {
 	struct mm_extractor_test_t *mme = arg;
 	int is_end = false;
@@ -682,7 +682,7 @@ static int mme_recycle_buffer(struct pitcher_buffer *buffer, void *arg, int *del
 	return RET_OK;
 }
 
-static struct pitcher_buffer *mme_alloc_buffer(void *arg)
+struct pitcher_buffer *mme_alloc_buffer(void *arg)
 {
 	struct mm_extractor_test_t *mme = arg;
 	struct pitcher_buffer_desc desc;
@@ -701,7 +701,7 @@ static struct pitcher_buffer *mme_alloc_buffer(void *arg)
 	return pitcher_new_buffer(&desc);
 }
 
-static int mme_checkready(void *arg, int *is_end)
+int mme_checkready(void *arg, int *is_end)
 {
 	struct mm_extractor_test_t *mme = arg;
 
@@ -720,7 +720,7 @@ static int mme_checkready(void *arg, int *is_end)
 	return false;
 }
 
-static int mme_avcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
+int mme_avcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
 {
 	uint8_t num_nal;
 	int sps_done = 0;
@@ -773,7 +773,7 @@ static int mme_avcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pit
 	return RET_OK;
 }
 
-static int mme_hvcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
+int mme_hvcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
 {
 	uint8_t num_array;
 	uint32_t offset = 0;
@@ -828,7 +828,7 @@ static int mme_hvcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pit
 	return RET_OK;
 }
 
-static void mme_mp4_to_annexb_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
+void mme_mp4_to_annexb_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
 {
 	uint8_t *pdata = buffer->planes[0].virt;
 	uint32_t bytesused = buffer->planes[0].bytesused;
@@ -845,7 +845,7 @@ static void mme_mp4_to_annexb_frame(struct mm_extractor_test_t *mme, struct pitc
 	}
 }
 
-static int mme_handle_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
+int mme_handle_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
 {
 	int ret;
 
@@ -900,7 +900,7 @@ static int mme_handle_frame(struct mm_extractor_test_t *mme, struct pitcher_buff
 	return RET_OK;
 }
 
-static int mme_run(void *arg, struct pitcher_buffer *pbuf)
+int mme_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct mm_extractor_test_t *mme = arg;
 	struct pitcher_buffer *buffer;
@@ -935,7 +935,7 @@ static int mme_run(void *arg, struct pitcher_buffer *pbuf)
 	return ret;
 }
 
-static int init_mme_node(struct test_node *node)
+int init_mme_node(struct test_node *node)
 {
 	struct mm_extractor_test_t *mme;
 	int ret;
@@ -984,7 +984,7 @@ error:
 	return ret;
 }
 
-static void free_mme_node(struct test_node *node)
+void free_mme_node(struct test_node *node)
 {
 	struct mm_extractor_test_t *mme;
 

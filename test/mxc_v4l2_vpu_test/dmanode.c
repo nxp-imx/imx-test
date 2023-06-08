@@ -36,20 +36,20 @@ struct mxc_vpu_test_option dmanode_options[] = {
 	{NULL, 0, NULL},
 };
 
-static int dmanode_init_plane(struct pitcher_buf_ref *plane,
+int dmanode_init_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int dmanode_free_plane(struct pitcher_buf_ref *plane,
+int dmanode_free_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	pitcher_free_dma_buf(plane);
 	return RET_OK;
 }
 
-static int dmanode_recycle_buffer(struct pitcher_buffer *buffer,
+int dmanode_recycle_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
 	struct dmanode_test_t *dn = arg;
@@ -69,7 +69,7 @@ static int dmanode_recycle_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
-static struct pitcher_buffer *dmanode_alloc_buffer(void *arg)
+struct pitcher_buffer *dmanode_alloc_buffer(void *arg)
 {
 	struct dmanode_test_t *dn = arg;
 	struct pitcher_buffer_desc desc;
@@ -86,7 +86,7 @@ static struct pitcher_buffer *dmanode_alloc_buffer(void *arg)
 	return pitcher_new_buffer(&desc);
 }
 
-static int start_dmanode(void *arg)
+int start_dmanode(void *arg)
 {
 	struct dmanode_test_t *dn = arg;
 
@@ -97,7 +97,7 @@ static int start_dmanode(void *arg)
 	return RET_OK;
 }
 
-static int checkready_dmanode(void *arg, int *is_end)
+int checkready_dmanode(void *arg, int *is_end)
 {
 	struct dmanode_test_t *dn = arg;
 
@@ -119,7 +119,7 @@ static int checkready_dmanode(void *arg, int *is_end)
 	return true;
 }
 
-static int run_dmanode(void *arg, struct pitcher_buffer *buffer)
+int run_dmanode(void *arg, struct pitcher_buffer *buffer)
 {
 	struct dmanode_test_t *dn = arg;
 	struct pitcher_buffer *dst;
@@ -169,7 +169,7 @@ static int run_dmanode(void *arg, struct pitcher_buffer *buffer)
 	return RET_OK;
 }
 
-static int init_dmanode(struct test_node *node)
+int init_dmanode(struct test_node *node)
 {
 	struct dmanode_test_t *dn;
 
@@ -188,7 +188,7 @@ static int init_dmanode(struct test_node *node)
 	return RET_OK;
 }
 
-static void free_dmanode(struct test_node *node)
+void free_dmanode(struct test_node *node)
 {
 	struct dmanode_test_t *dn;
 
@@ -200,7 +200,7 @@ static void free_dmanode(struct test_node *node)
 	SAFE_RELEASE(dn, pitcher_free);
 }
 
-static int get_dmanode_chnno(struct test_node *node)
+int get_dmanode_chnno(struct test_node *node)
 {
 	struct dmanode_test_t *dn;
 	struct test_node *src;
@@ -220,7 +220,7 @@ static int get_dmanode_chnno(struct test_node *node)
 	return dn->chnno;
 }
 
-static int set_dmanode_source(struct test_node *node, struct test_node *src)
+int set_dmanode_source(struct test_node *node, struct test_node *src)
 {
 	struct dmanode_test_t *dn;
 

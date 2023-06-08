@@ -548,12 +548,12 @@ static struct pitcher_buffer *__get_buf(struct v4l2_component_t *component)
 	return NULL;
 }
 
-static int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)
+int v4l2_enum_fmt(int fd, struct v4l2_fmtdesc *fmt)
 {
 	return ioctl(fd, VIDIOC_ENUM_FMT, fmt);
 }
 
-static int init_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
+int init_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	struct v4l2_buffer v4lbuf;
@@ -624,7 +624,7 @@ static int init_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 	return RET_OK;
 }
 
-static int uninit_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
+int uninit_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	if (!plane)
@@ -642,7 +642,7 @@ static int uninit_v4l2_mmap_plane(struct pitcher_buf_ref *plane,
 	return RET_OK;
 }
 
-static int init_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
+int init_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	struct v4l2_buffer v4lbuf;
@@ -682,20 +682,20 @@ static int init_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
 	return RET_OK;
 }
 
-static int uninit_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
+int uninit_v4l2_userptr_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int init_v4l2_dmabuf_plane(struct pitcher_buf_ref *plane,
+int init_v4l2_dmabuf_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	/* same operation as userptr */
 	return init_v4l2_userptr_plane(plane, index, arg);
 }
 
-static int uninit_v4l2_dmabuf_plane(struct pitcher_buf_ref *plane,
+int uninit_v4l2_dmabuf_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
@@ -803,7 +803,7 @@ static void __clear_error_buffers(struct v4l2_component_t *component)
 	}
 }
 
-static int init_v4l2(void *arg)
+int init_v4l2(void *arg)
 {
 	struct v4l2_component_t *component = arg;
 
@@ -815,7 +815,7 @@ static int init_v4l2(void *arg)
 	return RET_OK;
 }
 
-static int cleanup_v4l2(void *arg)
+int cleanup_v4l2(void *arg)
 {
 	struct v4l2_component_t *component = arg;
 
@@ -882,7 +882,7 @@ static int __cleanup_v4l2(struct v4l2_component_t *component)
 	return __rel_v4l2_buffer(component);
 }
 
-static int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferred_fourcc)
+int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferred_fourcc)
 {
 	struct v4l2_fmtdesc fmt_desc;
 	int found = 0;
@@ -905,7 +905,7 @@ static int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferre
 	return RET_OK;
 }
 
-static int start_v4l2(void *arg)
+int start_v4l2(void *arg)
 {
 	struct v4l2_component_t *component = arg;
 	int ret;
@@ -956,7 +956,7 @@ static int start_v4l2(void *arg)
 	return RET_OK;
 }
 
-static int stop_v4l2(void *arg)
+int stop_v4l2(void *arg)
 {
 	struct v4l2_component_t *component = arg;
 	int i;
@@ -1031,7 +1031,7 @@ static void __check_v4l2_events(struct v4l2_component_t *component)
 	}
 }
 
-static int check_v4l2_ready(void *arg, int *is_end)
+int check_v4l2_ready(void *arg, int *is_end)
 {
 	struct v4l2_component_t *component = arg;
 	int i;
@@ -1247,7 +1247,7 @@ static int __run_v4l2_output(struct v4l2_component_t *component,
 	return ret;
 }
 
-static int run_v4l2(void *arg, struct pitcher_buffer *pbuf)
+int run_v4l2(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct v4l2_component_t *component = arg;
 	struct pitcher_buffer *buffer;

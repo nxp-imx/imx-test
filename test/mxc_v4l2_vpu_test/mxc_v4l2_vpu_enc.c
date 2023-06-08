@@ -187,8 +187,8 @@ struct mxc_vpu_test_subcmd {
 	struct test_node *(*alloc_node)(void);
 };
 
-static int flush_enc(struct v4l2_component_t *component);
-static int flush_dec(struct v4l2_component_t *component);
+int flush_enc(struct v4l2_component_t *component);
+int flush_dec(struct v4l2_component_t *component);
 
 static uint32_t bitmask;
 static struct test_node *nodes[MAX_NODE_COUNT];
@@ -196,12 +196,12 @@ static struct test_node *nodes[MAX_NODE_COUNT];
 #define FORCE_EXIT_MASK		0x8000
 static int g_exit;
 
-static void force_exit(void)
+void force_exit(void)
 {
 	g_exit |= FORCE_EXIT_MASK;
 }
 
-static int terminate(void)
+int terminate(void)
 {
 	force_exit();
 
@@ -242,7 +242,7 @@ void dump_backtrace(void)
 	free(stack_strings);
 }
 
-static void sig_handler(int sign)
+void sig_handler(int sign)
 {
 	switch (sign) {
 	case SIGINT:
@@ -258,7 +258,7 @@ static void sig_handler(int sign)
 	}
 }
 
-static int subscribe_event(int fd)
+int subscribe_event(int fd)
 {
 	struct v4l2_event_subscription sub;
 
@@ -273,7 +273,7 @@ static int subscribe_event(int fd)
 	return 0;
 }
 
-static int unsubcribe_event(int fd)
+int unsubcribe_event(int fd)
 {
 	struct v4l2_event_subscription sub;
 	int ret;
@@ -310,7 +310,7 @@ int is_source_end(int chnno)
 	return false;
 }
 
-static int is_camera_finish(struct v4l2_component_t *component)
+int is_camera_finish(struct v4l2_component_t *component)
 {
 	struct camera_test_t *camera;
 	int is_end = false;
@@ -332,7 +332,7 @@ static int is_camera_finish(struct v4l2_component_t *component)
 	return is_end;
 }
 
-static int change_encoder_dynamically(struct v4l2_component_t *component)
+int change_encoder_dynamically(struct v4l2_component_t *component)
 {
 	struct encoder_test_t *encoder;
 	int fd;
@@ -355,7 +355,7 @@ static int change_encoder_dynamically(struct v4l2_component_t *component)
 	return 0;
 }
 
-static int is_encoder_output_finish(struct v4l2_component_t *component)
+int is_encoder_output_finish(struct v4l2_component_t *component)
 {
 	struct encoder_test_t *encoder;
 	int is_end = false;
@@ -386,7 +386,7 @@ static int is_encoder_output_finish(struct v4l2_component_t *component)
 	return is_end;
 }
 
-static int is_encoder_capture_finish(struct v4l2_component_t *component)
+int is_encoder_capture_finish(struct v4l2_component_t *component)
 {
 	if (!component)
 		return true;
@@ -394,7 +394,7 @@ static int is_encoder_capture_finish(struct v4l2_component_t *component)
 	return is_force_exit();
 }
 
-static void switch_fmt_to_tile(unsigned int *fmt)
+void switch_fmt_to_tile(unsigned int *fmt)
 {
 	switch (*fmt) {
 	case PIX_FMT_NV12:
@@ -404,7 +404,7 @@ static void switch_fmt_to_tile(unsigned int *fmt)
 	}
 }
 
-static void sync_decoder_node_info(struct decoder_test_t *decoder)
+void sync_decoder_node_info(struct decoder_test_t *decoder)
 {
 	assert(decoder);
 
@@ -421,7 +421,7 @@ static void sync_decoder_node_info(struct decoder_test_t *decoder)
 	}
 }
 
-static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
+int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 {
 	int ret;
 	int chnno;
@@ -470,7 +470,7 @@ static int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 	return RET_OK;
 }
 
-static int seek_decoder(struct decoder_test_t *decoder)
+int seek_decoder(struct decoder_test_t *decoder)
 {
 	if (!decoder->output.seek)
 		return RET_OK;
@@ -491,7 +491,7 @@ static int seek_decoder(struct decoder_test_t *decoder)
 	return RET_OK;
 }
 
-static int is_decoder_output_finish(struct v4l2_component_t *component)
+int is_decoder_output_finish(struct v4l2_component_t *component)
 {
 	struct decoder_test_t *decoder;
 	int is_end = false;
@@ -537,7 +537,7 @@ static int is_decoder_output_finish(struct v4l2_component_t *component)
 	return is_end;
 }
 
-static int is_decoder_capture_finish(struct v4l2_component_t *component)
+int is_decoder_capture_finish(struct v4l2_component_t *component)
 {
 	if (!component)
 		return true;
@@ -545,7 +545,7 @@ static int is_decoder_capture_finish(struct v4l2_component_t *component)
 	return is_force_exit();
 }
 
-static int flush_enc(struct v4l2_component_t *component)
+int flush_enc(struct v4l2_component_t *component)
 {
 	struct v4l2_encoder_cmd cmd;
 	int ret;
@@ -565,7 +565,7 @@ static int flush_enc(struct v4l2_component_t *component)
 	return RET_OK;
 }
 
-static int flush_dec(struct v4l2_component_t *component)
+int flush_dec(struct v4l2_component_t *component)
 {
 	struct v4l2_decoder_cmd cmd;
 	int ret;
@@ -685,7 +685,7 @@ struct mxc_vpu_test_option parser_options[] = {
 	{NULL, 0, NULL},
 };
 
-static void free_camera_node(struct test_node *node)
+void free_camera_node(struct test_node *node)
 {
 	struct camera_test_t *camera;
 
@@ -700,7 +700,7 @@ static void free_camera_node(struct test_node *node)
 	SAFE_RELEASE(camera, pitcher_free);
 }
 
-static int init_camera_node(struct test_node *node)
+int init_camera_node(struct test_node *node)
 {
 	struct camera_test_t *camera;
 	int ret;
@@ -745,7 +745,7 @@ static int init_camera_node(struct test_node *node)
 	return RET_OK;
 }
 
-static int get_camera_chnno(struct test_node *node)
+int get_camera_chnno(struct test_node *node)
 {
 	struct camera_test_t *camera;
 
@@ -756,7 +756,7 @@ static int get_camera_chnno(struct test_node *node)
 	return camera->capture.chnno;
 }
 
-static struct test_node *alloc_camera_node(void)
+struct test_node *alloc_camera_node(void)
 {
 	struct camera_test_t *camera;
 
@@ -780,7 +780,7 @@ static struct test_node *alloc_camera_node(void)
 	return &camera->node;
 }
 
-static int parse_camera_option(struct test_node *node,
+int parse_camera_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -821,7 +821,7 @@ static int parse_camera_option(struct test_node *node,
 	return RET_OK;
 }
 
-static void free_encoder_node(struct test_node *node)
+void free_encoder_node(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
 
@@ -855,7 +855,7 @@ static void free_encoder_node(struct test_node *node)
 	SAFE_RELEASE(encoder, pitcher_free);
 }
 
-static int set_encoder_source(struct test_node *node, struct test_node *src)
+int set_encoder_source(struct test_node *node, struct test_node *src)
 {
 	struct encoder_test_t *encoder;
 
@@ -901,7 +901,7 @@ static int set_encoder_source(struct test_node *node, struct test_node *src)
 	return RET_OK;
 }
 
-static int get_encoder_source_chnno(struct test_node *node)
+int get_encoder_source_chnno(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
 
@@ -913,7 +913,7 @@ static int get_encoder_source_chnno(struct test_node *node)
 	return encoder->capture.chnno;
 }
 
-static int get_encoder_sink_chnno(struct test_node *node)
+int get_encoder_sink_chnno(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
 
@@ -925,7 +925,7 @@ static int get_encoder_sink_chnno(struct test_node *node)
 	return encoder->output.chnno;
 }
 
-static void validate_h264_profile_level(struct encoder_test_t *encoder)
+void validate_h264_profile_level(struct encoder_test_t *encoder)
 {
 	if (encoder->profile == UINT_MAX)
 		encoder->profile = V4L2_MPEG_VIDEO_H264_PROFILE_HIGH;
@@ -933,7 +933,7 @@ static void validate_h264_profile_level(struct encoder_test_t *encoder)
 		encoder->level = V4L2_MPEG_VIDEO_H264_LEVEL_4_0;
 }
 
-static void validate_h265_profile_level(struct encoder_test_t *encoder)
+void validate_h265_profile_level(struct encoder_test_t *encoder)
 {
 	if (encoder->profile == UINT_MAX)
 		encoder->profile = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN;
@@ -941,13 +941,13 @@ static void validate_h265_profile_level(struct encoder_test_t *encoder)
 		encoder->level = V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1;
 }
 
-static void validate_vpx_profile_level(struct encoder_test_t *encoder)
+void validate_vpx_profile_level(struct encoder_test_t *encoder)
 {
 	if (encoder->profile == UINT_MAX)
 		encoder->profile = V4L2_MPEG_VIDEO_VP8_PROFILE_0;
 }
 
-static int set_encoder_roi(int fd, struct v4l2_enc_roi_param *param)
+int set_encoder_roi(int fd, struct v4l2_enc_roi_param *param)
 {
 	struct v4l2_ext_control ctrl;
 	struct v4l2_ext_controls ctrls;
@@ -1004,7 +1004,7 @@ static int set_encoder_roi(int fd, struct v4l2_enc_roi_param *param)
 	return 0;
 }
 
-static int set_encoder_ipcm(int fd, struct v4l2_enc_ipcm_param *param)
+int set_encoder_ipcm(int fd, struct v4l2_enc_ipcm_param *param)
 {
 	struct v4l2_ext_control ctrl;
 	struct v4l2_ext_controls ctrls;
@@ -1057,7 +1057,7 @@ static int set_encoder_ipcm(int fd, struct v4l2_enc_ipcm_param *param)
 	return 0;
 }
 
-static int set_encoder_parameters(struct encoder_test_t *encoder)
+int set_encoder_parameters(struct encoder_test_t *encoder)
 {
 	int fd;
 	int profile_id = 0;
@@ -1161,7 +1161,7 @@ static int set_encoder_parameters(struct encoder_test_t *encoder)
 	return RET_OK;
 }
 
-static int init_encoder_node(struct test_node *node)
+int init_encoder_node(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
 	int ret;
@@ -1293,7 +1293,7 @@ static int init_encoder_node(struct test_node *node)
 	return set_encoder_parameters(encoder);
 }
 
-static struct test_node *alloc_encoder_node(void)
+struct test_node *alloc_encoder_node(void)
 {
 	struct encoder_test_t *encoder;
 
@@ -1336,7 +1336,7 @@ static struct test_node *alloc_encoder_node(void)
 	return &encoder->node;
 }
 
-static int parse_encoder_option(struct test_node *node,
+int parse_encoder_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -1419,7 +1419,7 @@ static int parse_encoder_option(struct test_node *node,
 	return RET_OK;
 }
 
-static int get_deocder_source_chnno(struct test_node *node)
+int get_deocder_source_chnno(struct test_node *node)
 {
 	struct decoder_test_t *decoder;
 
@@ -1431,7 +1431,7 @@ static int get_deocder_source_chnno(struct test_node *node)
 	return decoder->capture.chnno;
 }
 
-static int get_deocder_sink_chnno(struct test_node *node)
+int get_deocder_sink_chnno(struct test_node *node)
 {
 	struct decoder_test_t *decoder;
 
@@ -1443,7 +1443,7 @@ static int get_deocder_sink_chnno(struct test_node *node)
 	return decoder->output.chnno;
 }
 
-static int set_decoder_source(struct test_node *node, struct test_node *src)
+int set_decoder_source(struct test_node *node, struct test_node *src)
 {
 	struct decoder_test_t *decoder;
 
@@ -1483,7 +1483,7 @@ static int set_decoder_source(struct test_node *node, struct test_node *src)
 	return RET_OK;
 }
 
-static void free_decoder_node(struct test_node *node)
+void free_decoder_node(struct test_node *node)
 {
 	struct decoder_test_t *decoder;
 
@@ -1515,7 +1515,7 @@ static void free_decoder_node(struct test_node *node)
 	SAFE_RELEASE(decoder, pitcher_free);
 }
 
-static int init_decoder_platform(struct decoder_test_t *decoder)
+int init_decoder_platform(struct decoder_test_t *decoder)
 {
 	struct v4l2_capability cap;
 
@@ -1543,7 +1543,7 @@ static int init_decoder_platform(struct decoder_test_t *decoder)
 		return RET_OK;
 }
 
-static int init_decoder_node(struct test_node *node)
+int init_decoder_node(struct test_node *node)
 {
 	struct decoder_test_t *decoder;
 	struct v4l2_capability cap;
@@ -1619,7 +1619,7 @@ static int init_decoder_node(struct test_node *node)
 	return init_decoder_platform(decoder);
 }
 
-static struct test_node *alloc_decoder_node(void)
+struct test_node *alloc_decoder_node(void)
 {
 	struct decoder_test_t *decoder;
 
@@ -1652,7 +1652,7 @@ static struct test_node *alloc_decoder_node(void)
 	return &decoder->node;
 }
 
-static int parse_decoder_option(struct test_node *node,
+int parse_decoder_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -1692,7 +1692,7 @@ static int parse_decoder_option(struct test_node *node,
 	return RET_OK;
 }
 
-static int get_file_chnno(struct test_node *node)
+int get_file_chnno(struct test_node *node)
 {
 	struct test_file_t *file;
 
@@ -1704,7 +1704,7 @@ static int get_file_chnno(struct test_node *node)
 	return file->chnno;
 }
 
-static void free_file_node(struct test_node *node)
+void free_file_node(struct test_node *node)
 {
 	struct test_file_t *file;
 
@@ -1726,19 +1726,19 @@ static void free_file_node(struct test_node *node)
 	SAFE_RELEASE(file, pitcher_free);
 }
 
-static int ifile_init_plane(struct pitcher_buf_ref *plane,
+int ifile_init_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int ifile_uninit_plane(struct pitcher_buf_ref *plane,
+int ifile_uninit_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int ifile_recycle_buffer(struct pitcher_buffer *buffer,
+int ifile_recycle_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
 	struct test_file_t *file = arg;
@@ -1758,7 +1758,7 @@ static int ifile_recycle_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
-static struct pitcher_buffer *ifile_alloc_buffer(void *arg)
+struct pitcher_buffer *ifile_alloc_buffer(void *arg)
 {
 	struct test_file_t *file = arg;
 	struct pitcher_buffer_desc desc;
@@ -1777,7 +1777,7 @@ static struct pitcher_buffer *ifile_alloc_buffer(void *arg)
 	return pitcher_new_buffer(&desc);
 }
 
-static int ifile_checkready(void *arg, int *is_end)
+int ifile_checkready(void *arg, int *is_end)
 {
 	struct test_file_t *file = arg;
 
@@ -1797,7 +1797,7 @@ static int ifile_checkready(void *arg, int *is_end)
 	return false;
 }
 
-static int ifile_run(void *arg, struct pitcher_buffer *pbuf)
+int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct test_file_t *file = arg;
 	struct pitcher_buffer *buffer;
@@ -1845,7 +1845,7 @@ static int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 	return RET_OK;
 }
 
-static int init_ifile_node(struct test_node *node)
+int init_ifile_node(struct test_node *node)
 {
 	struct test_file_t *file;
 	int ret;
@@ -1907,7 +1907,7 @@ static int init_ifile_node(struct test_node *node)
 	return RET_OK;
 }
 
-static struct test_node *alloc_ifile_node(void)
+struct test_node *alloc_ifile_node(void)
 {
 	struct test_file_t *file;
 
@@ -1932,7 +1932,7 @@ static struct test_node *alloc_ifile_node(void)
 	return &file->node;
 }
 
-static int parse_ifile_option(struct test_node *node,
+int parse_ifile_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -1970,7 +1970,7 @@ static int parse_ifile_option(struct test_node *node,
 	return RET_OK;
 }
 
-static int ofile_start(void *arg)
+int ofile_start(void *arg)
 {
 	struct test_file_t *file = arg;
 
@@ -1982,7 +1982,7 @@ static int ofile_start(void *arg)
 	return RET_OK;
 }
 
-static int ofile_checkready(void *arg, int *is_end)
+int ofile_checkready(void *arg, int *is_end)
 {
 	struct test_file_t *file = arg;
 
@@ -1999,7 +1999,7 @@ static int ofile_checkready(void *arg, int *is_end)
 	return true;
 }
 
-static void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
+void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
 {
 	struct test_file_t *file = arg;
 	unsigned long data_len = 0;
@@ -2020,7 +2020,7 @@ static void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
 	}
 }
 
-static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
+int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 {
 	struct test_file_t *file = arg;
 	struct pix_fmt_info *format = buffer->format;
@@ -2070,7 +2070,7 @@ static int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 	return 0;
 }
 
-static int ofile_run(void *arg, struct pitcher_buffer *buffer)
+int ofile_run(void *arg, struct pitcher_buffer *buffer)
 {
 	struct test_file_t *file = arg;
 	int i;
@@ -2106,7 +2106,7 @@ exit:
 	return RET_OK;
 }
 
-static int init_ofile_node(struct test_node *node)
+int init_ofile_node(struct test_node *node)
 {
 	struct test_file_t *file;
 
@@ -2133,7 +2133,7 @@ static int init_ofile_node(struct test_node *node)
 	return RET_OK;
 }
 
-static int set_ofile_source(struct test_node *node, struct test_node *src)
+int set_ofile_source(struct test_node *node, struct test_node *src)
 {
 	struct test_file_t *file = NULL;
 
@@ -2149,7 +2149,7 @@ static int set_ofile_source(struct test_node *node, struct test_node *src)
 	return RET_OK;
 }
 
-static int get_ofile_chnno(struct test_node *node)
+int get_ofile_chnno(struct test_node *node)
 {
 	struct test_file_t *file;
 	struct test_node *src_node;
@@ -2170,7 +2170,7 @@ static int get_ofile_chnno(struct test_node *node)
 	return file->chnno;
 }
 
-static struct test_node *alloc_ofile_node(void)
+struct test_node *alloc_ofile_node(void)
 {
 	struct test_file_t *file;
 
@@ -2193,7 +2193,7 @@ static struct test_node *alloc_ofile_node(void)
 	return &file->node;
 }
 
-static int parse_ofile_option(struct test_node *node,
+int parse_ofile_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -2215,7 +2215,7 @@ static int parse_ofile_option(struct test_node *node,
 	return RET_OK;
 }
 
-static int set_convert_source(struct test_node *node,
+int set_convert_source(struct test_node *node,
 				struct test_node *src)
 {
 	struct convert_test_t *cvrt;
@@ -2247,7 +2247,7 @@ static int set_convert_source(struct test_node *node,
 	return RET_OK;
 }
 
-static int recycle_convert_buffer(struct pitcher_buffer *buffer,
+int recycle_convert_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
 	struct convert_test_t *cvrt = arg;
@@ -2267,7 +2267,7 @@ static int recycle_convert_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
-static int convert_init_plane(struct pitcher_buf_ref *plane, unsigned int index,
+int convert_init_plane(struct pitcher_buf_ref *plane, unsigned int index,
 				void *arg)
 {
 	assert(plane);
@@ -2278,7 +2278,7 @@ static int convert_init_plane(struct pitcher_buf_ref *plane, unsigned int index,
 	return pitcher_alloc_plane(plane, index, arg);
 }
 
-static struct pitcher_buffer *alloc_convert_buffer(void *arg)
+struct pitcher_buffer *alloc_convert_buffer(void *arg)
 {
 	struct convert_test_t *cvrt = arg;
 	struct pitcher_buffer_desc desc;
@@ -2308,7 +2308,7 @@ static struct pitcher_buffer *alloc_convert_buffer(void *arg)
 	return pitcher_new_buffer(&desc);
 }
 
-static int convert_start(void *arg)
+int convert_start(void *arg)
 {
 	struct convert_test_t *cvrt = arg;
 
@@ -2317,7 +2317,7 @@ static int convert_start(void *arg)
 	return RET_OK;
 }
 
-static int convert_checkready(void *arg, int *is_end)
+int convert_checkready(void *arg, int *is_end)
 {
 	struct convert_test_t *cvrt = arg;
 
@@ -2342,7 +2342,7 @@ static int convert_checkready(void *arg, int *is_end)
 	return false;
 }
 
-static int convert_run(void *arg, struct pitcher_buffer *pbuf)
+int convert_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct convert_test_t *cvrt = arg;
 
@@ -2381,7 +2381,7 @@ static int convert_run(void *arg, struct pitcher_buffer *pbuf)
 	return RET_OK;
 }
 
-static int init_convert_node(struct test_node *node)
+int init_convert_node(struct test_node *node)
 {
 	struct convert_test_t *cvrt;
 	struct test_node *src_node;
@@ -2409,7 +2409,7 @@ static int init_convert_node(struct test_node *node)
 	return RET_OK;
 }
 
-static void free_convert_node(struct test_node *node)
+void free_convert_node(struct test_node *node)
 {
 	struct convert_test_t *cvrt;
 
@@ -2423,7 +2423,7 @@ static void free_convert_node(struct test_node *node)
 	SAFE_RELEASE(cvrt, pitcher_free);
 }
 
-static int get_convert_chnno(struct test_node *node)
+int get_convert_chnno(struct test_node *node)
 {
 	struct convert_test_t *cvrt;
 	struct test_node *src_node;
@@ -2444,7 +2444,7 @@ static int get_convert_chnno(struct test_node *node)
 	return cvrt->chnno;
 }
 
-static struct test_node *alloc_convert_node(void)
+struct test_node *alloc_convert_node(void)
 {
 	struct convert_test_t *cvrt;
 
@@ -2467,7 +2467,7 @@ static struct test_node *alloc_convert_node(void)
 	return &cvrt->node;
 }
 
-static int parse_convert_option(struct test_node *node,
+int parse_convert_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -2496,7 +2496,7 @@ static int parse_convert_option(struct test_node *node,
 }
 
 #ifdef ENABLE_G2D
-static int set_g2d_cvt_source(struct test_node *node,
+int set_g2d_cvt_source(struct test_node *node,
 				struct test_node *src)
 {
 	struct g2d_cvt_test_t *g2dc;
@@ -2528,7 +2528,7 @@ static int set_g2d_cvt_source(struct test_node *node,
 	return RET_OK;
 }
 
-static int recycle_g2d_cvt_buffer(struct pitcher_buffer *buffer,
+int recycle_g2d_cvt_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
 	struct g2d_cvt_test_t *g2dc = arg;
@@ -2547,7 +2547,7 @@ static int recycle_g2d_cvt_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
-static struct pitcher_buffer *alloc_g2d_cvt_buffer(void *arg)
+struct pitcher_buffer *alloc_g2d_cvt_buffer(void *arg)
 {
 	struct g2d_cvt_test_t *g2dc = arg;
 	struct test_node *src_node;
@@ -2566,7 +2566,7 @@ static struct pitcher_buffer *alloc_g2d_cvt_buffer(void *arg)
 	return pitcher_new_dma_buffer(&g2dc->format, recycle_g2d_cvt_buffer, g2dc);
 }
 
-static int g2d_cvt_start(void *arg)
+int g2d_cvt_start(void *arg)
 {
 	struct g2d_cvt_test_t *g2dc = arg;
 
@@ -2574,7 +2574,7 @@ static int g2d_cvt_start(void *arg)
 	return RET_OK;
 }
 
-static int g2d_cvt_checkready(void *arg, int *is_end)
+int g2d_cvt_checkready(void *arg, int *is_end)
 {
 	struct g2d_cvt_test_t *g2dc = arg;
 
@@ -2599,7 +2599,7 @@ static int g2d_cvt_checkready(void *arg, int *is_end)
 	return false;
 }
 
-static int g2d_cvt_run(void *arg, struct pitcher_buffer *pbuf)
+int g2d_cvt_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct g2d_cvt_test_t *g2dc = arg;
 	uint32_t i;
@@ -2648,7 +2648,7 @@ static int g2d_cvt_run(void *arg, struct pitcher_buffer *pbuf)
 	return RET_OK;
 }
 
-static int init_g2d_cvt_node(struct test_node *node)
+int init_g2d_cvt_node(struct test_node *node)
 {
 	struct g2d_cvt_test_t *g2dc;
 
@@ -2672,7 +2672,7 @@ static int init_g2d_cvt_node(struct test_node *node)
 	return RET_OK;
 }
 
-static void free_g2d_cvt_node(struct test_node *node)
+void free_g2d_cvt_node(struct test_node *node)
 {
 	struct g2d_cvt_test_t *g2dc;
 
@@ -2687,7 +2687,7 @@ static void free_g2d_cvt_node(struct test_node *node)
 	SAFE_RELEASE(g2dc, pitcher_free);
 }
 
-static int get_g2d_cvt_chnno(struct test_node *node)
+int get_g2d_cvt_chnno(struct test_node *node)
 {
 	struct g2d_cvt_test_t *g2dc;
 	struct test_node *src_node;
@@ -2707,7 +2707,7 @@ static int get_g2d_cvt_chnno(struct test_node *node)
 	return g2dc->chnno;
 }
 
-static struct test_node *alloc_g2d_cvt_node(void)
+struct test_node *alloc_g2d_cvt_node(void)
 {
 	struct g2d_cvt_test_t *g2dc;
 
@@ -2730,7 +2730,7 @@ static struct test_node *alloc_g2d_cvt_node(void)
 	return &g2dc->node;
 }
 
-static int parse_g2d_cvt_option(struct test_node *node,
+int parse_g2d_cvt_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
 {
@@ -2759,7 +2759,7 @@ static int parse_g2d_cvt_option(struct test_node *node,
 }
 #endif
 
-static int get_parser_chnno(struct test_node *node)
+int get_parser_chnno(struct test_node *node)
 {
 	struct parser_test_t *parser;
 
@@ -2771,7 +2771,7 @@ static int get_parser_chnno(struct test_node *node)
 	return parser->chnno;
 }
 
-static int parser_checkready(void *arg, int *is_end)
+int parser_checkready(void *arg, int *is_end)
 {
 	struct parser_test_t *parser = arg;
 
@@ -2791,7 +2791,7 @@ static int parser_checkready(void *arg, int *is_end)
 	return false;
 }
 
-static int parser_run(void *arg, struct pitcher_buffer *pbuf)
+int parser_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct parser_test_t *parser = arg;
 	struct pitcher_buffer *buffer;
@@ -2864,19 +2864,19 @@ static int parser_run(void *arg, struct pitcher_buffer *pbuf)
 	return RET_OK;
 }
 
-static int parser_init_plane(struct pitcher_buf_ref *plane,
+int parser_init_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int parser_uninit_plane(struct pitcher_buf_ref *plane,
+int parser_uninit_plane(struct pitcher_buf_ref *plane,
 				unsigned int index, void *arg)
 {
 	return RET_OK;
 }
 
-static int parser_recycle_buffer(struct pitcher_buffer *buffer,
+int parser_recycle_buffer(struct pitcher_buffer *buffer,
 				void *arg, int *del)
 {
 	struct parser_test_t *parser = arg;
@@ -2896,7 +2896,7 @@ static int parser_recycle_buffer(struct pitcher_buffer *buffer,
 	return RET_OK;
 }
 
-static struct pitcher_buffer *parser_alloc_buffer(void *arg)
+struct pitcher_buffer *parser_alloc_buffer(void *arg)
 {
 	struct parser_test_t *parser = arg;
 	struct pitcher_buffer_desc desc;
@@ -2918,7 +2918,7 @@ static struct pitcher_buffer *parser_alloc_buffer(void *arg)
 	return pitcher_new_buffer(&desc);
 }
 
-static int init_parser_memory(struct parser_test_t *parser)
+int init_parser_memory(struct parser_test_t *parser)
 {
 	if (parser->node.pixelformat == PIX_FMT_RV30 || parser->node.pixelformat == PIX_FMT_RV40) {
 		FILE *fp = NULL;
@@ -2948,7 +2948,7 @@ static int init_parser_memory(struct parser_test_t *parser)
 	return RET_OK;
 }
 
-static void free_parser_memory(struct parser_test_t *parser)
+void free_parser_memory(struct parser_test_t *parser)
 {
 	if (!parser->virt)
 		return;
@@ -2962,7 +2962,7 @@ static void free_parser_memory(struct parser_test_t *parser)
 	parser->size = 0;
 }
 
-static int init_parser_node(struct test_node *node)
+int init_parser_node(struct test_node *node)
 {
 	struct parser_test_t *parser;
 	struct pitcher_parser *p;
@@ -3047,7 +3047,7 @@ static int init_parser_node(struct test_node *node)
 	return RET_OK;
 }
 
-static void free_parser_node(struct test_node *node)
+void free_parser_node(struct test_node *node)
 {
 	struct parser_test_t *parser;
 
@@ -3063,7 +3063,7 @@ static void free_parser_node(struct test_node *node)
 	SAFE_RELEASE(parser, pitcher_free);
 }
 
-static struct test_node *alloc_parser_node(void)
+struct test_node *alloc_parser_node(void)
 {
 	struct parser_test_t *parser;
 
@@ -3087,7 +3087,7 @@ static struct test_node *alloc_parser_node(void)
 	return &parser->node;
 }
 
-static int parse_parser_option(struct test_node *node,
+int parse_parser_option(struct test_node *node,
 			       struct mxc_vpu_test_option *option,
 			       char *argv[])
 {
@@ -3265,7 +3265,7 @@ struct mxc_vpu_test_option *find_option(struct mxc_vpu_test_option *options,
 	return NULL;
 }
 
-static int get_key_count(void)
+int get_key_count(void)
 {
 	int count = MAX_NODE_COUNT;
 
@@ -3275,7 +3275,7 @@ static int get_key_count(void)
 	return count;
 }
 
-static int check_key_is_valid(int key)
+int check_key_is_valid(int key)
 {
 	int count = get_key_count();
 
@@ -3287,7 +3287,7 @@ static int check_key_is_valid(int key)
 	return true;
 }
 
-static int find_idle_key(void)
+int find_idle_key(void)
 {
 	int i;
 	int count = get_key_count();
@@ -3300,7 +3300,7 @@ static int find_idle_key(void)
 	return -1;
 }
 
-static void set_key(int key)
+void set_key(int key)
 {
 	int count = get_key_count();
 
@@ -3310,7 +3310,7 @@ static void set_key(int key)
 	bitmask |= (1 << key);
 }
 
-static struct test_node *parse_args(struct mxc_vpu_test_subcmd *subcmd,
+struct test_node *parse_args(struct mxc_vpu_test_subcmd *subcmd,
 		int argc, char *argv[], int start, int end)
 {
 	struct mxc_vpu_test_option *option;
@@ -3369,7 +3369,7 @@ error:
 	return NULL;
 }
 
-static int show_help(int argc, char *argv[])
+int show_help(int argc, char *argv[])
 {
 	int i;
 
@@ -3393,7 +3393,7 @@ static int show_help(int argc, char *argv[])
 	return 0;
 }
 
-static int parse_subcmds(int argc, char *argv[],
+int parse_subcmds(int argc, char *argv[],
 				struct test_node *nodes[], unsigned int count)
 {
 	struct mxc_vpu_test_subcmd *subcmd = NULL;
@@ -3438,7 +3438,7 @@ static int parse_subcmds(int argc, char *argv[],
 	return RET_OK;
 }
 
-static int connect_node(struct test_node *src, struct test_node *dst)
+int connect_node(struct test_node *src, struct test_node *dst)
 {
 	int schn;
 	int dchn;
@@ -3480,7 +3480,7 @@ static int connect_node(struct test_node *src, struct test_node *dst)
 	return RET_OK;
 }
 
-static int disconnect_node(struct test_node *src, struct test_node *dst)
+int disconnect_node(struct test_node *src, struct test_node *dst)
 {
 	int schn;
 	int dchn;
@@ -3498,7 +3498,7 @@ static int disconnect_node(struct test_node *src, struct test_node *dst)
 	return pitcher_disconnect(schn, dchn);
 }
 
-static int check_node_is_stopped(struct test_node *node)
+int check_node_is_stopped(struct test_node *node)
 {
 	int chnno = -1;
 
@@ -3513,7 +3513,7 @@ static int check_node_is_stopped(struct test_node *node)
 	return true;
 }
 
-static int check_ctrl_ready(void *arg, int *is_end)
+int check_ctrl_ready(void *arg, int *is_end)
 {
 	int end = true;
 	int i;
@@ -3579,7 +3579,7 @@ static int check_ctrl_ready(void *arg, int *is_end)
 	return false;
 }
 
-static int ctrl_run(void *arg, struct pitcher_buffer *pbuf)
+int ctrl_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	return RET_OK;
 }
