@@ -43,6 +43,7 @@
 #define DEFAULT_FMT		PIX_FMT_NV12
 #define DEFAULT_WIDTH		1920
 #define DEFAULT_HEIGHT		1080
+#define DEFAULT_SIZEIMAGE       (1024*1024*2)
 #define DEFAULT_FRAMERATE	30
 #define MIN_BS			128
 
@@ -1301,8 +1302,8 @@ static struct test_node *alloc_encoder_node(void)
 	encoder->fd = -1;
 	encoder->node.type = TEST_TYPE_ENCODER;
 	encoder->node.pixelformat = PIX_FMT_H264;
-	encoder->node.width = DEFAULT_WIDTH;
-	encoder->node.height = DEFAULT_HEIGHT;
+	encoder->node.width = 8192;
+	encoder->node.height = 8192;
 	encoder->node.framerate = DEFAULT_FRAMERATE;
 	encoder->node.get_source_chnno = get_encoder_source_chnno;
 	encoder->node.get_sink_chnno = get_encoder_sink_chnno;
@@ -1627,7 +1628,7 @@ static struct test_node *alloc_decoder_node(void)
 	decoder->fd = -1;
 	decoder->node.type = TEST_TYPE_DECODER;
 	decoder->node.pixelformat = PIX_FMT_NONE;
-	decoder->sizeimage = DEFAULT_WIDTH * DEFAULT_HEIGHT;
+	decoder->sizeimage = DEFAULT_SIZEIMAGE;
 
 	decoder->node.init_node = init_decoder_node;
 	decoder->node.free_node = free_decoder_node;
