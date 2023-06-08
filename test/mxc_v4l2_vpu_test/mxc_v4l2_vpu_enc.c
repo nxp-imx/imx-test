@@ -163,6 +163,7 @@ struct parser_test_t {
 	Parser p;
 };
 
+#ifdef ENABLE_G2D
 struct g2d_cvt_test_t {
 	struct test_node node;
 	struct pitcher_unit_desc desc;
@@ -174,6 +175,7 @@ struct g2d_cvt_test_t {
 	unsigned long frame_count;
 	int end;
 };
+#endif
 
 struct mxc_vpu_test_subcmd {
 	const char *subcmd;
@@ -660,12 +662,14 @@ struct mxc_vpu_test_option convert_options[] = {
 	{NULL, 0, NULL},
 };
 
+#ifdef ENABLE_G2D
 struct mxc_vpu_test_option g2d_cvt_options[] = {
 	{"key", 1, "--key <key>\n\t\t\tassign key number"},
 	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign output pixel format, support mutual convert of nv12 and i420"},
 	{NULL, 0, NULL},
 };
+#endif
 
 struct mxc_vpu_test_option parser_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
