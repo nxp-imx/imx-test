@@ -296,16 +296,16 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 8},
 		},
 	},
-	[PIX_FMT_B312] = {
-		.name = "b312",
+	[PIX_FMT_BGR48_12] = {
+		.name = "bgr48_12",
 		.fourcc = v4l2_fourcc('B', '3', '1', '2'),
 		.num_planes = 1,
 		.comp = {
 			{48, 12},
 		},
 	},
-	[PIX_FMT_B412] = {
-		.name = "b412",
+	[PIX_FMT_ABGR64_12] = {
+		.name = "abgr64_12",
 		.fourcc = v4l2_fourcc('B', '4', '1', '2'),
 		.num_planes = 1,
 		.comp = {
@@ -344,8 +344,8 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 12},
 		},
 	},
-	[PIX_FMT_Y312] = {
-		.name = "y312",
+	[PIX_FMT_YUV48_12] = {
+		.name = "yuv48_12",
 		.fourcc = v4l2_fourcc('Y', '3', '1', '2'),
 		.num_planes = 1,
 		.comp = {

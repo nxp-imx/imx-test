@@ -690,7 +690,7 @@ static int swc_pack_y212(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	return 0;
 }
 
-static int swc_unpack_y312(struct pitcher_buffer *src,
+static int swc_unpack_yuv48_12(struct pitcher_buffer *src,
 			   struct pitcher_buffer *dst)
 {
 	uint32_t w = src->format->width;
@@ -718,7 +718,7 @@ static int swc_unpack_y312(struct pitcher_buffer *src,
 	return 0;
 }
 
-static int swc_pack_y312(struct pitcher_buffer *src, struct pitcher_buffer *dst)
+static int swc_pack_yuv48_12(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 {
 	uint32_t w = src->format->width;
 	uint32_t h = src->format->height;
@@ -839,8 +839,8 @@ int pitcher_sw_unpack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	case PIX_FMT_Y212:
 		ret = swc_unpack_y212(src, dst);
 		break;
-	case PIX_FMT_Y312:
-		ret = swc_unpack_y312(src, dst);
+	case PIX_FMT_YUV48_12:
+		ret = swc_unpack_yuv48_12(src, dst);
 		break;
 	default:
 		break;
@@ -873,8 +873,8 @@ int pitcher_sw_pack_16(struct pitcher_buffer *src, struct pitcher_buffer *dst)
 	case PIX_FMT_Y212:
 		ret = swc_pack_y212(src, dst);
 		break;
-	case PIX_FMT_Y312:
-		ret = swc_pack_y312(src, dst);
+	case PIX_FMT_YUV48_12:
+		ret = swc_pack_yuv48_12(src, dst);
 		break;
 	default:
 		break;

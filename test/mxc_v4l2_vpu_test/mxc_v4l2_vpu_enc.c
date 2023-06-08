@@ -2491,6 +2491,7 @@ static int parse_convert_option(struct test_node *node,
 	return RET_OK;
 }
 
+#ifdef ENABLE_G2D
 static int set_g2d_cvt_source(struct test_node *node,
 				struct test_node *src)
 {
@@ -2752,6 +2753,7 @@ static int parse_g2d_cvt_option(struct test_node *node,
 
 	return RET_OK;
 }
+#endif
 
 static int get_parser_chnno(struct test_node *node)
 {
@@ -3180,15 +3182,15 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.parse_option = parse_convert_option,
 		.alloc_node = alloc_convert_node,
 	},
+#ifdef ENABLE_G2D
 	{
 		.subcmd = "g2dc",
 		.type = TEST_TYPE_CONVERT,
-#ifdef ENABLE_G2D
 		.option = g2d_cvt_options,
 		.parse_option = parse_g2d_cvt_option,
 		.alloc_node = alloc_g2d_cvt_node,
-#endif
 	},
+#endif
 	{
 		.subcmd = "parser",
 		.option = parser_options,
@@ -3212,15 +3214,15 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.parse_option = parse_dmanode_option,
 		.alloc_node = alloc_dmanode,
 	},
+#ifdef ENABLE_WAYLAND
 	{
 		.subcmd = "waylandsink",
 		.type = TEST_TYPE_SINK,
-#ifdef ENABLE_WAYLAND
 		.option = waylandsink_options,
 		.parse_option = parse_wayland_sink_option,
 		.alloc_node = alloc_wayland_sink_node,
-#endif
 	},
+#endif
 };
 
 struct mxc_vpu_test_subcmd *find_subcmd(const char *name)
