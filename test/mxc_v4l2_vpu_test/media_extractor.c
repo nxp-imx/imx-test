@@ -180,6 +180,11 @@ int parse_mm_extractor_option(struct test_node *node,
 	else if (!strcasecmp(option->name, "bs"))
 		mme->sizeimage = max(strtol(argv[0], NULL, 0), 256) * 1024;
 
+	if (mme->filename && !pitcher_get_file_size(mme->filename)) {
+		PITCHER_ERR("please check the input stream %s\n", mme->filename);
+		mme->filename = NULL;
+	}
+
 	return RET_OK;
 }
 
@@ -482,8 +487,12 @@ int mme_init_video(struct mm_extractor_test_t *mme)
 	if (flag & FLAG_VIDEO_INSERT_HEADER)
 		PITCHER_LOG("enable parser insert video startcode\n");
 
-	call_vop(ret, 1, parser, createParser2, flag,
+	call_vop(ret, 0, parser, createParser2, flag,
 		 &mme_file_ops, &mme_memory_ops, &mme_buffer_ops, mme, &mme->handle);
+	if (ret) {
+		mme->handle = NULL;
+		goto exit;
+	}
 	call_vop(ret, 0, parser, initializeIndex, mme->handle);
 	mme->read_mode = PARSER_READ_MODE_TRACK_BASED;
 	call_vop(ret, 0, parser, setReadMode, mme->handle, mme->read_mode);
