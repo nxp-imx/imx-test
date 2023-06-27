@@ -12,15 +12,20 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 #ifdef ENABLE_WAYLAND
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <assert.h>
+#include <signal.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <pthread.h>
 #include "pitcher/pitcher_def.h"
 #include "pitcher/pitcher.h"
@@ -32,6 +37,7 @@
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
 #include "wayland-generated-protocols/linux-dmabuf-unstable-v1-client-protocol.h"
+#include "wayland-generated-protocols/xdg-shell-client-protocol.h"
 
 struct wayland_buffer_link;
 struct wayland_sink_test_t {
@@ -61,9 +67,11 @@ struct wayland_sink_test_t {
 	struct wl_compositor *compositor;
 	struct wl_registry *registry;
 	struct wl_surface *video_surface;
-	struct wl_surface *video_surface_wrapper;
-	struct wl_shell *shell;
-	struct wl_shell_surface *shell_surface;
+
+	struct xdg_wm_base *xdg_wm_base;
+	struct xdg_surface *xdg_surface;
+	struct xdg_toplevel *xdg_toplevel;
+
 	struct zwp_linux_dmabuf_v1 *dmabuf;
 
 	uint32_t (*format_pixel_2_wl)(uint32_t format);
@@ -155,19 +163,40 @@ static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
 	dmabuf_modifier,
 };
 
+static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface, uint32_t serial)
+{
+	xdg_surface_ack_configure(xdg_surface, serial);
+
+	PITCHER_LOG("configure xdg surface\n");
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+	.configure = xdg_surface_configure,
+};
+
+static void xdg_wm_base_ping(void *data, struct xdg_wm_base *xdg_wm_base, uint32_t serial)
+{
+	xdg_wm_base_pong(xdg_wm_base, serial);
+}
+
+static const struct xdg_wm_base_listener xdg_wm_base_listener = {
+	.ping = xdg_wm_base_ping,
+};
+
 void global_registry_handler(void *data, struct wl_registry *registry,
 		uint32_t id, const char *interface, uint32_t version)
 {
 	struct wayland_sink_test_t *wlc = data;
 
-	/*PITCHER_LOG("interface : %s\n", interface);*/
+	/*PITCHER_LOG("interface : %s, version : %d\n", interface, version);*/
 	if (strcmp(interface, "wl_compositor") == 0) {
 		wlc->compositor = wl_registry_bind(registry,
 				id,
 				&wl_compositor_interface,
 				min(version, 3));
-	} else if (strcmp(interface, "wl_shell") == 0) {
-		wlc->shell = wl_registry_bind(registry, id, &wl_shell_interface, 1);
+	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
+		wlc->xdg_wm_base = wl_registry_bind(registry, id, &xdg_wm_base_interface, 1);
+		xdg_wm_base_add_listener(wlc->xdg_wm_base, &xdg_wm_base_listener, wlc);
 	} else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0) {
 		wlc->dmabuf = wl_registry_bind(registry,
 				id,
@@ -184,27 +213,6 @@ void global_registry_remover(void *data, struct wl_registry *registry, uint32_t 
 static const struct wl_registry_listener registry_listener = {
 	global_registry_handler,
 	global_registry_remover
-};
-
-void handle_ping(void *data,
-		struct wl_shell_surface *shell_surface, uint32_t serial)
-{
-}
-
-void handle_configure(void *data,
-		struct wl_shell_surface *shell_surface,
-		uint32_t edges, int32_t width, int32_t height)
-{
-}
-
-void handle_popup_done(void *data, struct wl_shell_surface *shell_surface)
-{
-}
-
-static const struct wl_shell_surface_listener shell_surface_listener = {
-	handle_ping,
-	handle_configure,
-	handle_popup_done
 };
 
 void redraw(void *data, struct wl_callback *callback, uint32_t time)
@@ -269,6 +277,7 @@ void *wl_display_thread_run(void *arg)
 	}
 
 	PITCHER_LOG("wayland display thread done\n");
+	wlc->end = true;
 	return NULL;
 }
 
@@ -340,16 +349,34 @@ exit:
 	return data.wbuf;
 }
 
+int free_wl_buffer(unsigned long item, void *arg)
+{
+	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
+
+	SAFE_RELEASE(link->wbuf, wl_buffer_destroy);
+	return 0;
+}
+
 void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 {
 	if (wlc->tid != -1) {
-		pthread_join(wlc->tid, NULL);
+		struct timespec ts;
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+		ts.tv_sec += 3;
+
+		if (pthread_timedjoin_np(wlc->tid, NULL, &ts)) {
+			PITCHER_ERR("fail to exit display thread, kill it\n");
+			pthread_kill(wlc->tid, SIGINT);
+		}
 		wlc->tid = -1;
 	}
-	SAFE_RELEASE(wlc->shell_surface, wl_shell_surface_destroy);
-	SAFE_RELEASE(wlc->video_surface_wrapper, wl_proxy_wrapper_destroy);
+	pitcher_queue_enumerate(wlc->links, free_wl_buffer, NULL);
+	SAFE_RELEASE(wlc->xdg_toplevel, xdg_toplevel_destroy);
+	SAFE_RELEASE(wlc->xdg_surface, xdg_surface_destroy);
 	SAFE_RELEASE(wlc->video_surface, wl_surface_destroy);
 	SAFE_RELEASE(wlc->compositor, wl_compositor_destroy);
+	SAFE_RELEASE(wlc->xdg_wm_base, xdg_wm_base_destroy);
 	SAFE_RELEASE(wlc->dmabuf, zwp_linux_dmabuf_v1_destroy);
 	SAFE_RELEASE(wlc->registry, wl_registry_destroy);
 	SAFE_RELEASE(wlc->display, wl_display_disconnect);
@@ -357,19 +384,15 @@ void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 
 void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
 {
-	struct wl_callback *frame_callback;
-
 	if (!wlc || !wlc->display)
 		return;
 
 	if (wlc->redraw_pending)
 		pthread_cond_wait(&wlc->redraw_wait, &wlc->render_lock);
 
-	wl_surface_attach(wlc->video_surface_wrapper, NULL, 0, 0);
-	frame_callback = wl_surface_frame(wlc->video_surface_wrapper);
-	wl_callback_add_listener(frame_callback, &frame_listener, wlc);
-	wl_surface_damage(wlc->video_surface_wrapper, 0 ,0 , wlc->node.width, wlc->node.height);
-	wl_surface_commit(wlc->video_surface_wrapper);
+	wl_surface_attach(wlc->video_surface, NULL, 0, 0);
+	wl_surface_damage(wlc->video_surface, 0, 0, wlc->node.width, wlc->node.height);
+	wl_surface_commit(wlc->video_surface);
 	wl_display_flush(wlc->display);
 }
 
@@ -487,27 +510,22 @@ int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 	wl_buffer = link->wbuf;
 	pitcher_end_cpu_access(link->buffer, 1, 1);
 
-	while (wlc->redraw_pending && !wlc->end)
+	while (wlc->redraw_pending && !is_force_exit())
 		pthread_cond_wait(&wlc->redraw_wait, &wlc->render_lock);
-	if (wlc->end) {
+	if (is_force_exit()) {
 		pitcher_put_buffer(link->buffer);
 		return RET_OK;
 	}
 
 	wlc->redraw_pending = 1;
-	frame_callback = wl_surface_frame(wlc->video_surface_wrapper);
+	frame_callback = wl_surface_frame(wlc->video_surface);
 	wl_callback_add_listener(frame_callback, &frame_listener, wlc);
 
-	wl_surface_attach(wlc->video_surface_wrapper, wl_buffer, 0, 0);
-	wl_surface_set_buffer_scale(wlc->video_surface_wrapper, 1);
-	wl_surface_damage(wlc->video_surface_wrapper, 0 ,0 , width, height);
-	wl_surface_commit(wlc->video_surface_wrapper);
+	wl_surface_attach(wlc->video_surface, wl_buffer, 0, 0);
+	wl_surface_set_buffer_scale(wlc->video_surface, 1);
+	wl_surface_damage(wlc->video_surface, 0, 0, width, height);
+	wl_surface_commit(wlc->video_surface);
 	wl_display_flush(wlc->display);
-
-	/*
-	 *if (wlc->redraw_pending)
-	 *        pthread_cond_wait(&wlc->redraw_wait, &wlc->render_lock);
-	 */
 
 	if (link->buffer->flags & PITCHER_BUFFER_FLAG_LAST)
 		wlc->end = true;
@@ -546,6 +564,11 @@ int wayland_sink_start(void *arg)
 	if (!wlc)
 		return -RET_E_INVAL;
 
+	if (pitcher_is_error(wlc->chnno)) {
+		PITCHER_ERR("there is already some error in wayland sink\n");
+		return -RET_E_INVAL;
+	}
+
 	wlc->end = false;
 	wlc->done = false;
 	wlc->queue = pitcher_init_queue();
@@ -565,7 +588,7 @@ int wayland_sink_start(void *arg)
 	wl_registry_add_listener(wlc->registry, &registry_listener, wlc);
 	wl_display_dispatch(wlc->display);
 	wl_display_roundtrip(wlc->display);
-	if (!wlc->compositor || !wlc->dmabuf || !wlc->shell)
+	if (!wlc->compositor || !wlc->dmabuf || !wlc->xdg_wm_base)
 		goto error;
 	if (wlc->format_pixel_2_wl(wlc->format.format) == DRM_FORMAT_INVALID) {
 		PITCHER_ERR("wayland sink doesn't support format %s\n",
@@ -573,29 +596,27 @@ int wayland_sink_start(void *arg)
 		goto error;
 	}
 
+	wlc->video_surface = wl_compositor_create_surface(wlc->compositor);
+	if (!wlc->video_surface)
+		goto error;
+
 	ret = pthread_create(&wlc->pid, NULL, wl_thread_run, wlc);
 	if (ret)
 		goto error;
 
+	if (wlc->xdg_wm_base) {
+		wlc->xdg_surface = xdg_wm_base_get_xdg_surface(wlc->xdg_wm_base, wlc->video_surface);
+		if (!wlc->xdg_surface)
+			goto error;
+		xdg_surface_add_listener(wlc->xdg_surface, &xdg_surface_listener, wlc);
+		wlc->xdg_toplevel = xdg_surface_get_toplevel(wlc->xdg_surface);
+		xdg_toplevel_set_title(wlc->xdg_toplevel, "mxc_v4l2_vpu_test");
+		wl_surface_commit(wlc->video_surface);
+	}
+
 	ret = pthread_create(&wlc->tid, NULL, wl_display_thread_run, wlc);
 	if (ret)
 		goto error;
-
-	wlc->video_surface = wl_compositor_create_surface(wlc->compositor);
-	if (!wlc->video_surface)
-		goto error;
-	wlc->video_surface_wrapper = wl_proxy_create_wrapper(wlc->video_surface);
-	if (!wlc->video_surface_wrapper)
-		goto error;
-
-	if (wlc->shell) {
-		wlc->shell_surface = wl_shell_get_shell_surface(wlc->shell, wlc->video_surface);
-		if (!wlc->shell_surface)
-			goto error;
-
-		wl_shell_surface_set_toplevel(wlc->shell_surface);
-		wl_shell_surface_add_listener(wlc->shell_surface, &shell_surface_listener, NULL);
-	}
 
 	if (wlc->fps)
 		wlc->interval = NSEC_PER_SEC / wlc->fps;
@@ -626,6 +647,8 @@ int wayland_sink_checkready(void *arg, int *is_end)
 	if (is_force_exit())
 		wlc->end = true;
 	if (is_source_end(wlc->chnno) && !pitcher_chn_poll_input(wlc->chnno))
+		wlc->end = true;
+	if (pitcher_is_error(wlc->chnno))
 		wlc->end = true;
 	if (is_end)
 		*is_end = wlc->end;
