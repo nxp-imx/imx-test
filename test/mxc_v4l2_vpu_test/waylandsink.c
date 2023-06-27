@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <strings.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -73,7 +74,11 @@ struct wayland_sink_test_t {
 	struct xdg_toplevel *xdg_toplevel;
 
 	struct zwp_linux_dmabuf_v1 *dmabuf;
+	struct wl_shm *wl_shm;
+	bool use_shm;
+	int shm_index;
 
+	uint32_t (*format_pixel_2_shm)(uint32_t format);
 	uint32_t (*format_pixel_2_wl)(uint32_t format);
 	uint32_t (*format_wl_2_pixel)(uint32_t format);
 };
@@ -95,6 +100,9 @@ struct wayland_buffer_link {
 	struct wl_buffer *wbuf;
 	struct pitcher_buffer *buffer;
 	struct wayland_sink_test_t *wlc;
+	bool is_shm;
+	int shm_fd;
+	void *shm_virt;
 };
 
 static struct wl_videoformat wl_formats[] = {
@@ -102,6 +110,18 @@ static struct wl_videoformat wl_formats[] = {
 	{WL_SHM_FORMAT_NV12,   DRM_FORMAT_NV12,   PIX_FMT_NV12,    0},
 	{WL_SHM_FORMAT_YUV420, DRM_FORMAT_YUV420, PIX_FMT_I420,    0},
 };
+
+uint32_t pixel_foramt_to_wl_shm_format(uint32_t format)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(wl_formats); i++) {
+		if (format == wl_formats[i].pix_format)
+			return wl_formats[i].wl_shm_format;
+	}
+
+	return -1;
+}
 
 uint32_t pixel_foramt_to_wl_dmabuf_format(uint32_t format)
 {
@@ -134,6 +154,7 @@ struct mxc_vpu_test_option waylandsink_options[] = {
 	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
 	{"framerate", 1, "--framerate <f>\n\t\t\tset fps"},
 	{"interval", 1, "--interval <val>\n\t\t\tset frame interval"},
+	{"shm", 1, "--shm <val>\n\t\t\tuse shm, default:0"},
 	{NULL, 0, NULL},
 };
 
@@ -203,6 +224,8 @@ void global_registry_handler(void *data, struct wl_registry *registry,
 				&zwp_linux_dmabuf_v1_interface,
 				min(version, 3));
 		zwp_linux_dmabuf_v1_add_listener(wlc->dmabuf, &dmabuf_listener, wlc);
+	} else if (strcmp(interface, wl_shm_interface.name) == 0) {
+		wlc->wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
 	}
 }
 
@@ -349,9 +372,84 @@ exit:
 	return data.wbuf;
 }
 
+int wl_create_shm_file(int index)
+{
+	char name[64];
+	int fd;
+
+	snprintf(name, sizeof(name), "/wl_shm-20230617-%d", index);
+	fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+	if (fd >= 0) {
+		shm_unlink(name);
+		return fd;
+	}
+
+	return -1;
+}
+
+int wl_shm_create_buffer(struct wayland_buffer_link *link)
+{
+	struct wayland_sink_test_t *wlc = link->wlc;
+	const int width = wlc->node.width;
+	const int height = wlc->node.height;
+	const int format = wlc->format_pixel_2_shm(wlc->format.format);
+	struct wl_shm_pool *pool;
+	int ret;
+
+	if (format == -1) {
+		PITCHER_ERR("wayland sink doesn't support format %s\n",
+				pitcher_get_format_name(wlc->format.format));
+		return -RET_E_NOT_SUPPORT;
+	}
+	if (link->wbuf)
+		return RET_OK;
+
+	link->shm_fd = wl_create_shm_file(wlc->shm_index++);
+	if (link->shm_fd < 0) {
+		PITCHER_ERR("fail to create shm file\n");
+		return -RET_E_OPEN;
+	}
+
+	ret = ftruncate(link->shm_fd, wlc->format.size);
+	if (ret < 0) {
+		PITCHER_ERR("fail to ftruncate\n");
+		close(link->shm_fd);
+		link->shm_fd = -1;
+		return -RET_E_NO_MEMORY;
+	}
+	link->shm_virt = mmap(NULL,
+			      wlc->format.size,
+			      PROT_READ | PROT_WRITE,
+			      MAP_SHARED,
+			      link->shm_fd, 0);
+	if (link->shm_virt == MAP_FAILED) {
+		close(link->shm_fd);
+		link->shm_fd = -1;
+	}
+
+	pool = wl_shm_create_pool(wlc->wl_shm, link->shm_fd, wlc->format.size);
+	link->wbuf = wl_shm_pool_create_buffer(pool, 0, width, height, wlc->format.planes[0].line, format);
+	wl_shm_pool_destroy(pool);
+	if (!link->wbuf)
+		return -RET_E_NO_MEMORY;
+
+	wl_buffer_add_listener(link->wbuf, &buffer_listener, link);
+	link->is_shm = true;
+
+	return RET_OK;
+}
+
 int free_wl_buffer(unsigned long item, void *arg)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
+
+	if (link->is_shm) {
+		if (link->shm_virt) {
+			munmap(link->shm_virt, link->wlc->format.size);
+			link->shm_virt = NULL;
+		}
+		SAFE_CLOSE(link->shm_fd, close);
+	}
 
 	SAFE_RELEASE(link->wbuf, wl_buffer_destroy);
 	return 0;
@@ -378,6 +476,7 @@ void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 	SAFE_RELEASE(wlc->compositor, wl_compositor_destroy);
 	SAFE_RELEASE(wlc->xdg_wm_base, xdg_wm_base_destroy);
 	SAFE_RELEASE(wlc->dmabuf, zwp_linux_dmabuf_v1_destroy);
+	SAFE_RELEASE(wlc->wl_shm, wl_shm_destroy);
 	SAFE_RELEASE(wlc->registry, wl_registry_destroy);
 	SAFE_RELEASE(wlc->display, wl_display_disconnect);
 }
@@ -453,6 +552,59 @@ struct wayland_buffer_link *find_buffer_link(struct wayland_sink_test_t *wlc,
 	return link;
 }
 
+int wayland_sink_copy_frame_to_wl_buffer(struct wayland_buffer_link *link)
+{
+	struct pitcher_buffer *buffer = link->buffer;
+	struct v4l2_rect *crop = buffer->crop;
+	struct pix_fmt_info *format = buffer->format;
+	const struct pixel_format_desc *desc = buffer->format->desc;
+	struct pitcher_buf_ref splane;
+	int w, h, line;
+	int planes_line;
+	unsigned long offset;
+	void *dst = link->shm_virt;
+	int dst_line;
+
+	for (int i = 0; i < format->num_planes; i++) {
+		uint32_t left;
+		uint32_t top;
+
+		offset = 0;
+		pitcher_get_buffer_plane(buffer, i, &splane);
+		if (crop && crop->width != 0 && crop->height != 0) {
+			w = crop->width;
+			h = crop->height;
+		} else {
+			w = format->width;
+			h = format->height;
+		}
+		w = ALIGN(w, 1 << desc->log2_chroma_w);
+		h = ALIGN(h, 1 << desc->log2_chroma_h);
+		if (i) {
+			w >>= desc->log2_chroma_w;
+			h >>= desc->log2_chroma_h;
+		}
+		line = ALIGN(w * desc->comp[i].bpp, 8) >> 3;
+		left = crop->left;
+		top = crop->top;
+		if (i) {
+			left >>= desc->log2_chroma_w;
+			top >>= desc->log2_chroma_h;
+		}
+
+		dst_line = link->wlc->format.planes[i].line;
+		planes_line = format->planes[i].line;
+		offset = planes_line * top;
+		for (int j = 0; j < h; j++) {
+			memcpy(dst, splane.virt + offset + left, line);
+			offset += planes_line;
+			dst += dst_line;
+		}
+	}
+
+	return 0;
+}
+
 int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
 					struct pitcher_buffer *buffer)
 {
@@ -462,7 +614,13 @@ int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
 	link = find_buffer_link(wlc, buffer);
 	if (!link)
 		return -RET_E_NO_MEMORY;
-	if (!link->wbuf) {
+	if (wlc->use_shm) {
+		if (!link->wbuf)
+			wl_shm_create_buffer(link);
+		if (!link->wbuf)
+			return -RET_E_NO_MEMORY;
+		wayland_sink_copy_frame_to_wl_buffer(link);
+	} else if (!link->wbuf) {
 		link->wbuf = wl_linux_dmabuf_construct_wl_buffer(wlc, link->buffer);
 		if (!link->wbuf)
 			return -RET_E_NO_MEMORY;
@@ -590,7 +748,13 @@ int wayland_sink_start(void *arg)
 	wl_display_roundtrip(wlc->display);
 	if (!wlc->compositor || !wlc->dmabuf || !wlc->xdg_wm_base)
 		goto error;
-	if (wlc->format_pixel_2_wl(wlc->format.format) == DRM_FORMAT_INVALID) {
+	if (wlc->use_shm) {
+		if (wlc->format_pixel_2_shm(wlc->format.format) == -1) {
+			PITCHER_ERR("wayland sink doesn't support format %s\n",
+				    pitcher_get_format_name(wlc->format.format));
+			goto error;
+		}
+	} else if (wlc->format_pixel_2_wl(wlc->format.format) == DRM_FORMAT_INVALID) {
 		PITCHER_ERR("wayland sink doesn't support format %s\n",
 				pitcher_get_format_name(wlc->format.format));
 		goto error;
@@ -677,7 +841,7 @@ int wayland_sink_run(void *arg, struct pitcher_buffer *buffer)
 		return -RET_E_INVAL;
 	if (!buffer)
 		return -RET_E_NOT_READY;
-	if (pitcher_buffer_is_dma_buf(buffer)) {
+	if (pitcher_buffer_is_dma_buf(buffer) && !wlc->use_shm) {
 		PITCHER_ERR("wayland sink only support dma buffer\n");
 		return -RET_E_NOT_SUPPORT;
 	}
@@ -747,6 +911,7 @@ int init_wayland_sink_node(struct test_node *node)
 	wlc->tid = -1;
 	pthread_cond_init(&wlc->redraw_wait, NULL);
 	pthread_mutex_init(&wlc->render_lock, NULL);
+	wlc->format_pixel_2_shm = pixel_foramt_to_wl_shm_format;
 	wlc->format_pixel_2_wl = pixel_foramt_to_wl_dmabuf_format;
 	wlc->format_wl_2_pixel = wl_dmabuf_format_to_pixel_format;
 
@@ -830,6 +995,8 @@ int parse_wayland_sink_option(struct test_node *node,
 		wlc->fps = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "interval")) {
 		wlc->interval = (uint64_t)strtol(argv[0], NULL, 0) * NSEC_PER_MSEC;
+	} else if (!strcasecmp(option->name, "shm")) {
+		wlc->use_shm = strtol(argv[0], NULL, 0) ? true: false;
 	}
 
 	return RET_OK;
