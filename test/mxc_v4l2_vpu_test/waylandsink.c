@@ -349,8 +349,8 @@ struct wl_buffer *wl_linux_dmabuf_construct_wl_buffer(
 	}
 	zwp_linux_buffer_params_v1_add_listener(params, &params_listener, &data);
 	zwp_linux_buffer_params_v1_create(params,
-			buffer->format->width,
-			buffer->format->height,
+			wlc->format.width,
+			wlc->format.height,
 			format, flags);
 	wl_display_flush(wlc->display);
 	data.wbuf = (struct wl_buffer *)0x1;
@@ -390,8 +390,8 @@ int wl_create_shm_file(int index)
 int wl_shm_create_buffer(struct wayland_buffer_link *link)
 {
 	struct wayland_sink_test_t *wlc = link->wlc;
-	const int width = wlc->node.width;
-	const int height = wlc->node.height;
+	const int width = wlc->format.width;
+	const int height = wlc->format.height;
 	const int format = wlc->format_pixel_2_shm(wlc->format.format);
 	struct wl_shm_pool *pool;
 	int ret;
@@ -657,13 +657,8 @@ int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 	if (!link || !link->wbuf)
 		return -RET_E_INVAL;
 
-	if (link->buffer && link->buffer->format) {
-		width = link->buffer->format->width;
-		height = link->buffer->format->height;
-	} else {
-		width = wlc->node.width;
-		height = wlc->node.height;
-	}
+	width = wlc->format.width;
+	height = wlc->format.height;
 
 	wl_buffer = link->wbuf;
 	pitcher_end_cpu_access(link->buffer, 1, 1);
@@ -835,12 +830,26 @@ int wayland_sink_checkready(void *arg, int *is_end)
 int wayland_sink_run(void *arg, struct pitcher_buffer *buffer)
 {
 	struct wayland_sink_test_t *wlc = arg;
+	struct v4l2_rect *crop;
 	int ret;
 
 	if (!wlc)
 		return -RET_E_INVAL;
 	if (!buffer)
 		return -RET_E_NOT_READY;
+
+	crop = buffer->crop;
+	if (crop && crop->width && crop->height &&
+	    (crop->width != wlc->format.width || crop->height != wlc->format.height)) {
+		PITCHER_LOG("update display size %d x %d\n", crop->width, crop->height);
+
+		memset(&wlc->format, 0, sizeof(wlc->format));
+		wlc->format.format = wlc->node.pixelformat;
+		wlc->format.width = wlc->node.width = crop->width;
+		wlc->format.height = wlc->node.height = crop->height;
+		pitcher_get_pix_fmt_info(&wlc->format, 0);
+	}
+
 	if (pitcher_buffer_is_dma_buf(buffer) && !wlc->use_shm) {
 		PITCHER_ERR("wayland sink only support dma buffer\n");
 		return -RET_E_NOT_SUPPORT;
