@@ -86,6 +86,7 @@ struct decoder_test_t {
 
 	struct v4l2_component_t capture;
 	struct v4l2_component_t output;
+	int dec_display_delay;
 
 	uint32_t sizeimage;
 	const char *devnode;
@@ -650,6 +651,7 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of input buffer block size, the unit is Kb."},
 	{"framemode", 1, "--framemode <mode>\n\t\t\tSpecify input frame mode, 0: frame level(default), 1: non-frame level"},
 	{"disreorder", 1, "--disreorder <mode>\n\t\t\tEnable disreorder(low latency) mode, 0: no(default), 1: yes"},
+	{"dis_delay", 1, "--dis_delay <number>\n\t\t\tSet dec display delay"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21,\n\
 		    \r\t\t\ti420, dtrc, dtrc10, P010, nvx2, rfc, rfcx, nv16"},
 	{NULL, 0, NULL},
@@ -1543,6 +1545,22 @@ int init_decoder_platform(struct decoder_test_t *decoder)
 		return RET_OK;
 }
 
+int set_dec_parameter(struct decoder_test_t *decoder)
+{
+	int fd;
+
+	if (!decoder || decoder->fd < 0)
+		return -RET_E_INVAL;
+
+	fd = decoder->fd;
+	if (decoder->dec_display_delay >= 0) {
+		if (!set_ctrl(fd, V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE, 1))
+			set_ctrl(fd, V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY, decoder->dec_display_delay);
+	}
+
+	return RET_OK;
+}
+
 int init_decoder_node(struct test_node *node)
 {
 	struct decoder_test_t *decoder;
@@ -1616,6 +1634,8 @@ int init_decoder_node(struct test_node *node)
 	decoder->output.chnno = ret;
 	pitcher_set_ignore_pollerr(decoder->output.chnno, true);
 
+	set_dec_parameter(decoder);
+
 	return init_decoder_platform(decoder);
 }
 
@@ -1664,6 +1684,7 @@ int parse_decoder_option(struct test_node *node,
 		return -RET_E_INVAL;
 
 	decoder = container_of(node, struct decoder_test_t, node);
+	decoder->dec_display_delay = -1;
 
 	if (!strcasecmp(option->name, "key")) {
 		decoder->node.key = strtol(argv[0], NULL, 0);
@@ -1687,6 +1708,8 @@ int parse_decoder_option(struct test_node *node,
 		decoder->node.pixelformat = fmt;
 	} else if (!strcasecmp(option->name, "disreorder")) {
 		decoder->platform.dis_reorder = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "dis_delay")) {
+		decoder->dec_display_delay = (int)strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
