@@ -500,20 +500,13 @@ void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
 	wl_display_flush(wlc->display);
 }
 
-int free_input_buffer(unsigned long item, void *arg)
+int free_buffer_link(unsigned long item, void *arg)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 
 	if (link->active)
 		SAFE_RELEASE(link->buffer, pitcher_put_buffer);
 	link->active = false;
-	return 1;
-}
-
-int free_buffer_link(unsigned long item, void *arg)
-{
-	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
-
 	SAFE_RELEASE(link, pitcher_free);
 	return 1;
 }
@@ -930,7 +923,6 @@ int wayland_sink_stop(void *arg)
 	wayland_sink_uninit_display(wlc);
 	pthread_mutex_unlock(&wlc->render_lock);
 
-	pitcher_queue_enumerate(wlc->queue, free_input_buffer, NULL);
 	SAFE_RELEASE(wlc->queue, pitcher_destroy_queue);
 	pitcher_queue_enumerate(wlc->links, free_buffer_link, NULL);
 	SAFE_RELEASE(wlc->links, pitcher_destroy_queue);
