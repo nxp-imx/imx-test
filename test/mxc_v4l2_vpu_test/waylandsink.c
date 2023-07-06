@@ -103,6 +103,7 @@ struct wayland_buffer_link {
 	bool is_shm;
 	int shm_fd;
 	void *shm_virt;
+	bool active;
 };
 
 static struct wl_videoformat wl_formats[] = {
@@ -259,6 +260,7 @@ void buffer_release(void *data, struct wl_buffer *wl_buffer)
 
 	pitcher_start_cpu_access(link->buffer, 1, 1);
 	pitcher_put_buffer(link->buffer);
+	link->active = false;
 	atomic_dec(&link->wlc->buffer_count);
 }
 
@@ -293,8 +295,25 @@ static const struct zwp_linux_buffer_params_v1_listener params_listener = {
 void *wl_display_thread_run(void *arg)
 {
 	struct wayland_sink_test_t *wlc = arg;
+	int fd = wl_display_get_fd(wlc->display);
 
-	while (wl_display_dispatch(wlc->display) != -1) {
+	while (!is_force_exit()) {
+		while (wl_display_prepare_read(wlc->display) != 0)
+			wl_display_dispatch_pending(wlc->display);
+
+		wl_display_flush(wlc->display);
+		if (!pitcher_poll(fd, POLLIN, -1)) {
+			PITCHER_ERR("display poll error\n");
+			wl_display_cancel_read(wlc->display);
+			break;
+		}
+		if (wl_display_read_events(wlc->display) == -1) {
+			PITCHER_LOG("fail to read events\n");
+			pitcher_set_error(wlc->chnno);
+			wlc->end = true;
+			break;
+		}
+		wl_display_dispatch_pending(wlc->display);
 		if (wlc->end && wlc->done && !wlc->buffer_count)
 			break;
 	}
@@ -457,18 +476,6 @@ int free_wl_buffer(unsigned long item, void *arg)
 
 void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 {
-	if (wlc->tid != -1) {
-		struct timespec ts;
-
-		clock_gettime(CLOCK_REALTIME, &ts);
-		ts.tv_sec += 3;
-
-		if (pthread_timedjoin_np(wlc->tid, NULL, &ts)) {
-			PITCHER_ERR("fail to exit display thread, kill it\n");
-			pthread_kill(wlc->tid, SIGINT);
-		}
-		wlc->tid = -1;
-	}
 	pitcher_queue_enumerate(wlc->links, free_wl_buffer, NULL);
 	SAFE_RELEASE(wlc->xdg_toplevel, xdg_toplevel_destroy);
 	SAFE_RELEASE(wlc->xdg_surface, xdg_surface_destroy);
@@ -478,6 +485,7 @@ void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 	SAFE_RELEASE(wlc->dmabuf, zwp_linux_dmabuf_v1_destroy);
 	SAFE_RELEASE(wlc->wl_shm, wl_shm_destroy);
 	SAFE_RELEASE(wlc->registry, wl_registry_destroy);
+	wl_display_flush(wlc->display);
 	SAFE_RELEASE(wlc->display, wl_display_disconnect);
 }
 
@@ -485,9 +493,6 @@ void wayland_sink_exit_display(struct wayland_sink_test_t *wlc)
 {
 	if (!wlc || !wlc->display)
 		return;
-
-	if (wlc->redraw_pending)
-		pthread_cond_wait(&wlc->redraw_wait, &wlc->render_lock);
 
 	wl_surface_attach(wlc->video_surface, NULL, 0, 0);
 	wl_surface_damage(wlc->video_surface, 0, 0, wlc->node.width, wlc->node.height);
@@ -499,7 +504,9 @@ int free_input_buffer(unsigned long item, void *arg)
 {
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 
-	pitcher_put_buffer(link->buffer);
+	if (link->active)
+		SAFE_RELEASE(link->buffer, pitcher_put_buffer);
+	link->active = false;
 	return 1;
 }
 
@@ -516,7 +523,7 @@ int compare_buffer_link(unsigned long item, unsigned long key)
 	struct wayland_buffer_link *link = (struct wayland_buffer_link *)item;
 	struct pitcher_buffer *buffer = (struct pitcher_buffer *)key;
 
-	if (link->buffer == buffer)
+	if (!link->active && link->buffer == buffer)
 		return 1;
 	return 0;
 }
@@ -611,6 +618,9 @@ int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
 	struct wayland_buffer_link *link;
 	int ret;
 
+	if (wlc->done)
+		return -RET_E_INVAL;
+
 	link = find_buffer_link(wlc, buffer);
 	if (!link)
 		return -RET_E_NO_MEMORY;
@@ -628,6 +638,7 @@ int wayland_sink_enqueue_buffer(struct wayland_sink_test_t *wlc,
 	}
 
 	pthread_mutex_lock(&wlc->render_lock);
+	link->active = true;
 	ret = pitcher_queue_push_back(wlc->queue, (unsigned long)link);
 	pthread_mutex_unlock(&wlc->render_lock);
 
@@ -666,7 +677,7 @@ int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 	while (wlc->redraw_pending && !is_force_exit())
 		pthread_cond_wait(&wlc->redraw_wait, &wlc->render_lock);
 	if (is_force_exit()) {
-		pitcher_put_buffer(link->buffer);
+		SAFE_RELEASE(link->buffer, pitcher_put_buffer);
 		return RET_OK;
 	}
 
@@ -875,22 +886,47 @@ int wayland_sink_run(void *arg, struct pitcher_buffer *buffer)
 int wayland_sink_stop(void *arg)
 {
 	struct wayland_sink_test_t *wlc = arg;
+	struct timespec ts;
 
 	if (!wlc)
 		return -RET_E_INVAL;
 
 	if (wlc->pid != -1) {
-		pthread_mutex_lock(&wlc->render_lock);
-		if (wlc->redraw_pending) {
-			wlc->redraw_pending = 0;
+		clock_gettime(CLOCK_REALTIME, &ts);
+		ts.tv_sec += 3;
+
+		if (is_force_exit()) {
+			pthread_mutex_lock(&wlc->render_lock);
 			pthread_cond_signal(&wlc->redraw_wait);
+			pthread_mutex_unlock(&wlc->render_lock);
 		}
-		pthread_mutex_unlock(&wlc->render_lock);
-		pthread_join(wlc->pid, NULL);
+
+		if (pthread_timedjoin_np(wlc->pid, NULL, &ts)) {
+			PITCHER_ERR("fail to exit render thread, kill it\n");
+			pthread_kill(wlc->pid, SIGINT);
+		}
+		//pthread_join(wlc->pid, NULL);
 		wlc->pid = -1;
 	}
+
 	pthread_mutex_lock(&wlc->render_lock);
 	wayland_sink_exit_display(wlc);
+	pthread_mutex_unlock(&wlc->render_lock);
+
+	if (wlc->tid != -1) {
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+		ts.tv_sec += 3;
+
+		if (pthread_timedjoin_np(wlc->tid, NULL, &ts)) {
+			PITCHER_ERR("fail to exit display thread, kill it\n");
+			pthread_kill(wlc->tid, SIGINT);
+		}
+		//pthread_join(wlc->tid, NULL);
+		wlc->tid = -1;
+	}
+
+	pthread_mutex_lock(&wlc->render_lock);
 	wayland_sink_uninit_display(wlc);
 	pthread_mutex_unlock(&wlc->render_lock);
 
