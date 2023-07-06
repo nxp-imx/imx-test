@@ -485,7 +485,8 @@ void wayland_sink_uninit_display(struct wayland_sink_test_t *wlc)
 	SAFE_RELEASE(wlc->dmabuf, zwp_linux_dmabuf_v1_destroy);
 	SAFE_RELEASE(wlc->wl_shm, wl_shm_destroy);
 	SAFE_RELEASE(wlc->registry, wl_registry_destroy);
-	wl_display_flush(wlc->display);
+	if (wlc->display)
+		wl_display_flush(wlc->display);
 	SAFE_RELEASE(wlc->display, wl_display_disconnect);
 }
 
@@ -794,7 +795,8 @@ error:
 		pthread_join(wlc->pid, NULL);
 		wlc->pid = -1;
 	}
-	wayland_sink_uninit_display(wlc);
+	if (wlc->display)
+		wayland_sink_uninit_display(wlc);
 	SAFE_RELEASE(wlc->links, pitcher_destroy_queue);
 	SAFE_RELEASE(wlc->queue, pitcher_destroy_queue);
 	return -RET_E_INVAL;
