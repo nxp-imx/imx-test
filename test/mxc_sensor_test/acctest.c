@@ -383,7 +383,7 @@ int main(int argc, char **argv)
 			if (ev[i].type == EV_SYN) {
 				printf
 				    ("Event: time %ld.%06ld, ---- %s ----\n",
-				     ev[i].time.tv_sec, ev[i].time.tv_usec,
+				     ev[i].input_event_sec, ev[i].input_event_usec,
 				     ev[i].code ? "Config Sync" :
 				     "Report Sync");
 			} else if (ev[i].type == EV_MSC
@@ -391,7 +391,7 @@ int main(int argc, char **argv)
 				       || ev[i].code == MSC_SCAN)) {
 				printf
 				    ("Event: time %ld.%06ld, type %d (%s), code %d (%s), value %02x\n",
-				     ev[i].time.tv_sec, ev[i].time.tv_usec,
+				     ev[i].input_event_sec, ev[i].input_event_usec,
 				     ev[i].type,
 				     events[ev[i].type] ?
 				     events[ev[i].type] : "?",
@@ -403,7 +403,7 @@ int main(int argc, char **argv)
 			} else {
 				printf
 				    ("Event: time %ld.%06ld, type %d (%s), code %d (%s), value %f\n",
-				     ev[i].time.tv_sec, ev[i].time.tv_usec,
+				     ev[i].input_event_sec, ev[i].input_event_usec,
 				     ev[i].type,
 				     events[ev[i].type] ?
 				     events[ev[i].type] : "?",
