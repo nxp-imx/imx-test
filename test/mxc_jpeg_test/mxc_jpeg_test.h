@@ -372,6 +372,48 @@ void v4l2_s_fmt_cap(int vdev_fd, bool is_mp, struct encoder_args *ea,
 	}
 }
 
+void v4l2_reqbufs_out(int vdev_fd, bool is_mp)
+{
+	struct v4l2_requestbuffers bufreq;
+
+	/* The reserved array must be zeroed */
+	memset(&bufreq, 0, sizeof(bufreq));
+
+	/*
+	 * the output buffer is filled by the application
+	 * and the driver sends it to the device, for processing
+	 */
+	bufreq.type = is_mp ? V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE : V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	bufreq.memory = V4L2_MEMORY_MMAP;
+	bufreq.count = NUM_BUFS;
+
+	if (ioctl(vdev_fd, VIDIOC_REQBUFS, &bufreq) < 0) {
+		perror("VIDIOC_REQBUFS OUT");
+		exit(1);
+	}
+}
+
+void v4l2_reqbufs_cap(int vdev_fd, bool is_mp)
+{
+	struct v4l2_requestbuffers bufreq;
+
+	/* The reserved array must be zeroed */
+	memset(&bufreq, 0, sizeof(bufreq));
+
+	/*
+	 * the output buffer is filled by the application
+	 * and the driver sends it to the device, for processing
+	 */
+	bufreq.type = is_mp ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE : V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	bufreq.memory = V4L2_MEMORY_MMAP;
+	bufreq.count = NUM_BUFS;
+
+	if (ioctl(vdev_fd, VIDIOC_REQBUFS, &bufreq) < 0) {
+		perror("VIDIOC_REQBUFS IN");
+		exit(1);
+	}
+}
+
 void v4l2_reqbufs(int vdev_fd, bool is_mp)
 {
 	struct v4l2_requestbuffers bufreq_cap;
@@ -531,49 +573,78 @@ void v4l2_munmap(int vdev_fd, bool is_mp, struct v4l2_buffer *buf,
 	}
 }
 
-void v4l2_streamon(int vdev_fd, bool is_mp)
+void v4l2_streamon_out(int vdev_fd, bool is_mp)
 {
-	int type_cap, type_out;
+	int type;
 
-	if (is_mp) {
-		type_cap = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		type_out = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	} else {
-		type_cap = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		type_out = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	if (is_mp)
+		type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	else
+		type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+
+	if (ioctl(vdev_fd, VIDIOC_STREAMON, &type) < 0) {
+		perror("VIDIOC_STREAMON OUT");
+		exit(1);
 	}
+}
 
-	printf("STREAMON IN\n");
-	if (ioctl(vdev_fd, VIDIOC_STREAMON, &type_cap) < 0) {
+void v4l2_streamon_cap(int vdev_fd, bool is_mp)
+{
+	int type;
+
+	if (is_mp)
+		type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	else
+		type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+	if (ioctl(vdev_fd, VIDIOC_STREAMON, &type) < 0) {
 		perror("VIDIOC_STREAMON IN");
 		exit(1);
 	}
+}
+
+void v4l2_streamon(int vdev_fd, bool is_mp)
+{
+	printf("STREAMON IN\n");
+	v4l2_streamon_cap(vdev_fd, is_mp);
 	printf("STREAMON OUT\n");
-	if (ioctl(vdev_fd, VIDIOC_STREAMON, &type_out) < 0) {
-		perror("VIDIOC_STREAMON OUT");
+	v4l2_streamon_out(vdev_fd, is_mp);
+}
+
+void v4l2_streamoff_out(int vdev_fd, bool is_mp)
+{
+	int type;
+
+	if (is_mp)
+		type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	else
+		type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+
+	if (ioctl(vdev_fd, VIDIOC_STREAMOFF, &type) < 0) {
+		perror("VIDIOC_STREAMOFF OUT");
+		exit(1);
+	}
+}
+
+void v4l2_streamoff_cap(int vdev_fd, bool is_mp)
+{
+	int type;
+
+	if (is_mp)
+		type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	else
+		type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+	if (ioctl(vdev_fd, VIDIOC_STREAMOFF, &type) < 0) {
+		perror("VIDIOC_STREAMOFF IN");
 		exit(1);
 	}
 }
 
 void v4l2_streamoff(int vdev_fd, bool is_mp)
 {
-	int type_cap, type_out;
-
-	if (is_mp) {
-		type_cap = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		type_out = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	} else {
-		type_cap = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		type_out = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	}
-	if (ioctl(vdev_fd, VIDIOC_STREAMOFF, &type_cap) < 0) {
-		perror("VIDIOC_STREAMOFF IN");
-		exit(1);
-	}
-	if (ioctl(vdev_fd, VIDIOC_STREAMOFF, &type_out) < 0) {
-		perror("VIDIOC_STREAMOFF OUT");
-		exit(1);
-	}
+	v4l2_streamoff_cap(vdev_fd, is_mp);
+	v4l2_streamoff_out(vdev_fd, is_mp);
 }
 
 void v4l2_qbuf_dqbuf_loop(int vdev_fd, int n, struct v4l2_buffer *buf_cap,
