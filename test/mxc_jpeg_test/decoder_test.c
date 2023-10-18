@@ -167,6 +167,7 @@ int main(int argc, char *argv[])
 	struct v4l2_buffer bufferout;
 	void *bufferin_start[2] = {0};
 	void *bufferout_start[1] = {0};
+	int width, height;
 
 	parse_args(argc, argv, &ea);
 
@@ -191,7 +192,13 @@ int main(int argc, char *argv[])
 	is_mp = v4l2_query_caps(fd);
 
 	subscribe_source_change_event(fd);
+	width = ea.width;
+	height = ea.height;
+	ea.width = 0;
+	ea.height = 0;
 	v4l2_s_fmt_out(fd, is_mp, &ea, filesize, V4L2_PIX_FMT_JPEG);
+	ea.width = width;
+	ea.height = height;
 
 	if (ea.crop_w != 0 && ea.crop_h != 0) {
 		printf("Cropping is not supported for the decoder\n");
