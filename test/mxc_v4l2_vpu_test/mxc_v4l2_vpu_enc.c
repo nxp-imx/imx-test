@@ -444,7 +444,6 @@ int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 
 	chnno = decoder->capture.chnno;
 	if (pitcher_get_status(chnno) == PITCHER_STATE_STOPPED) {
-		decoder->capture.pixelformat = PIX_FMT_NONE;
 		decoder->capture.width = 0;
 		decoder->capture.height = 0;
 		ret = pitcher_start_chn(chnno);
@@ -1530,6 +1529,7 @@ int init_decoder_platform(struct decoder_test_t *decoder)
 		decoder->output.fixed_timestamp = 1;
 		decoder->output.timestamp.tv_sec = -1;
 		decoder->output.timestamp.tv_usec = 234568;	//-765432000
+		decoder->capture.pixelformat = PIX_FMT_NONE;
 	} else if (!strcasecmp((const char*)cap.driver, "vsi_v4l2")) {
 		decoder->platform.type = IMX_8M;
 		decoder->platform.set_decoder_parameter = set_decoder_parameter;
@@ -1667,7 +1667,7 @@ struct test_node *alloc_decoder_node(void)
 	decoder->output.memory = V4L2_MEMORY_MMAP;
 	decoder->capture.memory = V4L2_MEMORY_MMAP;
 	decoder->output.pixelformat = PIX_FMT_H264;
-	decoder->capture.pixelformat = PIX_FMT_NV12;
+	decoder->capture.pixelformat = PIX_FMT_NONE;
 
 	return &decoder->node;
 }
