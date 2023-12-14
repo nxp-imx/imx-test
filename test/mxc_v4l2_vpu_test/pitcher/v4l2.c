@@ -392,11 +392,15 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 
 		if (v4lbuf.flags & V4L2_BUF_FLAG_LAST
 			|| buffer->planes[0].bytesused == 0) {
-			PITCHER_LOG("LAST BUFFER, flags = 0x%x, bytesused = %ld\n", v4lbuf.flags, buffer->planes[0].bytesused);
 			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
 		}
-		if (v4lbuf.flags & V4L2_BUF_FLAG_ERROR)
+		if (v4lbuf.flags & V4L2_BUF_FLAG_ERROR) {
 			buffer->flags |= PITCHER_BUFFER_FLAG_ERROR;
+			if (!(v4lbuf.flags & V4L2_BUF_FLAG_LAST) && buffer->planes[0].bytesused == 0)
+				buffer->flags &= ~PITCHER_BUFFER_FLAG_LAST;
+		}
+		if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
+			PITCHER_LOG("LAST BUFFER, flags = 0x%x, bytesused = %ld\n", v4lbuf.flags, buffer->planes[0].bytesused);
 
 		if (buffer->planes[0].bytesused && !(buffer->flags & PITCHER_BUFFER_FLAG_ERROR))
 			component->frame_count++;
