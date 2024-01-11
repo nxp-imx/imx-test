@@ -190,6 +190,7 @@ struct mxc_vpu_test_subcmd {
 
 int flush_enc(struct v4l2_component_t *component);
 int flush_dec(struct v4l2_component_t *component);
+void scan_and_connect_sink(struct test_node *src);
 
 static uint32_t bitmask;
 static struct test_node *nodes[MAX_NODE_COUNT];
@@ -440,6 +441,7 @@ int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 			return ret;
 		}
 		decoder->capture.chnno = ret;
+		scan_and_connect_sink(&decoder->node);
 	}
 
 	chnno = decoder->capture.chnno;
@@ -3519,6 +3521,39 @@ int disconnect_node(struct test_node *src, struct test_node *dst)
 	PITCHER_LOG("disconnect <%d, %d>\n", src->key, dst->key);
 
 	return pitcher_disconnect(schn, dchn);
+}
+
+void scan_and_connect_sink(struct test_node *src)
+{
+	int i;
+
+	if (!src)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
+		struct test_node *dst = nodes[i];
+		int dchn;
+		int schn;
+		int ret = 0;
+
+		if (!dst)
+			continue;
+
+		if (src != nodes[dst->source])
+			continue;
+		schn = src->get_source_chnno(src);
+		if (schn < 0)
+			continue;
+		dchn = dst->get_sink_chnno(dst);
+		if (pitcher_get_source(dchn) == schn)
+			continue;
+
+		ret = connect_node(src, dst);
+		if (ret < 0) {
+			PITCHER_ERR("can't connect <%d, %d>\n", src->key, dst->key);
+			force_exit();
+		}
+	}
 }
 
 int check_node_is_stopped(struct test_node *node)
