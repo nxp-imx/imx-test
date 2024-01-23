@@ -2060,6 +2060,7 @@ int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 	for (i = 0; i < format->num_planes; i++) {
 		uint32_t left;
 		uint32_t top;
+		uint32_t x_offset;
 		offset = 0;
 
 		pitcher_get_buffer_plane(buffer, i, &splane);
@@ -2084,10 +2085,11 @@ int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 			top >>= desc->log2_chroma_h;
 		}
 
+		x_offset = ALIGN(left * desc->comp[i].bpp, 8) >> 3;
 		planes_line = format->planes[i].line;
 		offset = planes_line * top;
 		for (j = 0; j < h; j++) {
-			fwrite((uint8_t *)splane.virt + offset + left, 1, line, file->filp);
+			fwrite((uint8_t *)splane.virt + offset + x_offset, 1, line, file->filp);
 			offset += planes_line;
 		}
 	}
@@ -3678,9 +3680,9 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, sig_handler);
 	signal(SIGSEGV, sig_handler);
 
-	printf("mxc_v4l2_vpu_test.out V%d.%d, SHA: %s %s\n",
+	printf("mxc_v4l2_vpu_test.out V%d.%d, SHA: %s %s, build on %s %s\n",
 		VERSION_MAJOR, VERSION_MINOR,
-		GIT_SHA, GIT_COMMIT_DATE);
+		GIT_SHA, GIT_COMMIT_DATE, __DATE__, __TIME__);
 
 	if (argc < 2 || !strcasecmp("help", argv[1]))
 		return show_help(argc, argv);
