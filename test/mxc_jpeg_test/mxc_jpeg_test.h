@@ -262,6 +262,7 @@ void v4l2_s_fmt_out(int vdev_fd, bool is_mp, struct encoder_args *ea,
 {
 	struct v4l2_format out_fmt;
 
+	memset(&out_fmt, 0, sizeof(out_fmt));
 	if (!is_mp) {
 		out_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 		out_fmt.fmt.pix.pixelformat = pixelformat;
@@ -319,6 +320,7 @@ void v4l2_s_fmt_cap(int vdev_fd, bool is_mp, struct encoder_args *ea,
 {
 	struct v4l2_format cap_fmt;
 
+	memset(&cap_fmt, 0, sizeof(cap_fmt));
 	if (!is_mp) {
 		cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		cap_fmt.fmt.pix.pixelformat = pixelformat;
@@ -819,6 +821,7 @@ void v4l2_fwrite_cap_payload(int vdev_fd, bool is_mp, const char *filename,
 	struct v4l2_format cap_fmt;
 	int w, h, w_crop, h_crop;
 
+	memset(&cap_fmt, 0, sizeof(cap_fmt));
 	if (!is_mp)
 		cap_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	else
