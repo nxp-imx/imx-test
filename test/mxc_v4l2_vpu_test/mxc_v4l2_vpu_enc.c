@@ -2078,8 +2078,14 @@ int ofile_output_by_line(void *arg, struct pitcher_buffer *buffer)
 			h >>= desc->log2_chroma_h;
 		}
 		line = ALIGN(w * desc->comp[i].bpp, 8) >> 3;
-		left = crop->left;
-		top = crop->top;
+		if (crop) {
+			left = crop->left;
+			top = crop->top;
+		} else {
+			left = 0;
+			top = 0;
+		}
+
 		if (i) {
 			left >>= desc->log2_chroma_w;
 			top >>= desc->log2_chroma_h;
