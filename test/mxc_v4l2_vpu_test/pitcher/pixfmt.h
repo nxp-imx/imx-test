@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2023 NXP. All rights reserved.
+ * Copyright(c) 2023-2024 NXP. All rights reserved.
  *
  */
 /*
@@ -57,6 +57,7 @@ enum pixel_format {
 	PIX_FMT_Y16,
 	PIX_FMT_Y212,
 	PIX_FMT_YUV48_12,
+	PIX_FMT_RAW,
 
 	PIX_FMT_COMPRESSED,
 	PIX_FMT_H264 = PIX_FMT_COMPRESSED,

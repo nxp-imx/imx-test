@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2023 NXP. All rights reserved.
+ * Copyright(c) 2023-2024 NXP. All rights reserved.
  *
  */
 /*
@@ -32,6 +32,7 @@ enum {
 #ifdef ENABLE_MM_PARSE
 	TEST_TYPE_MM_EXTRACTOR,
 #endif
+	TEST_TYPE_NETWORK,
 };
 
 struct test_node {

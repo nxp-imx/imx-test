@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2023 NXP. All rights reserved.
+ * Copyright(c) 2023-2024 NXP. All rights reserved.
  *
  */
 /*
@@ -436,6 +436,14 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.name = "jpeg",
 		.fourcc = V4L2_PIX_FMT_JPEG,
 		.num_planes = 1,
+	},
+	[PIX_FMT_RAW] = {
+		.name = "raw",
+		.fourcc = v4l2_fourcc('R', 'A', 'W', '0'),
+		.num_planes = 1,
+		.comp = {
+			{8, 8},
+		},
 	}
 };
 
