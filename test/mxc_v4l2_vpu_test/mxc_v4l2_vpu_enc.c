@@ -909,6 +909,8 @@ int set_encoder_source(struct test_node *node, struct test_node *src)
 	if (src->type == TEST_TYPE_DECODER) {
 		encoder->output.memory = V4L2_MEMORY_DMABUF;
 	}
+	if (src->type == TEST_TYPE_DMA)
+		encoder->output.memory = V4L2_MEMORY_DMABUF;
 
 	return RET_OK;
 }

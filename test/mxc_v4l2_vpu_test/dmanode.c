@@ -183,7 +183,7 @@ int init_dmanode(struct test_node *node)
 	dn->desc.runfunc = run_dmanode;
 	dn->desc.buffer_count = 4;
 	dn->desc.alloc_buffer = dmanode_alloc_buffer;
-	snprintf(dn->desc.name, sizeof(dn->desc.name), "dma");
+	snprintf(dn->desc.name, sizeof(dn->desc.name), "dma.%d", node->key);
 
 	return RET_OK;
 }
@@ -217,6 +217,9 @@ int get_dmanode_chnno(struct test_node *node)
 		return dn->chnno;
 
 	dn->chnno = pitcher_register_chn(dn->node.context, &dn->desc, dn);
+	if (dn->chnno >= 0 && dn->format.desc && dn->format.desc->fourcc_nc)
+		pitcher_set_preferred_fourcc(dn->chnno, dn->format.desc->fourcc);
+
 	return dn->chnno;
 }
 
@@ -237,6 +240,8 @@ int set_dmanode_source(struct test_node *node, struct test_node *src)
 	dn->format.width = dn->node.width;
 	dn->format.height = dn->node.height;
 	pitcher_get_pix_fmt_info(&dn->format, 0);
+	if (dn->chnno >= 0 && dn->format.desc && dn->format.desc->fourcc_nc)
+		pitcher_set_preferred_fourcc(dn->chnno, dn->format.desc->fourcc);
 
 	return RET_OK;
 }
@@ -272,7 +277,7 @@ struct test_node *alloc_dmanode(void)
 
 	dn->node.key = -1;
 	dn->node.source = -1;
-	dn->node.type = TEST_TYPE_CONVERT;
+	dn->node.type = TEST_TYPE_DMA;
 	dn->chnno = -1;
 
 	dn->node.init_node = init_dmanode;
