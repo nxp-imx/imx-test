@@ -44,6 +44,15 @@ struct filter_test_t {
 	uint64_t deviation;
 	uint64_t result_fps;
 	unsigned long frame_index;
+
+	/*corrupt*/
+	struct {
+		uint8_t type;
+		uint8_t mask;
+		uint32_t count;
+	} corrupt;
+
+	uint32_t rate;
 };
 
 struct mxc_vpu_test_option filter_options[] = {
@@ -52,6 +61,10 @@ struct mxc_vpu_test_option filter_options[] = {
 	{"function", 1, "--function <func>\n\t\t\t set filter function"},
 	{"framerate", 1, "--framerate <f>\n\t\t\tset frame rate(fps)"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the buffer size, the unit is Kb."},
+	{"type", 1, "--type <corrupt type>\n\t\t\tCorrupt buffer data, 0:and, 1:or, 2:not"},
+	{"mask", 1, "--mask <corrupt mask>\n\t\t\tCorrupt mask"},
+	{"rate", 1, "--rate\n\t\t\tCorrupt rate, the unit is %"},
+	{"count", 1, "--count <corrupt byte count>\n\t\t\tCorrupt byte count limit, default is 1"},
 	{NULL, 0, NULL},
 };
 
@@ -191,14 +204,86 @@ int filter_fps_func(struct filter_test_t *filter, struct pitcher_buffer *pbuf)
 	return ret;
 }
 
+static int filter_common_func(struct filter_test_t *filter, struct pitcher_buffer *pbuf,
+			      int (*procecc_cb)(struct filter_test_t *, struct pitcher_buffer *))
+{
+	struct pitcher_buffer *pdst;
+
+	pdst = get_filter_buffer(filter);
+	if (!pdst)
+		return -RET_E_EMPTY;
+
+	pdst->format = pbuf->format;
+	if (pitcher_copy_buffer_data(pbuf, pdst)) {
+		unsigned long size = 0;
+
+		for (unsigned int i = 0; i < pbuf->count; i++) {
+			memcpy(pdst->planes[0].virt + size,
+			       pbuf->planes[i].virt,
+			       pbuf->planes[i].bytesused);
+			size += pbuf->planes[i].bytesused;
+		}
+		pdst->planes[0].bytesused = size;
+	}
+
+	if (procecc_cb)
+		procecc_cb(filter, pdst);
+
+	pitcher_push_back_output(filter->chnno, pdst);
+	SAFE_RELEASE(pdst, pitcher_put_buffer);
+
+	return RET_OK;
+}
+
+static int filter_corrupt_buffer(struct filter_test_t *filter, struct pitcher_buffer *buffer)
+{
+	uint32_t r = rand() % 100;
+	uint32_t count;
+	uint8_t *pdata = NULL;
+
+	if (!filter->corrupt.count)
+		return RET_OK;
+
+	if (r >= filter->rate)
+		return RET_OK;
+	if (filter->corrupt.type > 2)
+		return RET_OK;
+
+	pdata = (uint8_t *)buffer->planes[0].virt;
+	count = (rand() % filter->corrupt.count) + 1;
+	for (uint32_t i = 0; i < count; i++) {
+		uint32_t offset = rand() % buffer->planes[0].bytesused;
+
+		switch (filter->corrupt.type) {
+		case 0:
+			pdata[offset] &= filter->corrupt.mask;
+			break;
+		case 1:
+			pdata[offset] |= filter->corrupt.mask;
+			break;
+		case 2:
+			pdata[offset] = ~pdata[offset];
+			break;
+		}
+	}
+
+	return RET_OK;
+}
+
+int filter_corrupt_func(struct filter_test_t *filter, struct pitcher_buffer *pbuf)
+{
+	return filter_common_func(filter, pbuf, filter_corrupt_buffer);
+}
+
 void init_filter_function(struct filter_test_t *filter)
 {
 	if (!filter || !filter->name)
 		return;
 
-	if (!strcasecmp(filter->name, "fps") && filter->framerate) {
+	if (!strcasecmp(filter->name, "fps") && filter->framerate)
 		filter->filter_func = filter_fps_func;
-	}
+	else if (!strcasecmp(filter->name, "corrupt"))
+		filter->filter_func = filter_corrupt_func;
 }
 
 int start_filter(void *arg)
@@ -379,6 +464,7 @@ int parse_filter_option(struct test_node *node, struct mxc_vpu_test_option *opti
 
 	filter = container_of(node, struct filter_test_t, node);
 	filter->sizeimage = 2 * 1024 * 1024;
+	filter->corrupt.count = 1;
 
 	if (!strcasecmp(option->name, "key")) {
 		filter->node.key = strtol(argv[0], NULL, 0);
@@ -392,6 +478,15 @@ int parse_filter_option(struct test_node *node, struct mxc_vpu_test_option *opti
 		uint32_t bs = strtol(argv[0], NULL, 0);
 
 		filter->sizeimage = max(bs, 128) * 1024;
+	} else if (!strcasecmp(option->name, "type")) {
+		filter->corrupt.type = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "mask")) {
+		filter->corrupt.mask = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "rate")) {
+		filter->rate = strtol(argv[0], NULL, 0);
+		filter->rate = min(filter->rate, 100);
+	} else if (!strcasecmp(option->name, "count")) {
+		filter->corrupt.count = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
