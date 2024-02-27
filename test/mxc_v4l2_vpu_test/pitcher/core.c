@@ -924,3 +924,11 @@ uint32_t pitcher_get_preferred_fourcc(unsigned int chnno)
 
 	return chn->preferred_fourcc;
 }
+
+Loop pitcher_get_main_loop(PitcherContext context)
+{
+	struct pitcher_core *core = context;
+
+	assert(core);
+	return core->loop;
+}

@@ -3307,6 +3307,13 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.parse_option = parse_network_option,
 		.alloc_node = alloc_network_node,
 	},
+	{
+		.subcmd = "filter",
+		.option = filter_options,
+		.type = TEST_TYPE_FILTER,
+		.parse_option = parse_filter_option,
+		.alloc_node = alloc_filter,
+	},
 };
 
 struct mxc_vpu_test_subcmd *find_subcmd(const char *name)

@@ -34,6 +34,7 @@ enum {
 	TEST_TYPE_MM_EXTRACTOR,
 #endif
 	TEST_TYPE_NETWORK,
+	TEST_TYPE_FILTER,
 };
 
 struct test_node {
@@ -88,6 +89,10 @@ int parse_mm_extractor_option(struct test_node *node,
 				char *argv[]);
 struct test_node *alloc_mm_extractor_node(void);
 #endif
+
+extern struct mxc_vpu_test_option filter_options[];
+int parse_filter_option(struct test_node *node, struct mxc_vpu_test_option *option, char *argv[]);
+struct test_node *alloc_filter(void);
 
 #ifdef __cplusplus
 }

@@ -46,6 +46,7 @@ int pitcher_loop_add_poll_fd(Loop loop, struct pitcher_poll_fd *fd);
 int pitcher_loop_add_task(Loop loop, struct pitcher_timer_task *task);
 int pitcher_loop_del_poll_fd(Loop l, struct pitcher_poll_fd *fd);
 int pitcher_loop_del_task(Loop l, struct pitcher_timer_task *task);
+Loop pitcher_get_main_loop(void *context);
 
 #ifdef __cplusplus
 }
