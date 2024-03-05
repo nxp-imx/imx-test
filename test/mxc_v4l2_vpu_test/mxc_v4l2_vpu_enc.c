@@ -33,7 +33,6 @@
 #include "pitcher/platform_8x.h"
 #include "pitcher/convert.h"
 #include "pitcher/dmabuf.h"
-#include "pitcher/network.h"
 #include "mxc_v4l2_vpu_enc.h"
 
 #define STRING(x)		#x
@@ -687,13 +686,6 @@ struct mxc_vpu_test_option parser_options[] = {
 	{"skip", 1, "--skip <number>\n\t\t\tset skip frame number"},
 	{"seek", 3, "--seek <input number> <decode number> <new position>\n\t\t\tseek"},
 	{"show", 0, "--show\n\t\t\tshow size and offset of per frame"},
-	{NULL, 0, NULL},
-};
-
-struct mxc_vpu_test_option network_options[] = {
-	{"key", 1, "--key <key>\n\t\t\tassign key number"},
-	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
-	{"drop_rate", 1, "--drop_rate\n\t\t\tdrop rate of a packets"},
 	{NULL, 0, NULL},
 };
 
@@ -3190,32 +3182,6 @@ int parse_parser_option(struct test_node *node,
 	return RET_OK;
 }
 
-int parse_network_option(struct test_node *node,
-				struct mxc_vpu_test_option *option,
-				char *argv[])
-{
-	struct network_test_t *network;
-
-	if (!node || !option || !option->name)
-		return -RET_E_INVAL;
-	if (option->arg_num && !argv)
-		return -RET_E_INVAL;
-
-	network = container_of(node, struct network_test_t, node);
-	if (!strcasecmp(option->name, "key")) {
-		network->node.key = strtol(argv[0], NULL, 0);
-	} else if (!strcasecmp(option->name, "source")) {
-		network->node.source = strtol(argv[0], NULL, 0);
-	} else if (!strcasecmp(option->name, "drop_rate")) {
-		printf("parse %s\n", argv[0]);
-		network->drop_rate = strtof(argv[0], NULL);
-		if (network->drop_rate < 0.0f || network->drop_rate >= 1.0f)
-			return -RET_E_INVAL;
-	}
-
-	return RET_OK;
-}
-
 struct mxc_vpu_test_subcmd subcmds[] = {
 	{
 		.subcmd = "ifile",
@@ -3300,13 +3266,6 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.alloc_node = alloc_wayland_sink_node,
 	},
 #endif
-	{
-		.subcmd = "network",
-		.option = network_options,
-		.type = TEST_TYPE_NETWORK,
-		.parse_option = parse_network_option,
-		.alloc_node = alloc_network_node,
-	},
 	{
 		.subcmd = "filter",
 		.option = filter_options,

@@ -33,7 +33,6 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			pitcher/sysloadso.o \
 			dmanode.o \
 			pitcher/bitstream.o \
-			pitcher/network.o \
 			filter.o
 
 ifneq ($(PLATFORM), zebu)
