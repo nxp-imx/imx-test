@@ -20,6 +20,7 @@ extern "C"
 
 #include <linux/videodev2.h>
 #include "pixfmt.h"
+#include "statistics.h"
 
 #ifndef _UAPI__LINUX_IMX_VPU_H
 
@@ -100,6 +101,17 @@ struct v4l2_component_t {
 	struct pix_fmt_info format;
 	int fixed_timestamp;
 	struct timeval timestamp;
+	struct stats_event_t request_mem;
+	struct stats_event_t release_mem;
+	struct stats_event_t stream_on;
+	struct stats_event_t stream_off;
+	struct stats_event_t last_res_change;
+	struct stats_events_t qbuf;
+	struct stats_events_t dqbuf;
+	struct stats_events_t qdqbuf;
+	struct stats_events_t frame;
+	struct stats_event_t *qevents[MAX_BUFFER_COUNT];
+	struct stats_sizes_t frame_sizes;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;
@@ -113,6 +125,7 @@ int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat);
 int set_ctrl(int fd, int id, int value);
 int get_ctrl(int fd, int id, int *value);
 uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t alignment);
+void fill_stats_v4l2(struct v4l2_component_t *component);
 #ifdef __cplusplus
 }
 #endif

@@ -28,6 +28,7 @@
 #include "pitcher_v4l2.h"
 #include "platform_8x.h"
 #include "dmabuf.h"
+#include "statistics.h"
 
 static int __is_v4l2_end(struct v4l2_component_t *component)
 {
@@ -286,7 +287,9 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 	req_bufs.count = component->buffer_count;
 	req_bufs.type = component->type;
 	req_bufs.memory = component->memory;
+	stats_start_event(&component->request_mem);
 	ret = ioctl(fd, VIDIOC_REQBUFS, &req_bufs);
+	stats_end_event(&component->request_mem);
 	if (ret) {
 		PITCHER_ERR("VIDIOC_REQBUFS fail, error : %s\n",
 				strerror(errno));
@@ -319,7 +322,9 @@ static int __rel_v4l2_buffer(struct v4l2_component_t *component)
 	memset(&req_bufs, 0, sizeof(req_bufs));
 	req_bufs.type = component->type;
 	req_bufs.memory = component->memory;
+	stats_start_event(&component->release_mem);
 	ret = ioctl(fd, VIDIOC_REQBUFS, &req_bufs);
+	stats_end_event(&component->release_mem);
 	if (ret) {
 		PITCHER_ERR("VIDIOC_REQBUFS 0 fail, error : %s\n",
 				strerror(errno));
@@ -334,6 +339,7 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	struct v4l2_buffer v4lbuf;
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 	struct pitcher_buffer *buffer = NULL;
+	struct stats_event_t *se;
 	int is_ready;
 	int fd;
 	int i;
@@ -358,7 +364,10 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 		v4lbuf.m.planes = planes;
 		v4lbuf.length = ARRAY_SIZE(planes);
 	}
+	se = stats_poll_event(&component->dqbuf);
+	stats_start_event(se);
 	ret = ioctl(fd, VIDIOC_DQBUF, &v4lbuf);
+	stats_end_event(se);
 	if (ret) {
 		if (errno == EPIPE ||
 		    (V4L2_TYPE_IS_CAPTURE(component->type) && component->eos_received)) {
@@ -371,15 +380,26 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	}
 
 	buffer = component->slots[v4lbuf.index];
-
 	if (!buffer)
 		return NULL;
+	if (!(v4lbuf.flags & V4L2_BUF_FLAG_LAST || v4lbuf.m.planes[0].bytesused == 0)) {
+		stats_index_event(se, v4lbuf.sequence);
+		stats_index_event(component->qevents[v4lbuf.index], v4lbuf.sequence);
+	}
 	component->slots[v4lbuf.index] = NULL;
 	if (V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
-		for (i = 0; i < v4lbuf.length; i++)
+		for (i = 0; i < v4lbuf.length; i++) {
 			buffer->planes[i].bytesused = v4lbuf.m.planes[i].bytesused;
+			if (!(v4lbuf.flags & V4L2_BUF_FLAG_LAST ||
+				buffer->planes[i].bytesused == 0))
+				stats_push_size(&component->frame_sizes,
+					v4lbuf.m.planes[i].bytesused, v4lbuf.sequence);
+		}
 	} else {
 		buffer->planes[0].bytesused = v4lbuf.bytesused;
+		if (!(v4lbuf.flags & V4L2_BUF_FLAG_LAST || buffer->planes[0].bytesused == 0))
+			stats_push_size(&component->frame_sizes,
+				v4lbuf.bytesused, v4lbuf.sequence);
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(component->type)) {
@@ -414,6 +434,7 @@ static void __qbuf(struct v4l2_component_t *component,
 {
 	struct v4l2_buffer v4lbuf;
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
+	struct stats_event_t *se;
 	int fd;
 	int i;
 	int ret;
@@ -478,7 +499,10 @@ static void __qbuf(struct v4l2_component_t *component,
 	v4lbuf.timestamp.tv_sec = -1;
 	if (component->fixed_timestamp)
 		v4lbuf.timestamp = component->timestamp;
+	se = stats_poll_event(&component->qbuf);
+	stats_start_event(se);
 	ret = ioctl(fd, VIDIOC_QBUF, &v4lbuf);
+	stats_end_event(se);
 	if (ret) {
 		PITCHER_ERR("(%s)qbuf fail, error: %s\n",
 				component->desc.name, strerror(errno));
@@ -487,7 +511,7 @@ static void __qbuf(struct v4l2_component_t *component,
 		pitcher_set_ignore_pollerr(component->chnno, false);
 		return;
 	}
-
+	component->qevents[buffer->index] = se;
 	component->slots[buffer->index] = buffer;
 	if (V4L2_TYPE_IS_OUTPUT(component->type))
 		component->frame_count++;
@@ -506,7 +530,9 @@ static int __streamon_v4l2(struct v4l2_component_t *component)
 
 	fd = component->fd;
 	type = component->type;
+	stats_start_event(&component->stream_on);
 	ret = ioctl(fd, VIDIOC_STREAMON, &type);
+	stats_end_event(&component->stream_on);
 	if (ret) {
 		PITCHER_LOG("streamon fail, error : %s\n", strerror(errno));
 		return -RET_E_INVAL;
@@ -526,7 +552,9 @@ static int __streamoff_v4l2(struct v4l2_component_t *component)
 
 	fd = component->fd;
 	type = component->type;
+	stats_start_event(&component->stream_off);
 	ret = ioctl(fd, VIDIOC_STREAMOFF, &type);
+	stats_end_event(&component->stream_off);
 	if (ret) {
 		PITCHER_LOG("streamoff fail, error : %s\n", strerror(errno));
 		return -RET_E_INVAL;
@@ -814,6 +842,10 @@ int init_v4l2(void *arg)
 	if (!component || component->fd < 0)
 		return -RET_E_INVAL;
 
+	stats_init_events(&component->qbuf);
+	stats_init_events(&component->dqbuf);
+	stats_init_sizes(&component->frame_sizes);
+
 	PITCHER_LOG("init : %s\n", component->desc.name);
 
 	return RET_OK;
@@ -1029,6 +1061,8 @@ static void __check_v4l2_events(struct v4l2_component_t *component)
 	case V4L2_EVENT_SOURCE_CHANGE:
 		PITCHER_LOG("Receive Source Change, fd = %d\n", component->fd);
 		component->resolution_change = true;
+		if (component->dqbuf.size == 0)
+			stats_end_event(&component->last_res_change);
 		break;
 	default:
 		break;
@@ -1329,10 +1363,10 @@ int is_v4l2_mplane(struct v4l2_capability *cap)
     if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE_MPLANE
 			| V4L2_CAP_VIDEO_OUTPUT_MPLANE)
 			&& cap->capabilities & V4L2_CAP_STREAMING)
-        return TRUE;
+	return TRUE;
 
     if (cap->capabilities & V4L2_CAP_VIDEO_M2M_MPLANE)
-        return TRUE;
+	return TRUE;
 
     return FALSE;
 }
@@ -1341,10 +1375,10 @@ int is_v4l2_splane(struct v4l2_capability *cap)
 {
     if (cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT)
 			&& cap->capabilities & V4L2_CAP_STREAMING)
-        return TRUE;
+	return TRUE;
 
     if (cap->capabilities & V4L2_CAP_VIDEO_M2M)
-        return TRUE;
+	return TRUE;
 
     return FALSE;
 }
@@ -1497,4 +1531,43 @@ uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t 
 		size = format.size;
 
 	return size;
+}
+
+void fill_stats_v4l2(struct v4l2_component_t *component)
+{
+	int i;
+	struct stats_event_t *prev_se, *next_se, *curr_se;
+
+	stats_init_events(&component->frame);
+	prev_se = &component->stream_on;
+	for (i = 0; i < component->dqbuf.size; i++) {
+		next_se = stats_get_by_index(&component->dqbuf, i);
+		if (next_se == NULL)
+			continue;
+		curr_se = stats_poll_event(&component->frame);
+		if (curr_se == NULL)
+			break;
+		*curr_se = (struct stats_event_t) {
+			.start = prev_se->end,
+			.end = next_se->end,
+			.index = i
+		};
+		prev_se = next_se;
+	}
+
+	stats_init_events(&component->qdqbuf);
+	for (i = 0; i < component->qbuf.size && i < component->dqbuf.size; i++) {
+		prev_se = stats_get_by_index(&component->qbuf, i);
+		next_se = stats_get_by_index(&component->dqbuf, i);
+		if (prev_se == NULL || next_se == NULL)
+			continue;
+		curr_se = stats_poll_event(&component->qdqbuf);
+		if (curr_se == NULL)
+			break;
+		*curr_se = (struct stats_event_t) {
+			.start = prev_se->start,
+			.end = next_se->end,
+			.index = i
+		};
+	}
 }

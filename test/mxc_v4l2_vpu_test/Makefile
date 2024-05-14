@@ -33,7 +33,8 @@ mxc_v4l2_vpu_enc.out = mxc_v4l2_vpu_enc.o \
 			pitcher/sysloadso.o \
 			dmanode.o \
 			pitcher/bitstream.o \
-			filter.o
+			filter.o \
+			pitcher/statistics.o
 
 ifneq ($(PLATFORM), zebu)
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/imx-mm/parser/fsl_parser.h))

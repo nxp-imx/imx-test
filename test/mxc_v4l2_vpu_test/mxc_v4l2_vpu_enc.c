@@ -33,6 +33,7 @@
 #include "pitcher/platform_8x.h"
 #include "pitcher/convert.h"
 #include "pitcher/dmabuf.h"
+#include "pitcher/statistics.h"
 #include "mxc_v4l2_vpu_enc.h"
 
 #define STRING(x)		#x
@@ -46,6 +47,7 @@
 #define DEFAULT_SIZEIMAGE       (1024*1024*2)
 #define DEFAULT_FRAMERATE	30
 #define MIN_BS			128
+
 
 struct encoder_test_t {
 	struct test_node node;
@@ -78,6 +80,11 @@ struct encoder_test_t {
 	uint32_t cpbsize;
 
 	const char *devnode;
+
+	uint32_t stats_size;
+	struct stats_event_t open;
+	struct stats_event_t seq_init;
+	struct stats_event_t close;
 };
 
 struct decoder_test_t {
@@ -92,6 +99,11 @@ struct decoder_test_t {
 	const char *devnode;
 
 	struct platform_t platform;
+
+	uint32_t stats_size;
+	struct stats_event_t open;
+	struct stats_event_t seq_init;
+	struct stats_event_t close;
 };
 
 struct camera_test_t {
@@ -643,6 +655,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"seqhdr", 1, "--seqhdr <set>\n\t\t\tset encoder idr sequence header"},
 	{"cpbsize", 1, "--cpbsize <size>\n\t\t\tset encoder coded picture buffer size, the unit is b"},
 	{"quality", 1, "--quality <quality>\n\t\t\tset jpeg quality"},
+	{"stats-size", 1, "--stats-size\n\t\t\t statistics report size. 0 to disable"},
 	{NULL, 0, NULL},
 };
 
@@ -656,6 +669,7 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"dis_delay", 1, "--dis_delay <number>\n\t\t\tSet dec display delay"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21,\n\
 		    \r\t\t\ti420, dtrc, dtrc10, P010, nvx2, rfc, rfcx, nv16"},
+	{"stats-size", 1, "--stats-size\n\t\t\t statistics report size. 0 to disable"},
 	{NULL, 0, NULL},
 };
 
@@ -825,6 +839,72 @@ int parse_camera_option(struct test_node *node,
 	return RET_OK;
 }
 
+void print_stats_encoder_node(struct encoder_test_t *encoder)
+{
+	if (!encoder || !encoder->stats_size)
+		return;
+
+	fill_stats_v4l2(&encoder->output);
+	fill_stats_v4l2(&encoder->capture);
+	encoder->seq_init.start = stats_get_by_index(&encoder->output.qbuf, 0)->start;
+	encoder->seq_init.end = stats_get_by_index(&encoder->output.dqbuf, 0)->end;
+	PITCHER_LOG("Encoder %d statistics:\n", encoder->node.key);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "SETUP statistics:",
+		"start(us)", "end(us)", "delta(us)");
+	stats_print_event("OPEN", &encoder->open);
+	stats_print_event("REQ_MEM_OUT", &encoder->output.request_mem);
+	stats_print_event("STREAM_ON_OUT", &encoder->output.stream_on);
+	stats_print_event("SEQ_INIT", &encoder->seq_init);
+	PITCHER_LOG("SEQ_INIT = OUT_DQBUF[0] - OUT_QBUF[0]\n");
+	stats_print_event("REQ_MEM_CAP", &encoder->capture.request_mem);
+	stats_print_event("STREAM_ON_CAP", &encoder->capture.stream_on);
+	stats_print_event("STREAM_OFF_OUT", &encoder->output.stream_off);
+	stats_print_event("STREAM_OFF_CAP", &encoder->capture.stream_off);
+	stats_print_event("CLOSE", &encoder->close);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "BUF-OUT statistics:",
+		"q(us)", "dq(us)", "delta(us)");
+	stats_print_events("QDQBUF", &encoder->output.qdqbuf, encoder->stats_size);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "BUF-CAP statistics:",
+		"q(us)", "dq(us)", "delta(us)");
+	stats_print_events("QDQBUF", &encoder->capture.qdqbuf, encoder->stats_size);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "FRAME-ENC statistics:",
+		"start(us)", "end(us)", "delta(us)");
+	stats_print_events("FRAME-ENC", &encoder->capture.frame, encoder->stats_size);
+	PITCHER_LOG("%-24s %10s\n", "BITSTREAM statistics:", "size(KB)");
+	stats_print_sizes("FRAME-SIZE", &encoder->capture.frame_sizes, 1024, encoder->stats_size);
+	PITCHER_LOG("[%-22s] %10.2f Kbits/s\n", "Avg-bitrate(30fps)",
+		stats_avg_sizes(&encoder->capture.frame_sizes) / 1024.0f * 8 * 30);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "MEMORY INFO statistics:",
+		"number", "buffersize(MB)", "totalsize(MB)");
+	PITCHER_LOG("[%-22s] %10u %10.2f %10.2f\n", "Bitstream",
+		encoder->capture.buffer_count, encoder->capture.sizeimage / 1048576.0f,
+		encoder->capture.buffer_count * encoder->capture.sizeimage / 1048576.0f);
+	PITCHER_LOG("[%-22s] %10u %10.2f %10.2f\n", "Framebuffer",
+		encoder->output.buffer_count, encoder->output.sizeimage / 1048576.0f,
+		encoder->output.buffer_count * encoder->output.sizeimage / 1048576.0f);
+	PITCHER_LOG("%-24s %10s\n", "LATENCY statistics:", "delta(us)");
+	PITCHER_LOG("[%-22s] %10d\n", "INIT",
+		stats_get_by_index(&encoder->output.dqbuf, 0)->end -
+		encoder->output.stream_on.start);
+	PITCHER_LOG("INIT = OUT_DQBUF[0] - OUT_STREAM_ON\n");
+	PITCHER_LOG("[%-22s] %10d\n", "FIRST",
+		stats_get_by_index(&encoder->capture.dqbuf, 0)->end -
+		encoder->output.stream_on.start);
+	PITCHER_LOG("FIRST = CAP_DQBUF[0] - OUT_STREAM_ON\n");
+	PITCHER_LOG("PERFORMANCE statistics:\n");
+	PITCHER_LOG("[%-22s] %4u  %4u\n", "RESOLUTION", encoder->output.width,
+		encoder->output.height);
+	PITCHER_LOG("[%-22s] %10u\n", "FRAME-ENC number", encoder->output.frame.size);
+	PITCHER_LOG("[%-22s] %10u (us)\n", "FRAME-ENC min",
+		stats_min_delta_events(&encoder->capture.frame));
+	PITCHER_LOG("[%-22s] %10u (us)\n", "FRAME-ENC avg",
+		stats_avg_delta_events(&encoder->capture.frame));
+	PITCHER_LOG("[%-22s] %10u (us)\n", "FRAME-ENC max",
+		stats_max_delta_events(&encoder->capture.frame));
+	PITCHER_LOG("[%-22s] %10.2f\n", "FPS avg",
+		1000000.0f / stats_avg_delta_events(&encoder->capture.frame));
+}
+
 void free_encoder_node(struct test_node *node)
 {
 	struct encoder_test_t *encoder;
@@ -855,7 +935,10 @@ void free_encoder_node(struct test_node *node)
 	unsubcribe_event(encoder->fd);
 	SAFE_CLOSE(encoder->output.chnno, pitcher_unregister_chn);
 	SAFE_CLOSE(encoder->capture.chnno, pitcher_unregister_chn);
+	stats_start_event(&encoder->close);
 	SAFE_CLOSE(encoder->fd, close);
+	stats_end_event(&encoder->close);
+	print_stats_encoder_node(encoder);
 	SAFE_RELEASE(encoder, pitcher_free);
 }
 
@@ -1178,20 +1261,26 @@ int init_encoder_node(struct test_node *node)
 
 	encoder = container_of(node, struct encoder_test_t, node);
 	encoder->capture.pixelformat = encoder->node.pixelformat;
+	if (encoder->stats_size)
+		stats_init();
 	if (encoder->devnode) {
+		stats_start_event(&encoder->open);
 		encoder->fd = open(encoder->devnode, O_RDWR | O_NONBLOCK);
-		PITCHER_LOG("open %s\n", encoder->devnode);
+		stats_end_event(&encoder->open);
 		ret = check_v4l2_device_type(encoder->fd,
 						encoder->output.pixelformat,
 						encoder->capture.pixelformat);
+		PITCHER_LOG("open %s\n", encoder->devnode);
 		if (ret == FALSE) {
 			SAFE_CLOSE(encoder->fd, close);
 			PITCHER_ERR("open encoder device node fail\n");
 			return -RET_E_OPEN;
 		}
 	} else {
+		stats_start_event(&encoder->open);
 		encoder->fd = lookup_v4l2_device_and_open(encoder->output.pixelformat,
 						encoder->capture.pixelformat);
+		stats_end_event(&encoder->open);
 		if (encoder->fd < 0) {
 			PITCHER_ERR("open encoder device node fail\n");
 			return -RET_E_OPEN;
@@ -1339,6 +1428,8 @@ struct test_node *alloc_encoder_node(void)
 	encoder->output.pixelformat = PIX_FMT_NV12;
 	encoder->capture.pixelformat = encoder->node.pixelformat;
 
+	encoder->stats_size = 0;
+
 	return &encoder->node;
 }
 
@@ -1420,6 +1511,10 @@ int parse_encoder_option(struct test_node *node,
 		encoder->cpbsize = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "quality")) {
 		encoder->quality = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "stats-size")) {
+		encoder->stats_size = strtol(argv[0], NULL, 0);
+		if (encoder->stats_size > STATS_MAX_ENTRIES)
+			return -RET_E_INVAL;
 	}
 
 	return RET_OK;
@@ -1489,6 +1584,71 @@ int set_decoder_source(struct test_node *node, struct test_node *src)
 	return RET_OK;
 }
 
+void print_stats_decoder_node(struct decoder_test_t *decoder)
+{
+	if (!decoder || !decoder->stats_size)
+		return;
+
+	fill_stats_v4l2(&decoder->output);
+	fill_stats_v4l2(&decoder->capture);
+	decoder->seq_init.start = stats_get_by_index(&decoder->output.qbuf, 0)->start;
+	decoder->seq_init.end = decoder->output.last_res_change.end;
+	PITCHER_LOG("Decoder %d stats:\n", decoder->node.key);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "SETUP statistics:",
+		"start(us)", "end(us)", "delta(us)");
+	stats_print_event("OPEN", &decoder->open);
+	stats_print_event("REQ_MEM_OUT", &decoder->output.request_mem);
+	stats_print_event("STREAM_ON_OUT", &decoder->output.stream_on);
+	stats_print_event("SEQ_INIT", &decoder->seq_init);
+	PITCHER_LOG("SEQ_INIT = LAST_RESOLUTION_CHANGE - OUT_QBUF[0]\n");
+	stats_print_event("REQ_MEM_CAP", &decoder->capture.request_mem);
+	stats_print_event("STREAM_ON_CAP", &decoder->capture.stream_on);
+	stats_print_event("STREAM_OFF_OUT", &decoder->output.stream_off);
+	stats_print_event("STREAM_OFF_CAP", &decoder->capture.stream_off);
+	stats_print_event("CLOSE", &decoder->close);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "BUF-OUT statistics:",
+		"q(us)", "dq(us)", "delta(us)");
+	stats_print_events("QDQBUF", &decoder->output.qdqbuf, decoder->stats_size);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "BUF-CAP statistics:",
+		"q(us)", "dq(us)", "delta(us)");
+	stats_print_events("QDQBUF", &decoder->capture.qdqbuf, decoder->stats_size);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "FRAME-DEC statistics:",
+		"start(us)", "end(us)", "delta(us)");
+	stats_print_events("FRAME-DEC", &decoder->capture.frame, decoder->stats_size);
+	PITCHER_LOG("%-24s %10s\n", "BITSTREAM statistics:", "size(KB)");
+	stats_print_sizes("FRAME-SIZE", &decoder->output.frame_sizes, 1024, decoder->stats_size);
+	PITCHER_LOG("[%-22s] %10.2f Kbits/s\n", "Avg-bitrate",
+		stats_avg_sizes(&decoder->output.frame_sizes) / 1024.0f * 8 * 30);
+	PITCHER_LOG("%-24s %10s %10s %10s\n", "MEMORY INFO statistics:",
+		"number", "buffersize(MB)", "totalsize(MB)");
+	PITCHER_LOG("[%-22s] %10u %10.2f %10.2f\n", "Bitstream",
+		decoder->output.buffer_count, decoder->output.sizeimage / 1048576.0f,
+		decoder->output.buffer_count * decoder->output.sizeimage / 1048576.0f);
+	PITCHER_LOG("[%-22s] %10u %10.2f %10.2f\n", "Framebuffer",
+		decoder->capture.buffer_count, decoder->capture.sizeimage / 1048576.0f,
+		decoder->capture.buffer_count * decoder->capture.sizeimage / 1048576.0f);
+	PITCHER_LOG("%-24s %10s\n", "LATENCY statistics:", "delta(us)");
+	PITCHER_LOG("[%-22s] %10d\n", "INIT", decoder->output.last_res_change.end -
+		decoder->output.stream_on.start);
+	PITCHER_LOG("INIT = LAST_RESOLUTION_CHANGE - OUT_STREAM_ON\n");
+	PITCHER_LOG("[%-22s] %10d\n", "FIRST",
+		stats_get_by_index(&decoder->capture.dqbuf, 0)->end -
+		decoder->output.stream_on.start);
+	PITCHER_LOG("FIRST = CAP_DQBUF[0] - OUT_STREAM_ON\n");
+	PITCHER_LOG("PERFORMANCE statistics:\n");
+	PITCHER_LOG("[%-22s] %4u  %4u\n", "RESOLUTION", decoder->capture.width,
+		decoder->capture.height);
+	PITCHER_LOG("[%-22s] %10u\n", "FRAME-DEC number", decoder->capture.frame.size);
+	PITCHER_LOG("[%-22s] %10u (us)\n", "FRAME-DEC min",
+		stats_min_delta_events(&decoder->capture.frame));
+	PITCHER_LOG("[%-22s] %10u (us)\n", "FRAME-DEC avg",
+		stats_avg_delta_events(&decoder->capture.frame));
+	PITCHER_LOG("[%-22s] %10u (us)\n", "FRAME-DEC max",
+		stats_max_delta_events(&decoder->capture.frame));
+	PITCHER_LOG("[%-22s] %10.2f\n", "FPS avg",
+		1000000.0f / stats_avg_delta_events(&decoder->capture.frame));
+}
+
 void free_decoder_node(struct test_node *node)
 {
 	struct decoder_test_t *decoder;
@@ -1517,7 +1677,10 @@ void free_decoder_node(struct test_node *node)
 	unsubcribe_event(decoder->fd);
 	SAFE_CLOSE(decoder->output.chnno, pitcher_unregister_chn);
 	SAFE_CLOSE(decoder->capture.chnno, pitcher_unregister_chn);
+	stats_start_event(&decoder->close);
 	SAFE_CLOSE(decoder->fd, close);
+	stats_end_event(&decoder->close);
+	print_stats_decoder_node(decoder);
 	SAFE_RELEASE(decoder, pitcher_free);
 }
 
@@ -1577,19 +1740,25 @@ int init_decoder_node(struct test_node *node)
 
 	decoder = container_of(node, struct decoder_test_t, node);
 	decoder->capture.pixelformat = decoder->node.pixelformat;
+	if (decoder->stats_size)
+		stats_init();
 	PITCHER_LOG("decode capture format: %s\n",
 			pitcher_get_format_name(decoder->capture.pixelformat));
 	if (decoder->devnode) {
+		stats_start_event(&decoder->open);
 		decoder->fd = open(decoder->devnode, O_RDWR | O_NONBLOCK);
+		stats_end_event(&decoder->open);
 		if (decoder->fd >= 0 &&
 		    !check_v4l2_device_type(decoder->fd,
 					   decoder->output.pixelformat,
 					   decoder->capture.pixelformat))
 			SAFE_CLOSE(decoder->fd, close);
 	} else {
+		stats_start_event(&decoder->open);
 		decoder->fd = lookup_v4l2_device_and_open(
 					decoder->output.pixelformat,
 					decoder->capture.pixelformat);
+		stats_end_event(&decoder->open);
 	}
 	if (decoder->fd < 0) {
 		PITCHER_ERR("open decoder device node fail\n");
@@ -1674,6 +1843,8 @@ struct test_node *alloc_decoder_node(void)
 	decoder->output.pixelformat = PIX_FMT_H264;
 	decoder->capture.pixelformat = PIX_FMT_NONE;
 
+	decoder->stats_size = 0;
+
 	return &decoder->node;
 }
 
@@ -1715,6 +1886,10 @@ int parse_decoder_option(struct test_node *node,
 		decoder->platform.dis_reorder = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "dis_delay")) {
 		decoder->dec_display_delay = (int)strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "stats-size")) {
+		decoder->stats_size = strtol(argv[0], NULL, 0);
+		if (decoder->stats_size > STATS_MAX_ENTRIES)
+			return -RET_E_INVAL;
 	}
 
 	return RET_OK;
