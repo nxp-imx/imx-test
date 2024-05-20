@@ -882,7 +882,6 @@ static int __init_v4l2(struct v4l2_component_t *component)
 	ret = __set_v4l2_fps(component);
 	if (ret < 0) {
 		PITCHER_ERR("set fps fail\n");
-		return ret;
 	}
 
 	ret = __req_v4l2_buffer(component);
