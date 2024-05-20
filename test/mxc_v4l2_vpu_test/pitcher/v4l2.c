@@ -920,7 +920,7 @@ static int __cleanup_v4l2(struct v4l2_component_t *component)
 
 int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferred_fourcc)
 {
-	struct v4l2_fmtdesc fmt_desc;
+	struct v4l2_fmtdesc fmt_desc = {0};
 	int found = 0;
 
 	fmt_desc.type = component->type;
