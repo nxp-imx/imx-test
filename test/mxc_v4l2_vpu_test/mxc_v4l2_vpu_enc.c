@@ -295,10 +295,6 @@ int subscribe_event(int fd)
 	sub.type = V4L2_EVENT_SOURCE_CHANGE;
 	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 
-	memset(&sub, 0, sizeof(sub));
-	sub.type = V4L2_EVENT_EOS;
-	ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
-
 	return 0;
 }
 
