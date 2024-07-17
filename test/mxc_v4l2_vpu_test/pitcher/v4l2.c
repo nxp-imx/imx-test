@@ -340,6 +340,7 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 	struct pitcher_buffer *buffer = NULL;
 	struct stats_event_t *se;
+	uint32_t bytesused;
 	int is_ready;
 	int fd;
 	int i;
@@ -382,7 +383,9 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	buffer = component->slots[v4lbuf.index];
 	if (!buffer)
 		return NULL;
-	if (!(v4lbuf.flags & V4L2_BUF_FLAG_LAST || v4lbuf.m.planes[0].bytesused == 0)) {
+	bytesused = V4L2_TYPE_IS_MULTIPLANAR(component->type) ? v4lbuf.m.planes[0].bytesused :
+								v4lbuf.bytesused;
+	if (!(v4lbuf.flags & V4L2_BUF_FLAG_LAST || bytesused == 0)) {
 		stats_index_event(se, v4lbuf.sequence);
 		stats_index_event(component->qevents[v4lbuf.index], v4lbuf.sequence);
 	}
