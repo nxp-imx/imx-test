@@ -51,7 +51,6 @@ struct wayland_sink_test_t {
 	int done;
 	unsigned long frame_count;
 	unsigned long disp_count;
-	long buffer_count;
 	Queue queue;
 	Queue links;
 	uint32_t fps;
@@ -261,7 +260,6 @@ void buffer_release(void *data, struct wl_buffer *wl_buffer)
 	pitcher_start_cpu_access(link->buffer, 1, 1);
 	pitcher_put_buffer(link->buffer);
 	link->active = false;
-	atomic_dec(&link->wlc->buffer_count);
 }
 
 static const struct wl_buffer_listener buffer_listener = {
@@ -298,13 +296,19 @@ void *wl_display_thread_run(void *arg)
 	int fd = wl_display_get_fd(wlc->display);
 
 	while (!is_force_exit()) {
-		while (wl_display_prepare_read(wlc->display) != 0)
+		while (wl_display_prepare_read(wlc->display) != 0) {
 			wl_display_dispatch_pending(wlc->display);
+			if (is_force_exit()) {
+				PITCHER_ERR("force exit display thread\n");
+				wlc->end = true;
+				break;
+			}
+		}
 
 		wl_display_flush(wlc->display);
 		if (!pitcher_poll(fd, POLLIN, -1)) {
 			PITCHER_ERR("display poll error\n");
-			wl_display_cancel_read(wlc->display);
+			//wl_display_cancel_read(wlc->display);
 			break;
 		}
 		if (wl_display_read_events(wlc->display) == -1) {
@@ -314,7 +318,7 @@ void *wl_display_thread_run(void *arg)
 			break;
 		}
 		wl_display_dispatch_pending(wlc->display);
-		if (wlc->end && wlc->done && !wlc->buffer_count)
+		if (wlc->end && wlc->done)
 			break;
 	}
 
@@ -687,7 +691,6 @@ int wayland_render_last_buffer(struct wayland_sink_test_t *wlc)
 
 	if (link->buffer->flags & PITCHER_BUFFER_FLAG_LAST)
 		wlc->end = true;
-	atomic_inc(&wlc->buffer_count);
 	wlc->disp_count++;
 
 	return RET_OK;
