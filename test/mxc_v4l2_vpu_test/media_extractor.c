@@ -161,6 +161,8 @@ struct mxc_vpu_test_option mm_extractor_options[] = {
 	{NULL, 0, NULL},
 };
 
+struct pitcher_buffer *mme_alloc_buffer(void *arg);
+
 int parse_mm_extractor_option(struct test_node *node,
 				struct mxc_vpu_test_option *option,
 				char *argv[])
@@ -318,13 +320,37 @@ ParserMemoryOps mme_memory_ops = {
 uint8 *mme_request_buffer(uint32 streamNum, uint32 *size, void **bufContext, void *parserContext)
 {
 	struct mm_extractor_test_t *mme = parserContext;
+	struct pitcher_buffer *buffer;
 
-	if (!mme || !mme->buffer || !size || !(*size))
+	if (!mme || !size || !(*size))
 		return NULL;
-	if (*size + mme->buffer->planes[0].bytesused > mme->buffer->planes[0].size)
+	if (*size + mme->codec_data_size > mme->sizeimage)
 		return NULL;
 
-	return (uint8 *)(mme->buffer->planes[0].virt + mme->buffer->planes[0].bytesused);
+	if (mme->buffer) {
+		buffer = mme->buffer;
+		mme->buffer = NULL;
+	} else {
+		buffer = pitcher_get_idle_buffer(mme->chnno);
+		if (buffer) {
+			buffer->format = &mme->format;
+			buffer->planes[0].bytesused = 0;
+		}
+	}
+	if (!buffer) {
+		buffer = mme_alloc_buffer((void *)mme);
+		if (buffer) {
+			buffer->format = &mme->format;
+			buffer->planes[0].bytesused = 0;
+		}
+	}
+	if (!buffer)
+		return NULL;
+
+	if (bufContext)
+		*bufContext = (void *)buffer;
+	//PITCHER_LOG("requset %8d, %p\n", *size, buffer->planes[0].virt + buffer->planes[0].bytesused);
+	return (uint8 *)(buffer->planes[0].virt + buffer->planes[0].bytesused);
 }
 
 void mme_release_buffer(uint32 streamNum, uint8 *pBuffer, void *bufContext, void *parserContext)
@@ -605,9 +631,10 @@ uint32_t mme_get_pixel_foramt(uint32 decoder_type, uint32 sub_type)
 	return PIX_FMT_NONE;
 }
 
-int mme_get_next_sample(struct mm_extractor_test_t *mme)
+int mme_get_next_sample(struct mm_extractor_test_t *mme, struct pitcher_buffer **pbuffer)
 {
 	struct mm_parser_interface *parser;
+	struct pitcher_buffer *buffer = NULL;
 	int ret = -RET_E_NOT_FOUND;
 
 	if (!mme || !mme->parser.library)
@@ -635,14 +662,33 @@ int mme_get_next_sample(struct mm_extractor_test_t *mme)
 			if (track_num_got != mme->track_index)
 				continue;
 		}
+		PITCHER_DBG("ret = %d, pdata = %p, size = %8d, flag = 0x%04x, %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			    ret, pdata, size, flag,
+			    pdata ? pdata[0] : 0,
+			    pdata ? pdata[1] : 0,
+			    pdata ? pdata[2] : 0,
+			    pdata ? pdata[3] : 0,
+			    pdata ? pdata[4] : 0,
+			    pdata ? pdata[5] : 0,
+			    pdata ? pdata[6] : 0,
+			    pdata ? pdata[7] : 0);
 		if (ret == PARSER_NOT_READY) {
 			PITCHER_ERR("parser not ready\n");
 			break;
 		}
-		if (pdata && size)
-			mme->buffer->planes[0].bytesused += size;
+		if (ret < 0) {
+			PITCHER_LOG("parse error, ret = %d\n", ret);
+			mme->end = true;
+			break;
+		}
+
+		if (pdata && size) {
+			buffer = buffer_context;
+			if (buffer)
+				buffer->planes[0].bytesused += size;
+		}
 		if (!(flag & FLAG_SAMPLE_NOT_FINISHED)) {
-			if (mme->buffer->planes[0].bytesused) {
+			if (buffer && buffer->planes[0].bytesused) {
 				ret = RET_OK;
 				mme->frame_count++;
 			}
@@ -654,8 +700,11 @@ int mme_get_next_sample(struct mm_extractor_test_t *mme)
 			mme->end = true;
 			break;
 		}
-		if (ret == RET_OK)
+		if (ret == RET_OK) {
+			if (pbuffer)
+				*pbuffer = buffer;
 			break;
+		}
 	}
 
 	return ret;
@@ -839,8 +888,8 @@ int mme_hvcc2annexb_codecdata(struct mm_extractor_test_t *mme, struct pitcher_bu
 
 void mme_mp4_to_annexb_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
 {
-	uint8_t *pdata = buffer->planes[0].virt;
-	uint32_t bytesused = buffer->planes[0].bytesused;
+	uint8_t *pdata = buffer->planes[0].virt + buffer->planes[0].offset;
+	uint32_t bytesused = buffer->planes[0].bytesused - buffer->planes[0].offset;
 	uint32_t length;
 	uint32_t consumed = 0;
 	uint32_t num_nal = 0;
@@ -854,57 +903,74 @@ void mme_mp4_to_annexb_frame(struct mm_extractor_test_t *mme, struct pitcher_buf
 	}
 }
 
-int mme_handle_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buffer)
+int mme_handle_codec_data(struct mm_extractor_test_t *mme)
 {
-	int ret;
+	struct pitcher_buffer *buffer;
 
-	if (mme->codec_data && mme->codec_data_size && !mme->codec_data_sent) {
-		if (mme->codec_data_size > buffer->planes[0].size) {
-			PITCHER_ERR("buffer size(%ld) is too small for codec data(%d)\n",
-				    buffer->planes[0].size, mme->codec_data_size);
+	buffer = pitcher_get_idle_buffer(mme->chnno);
+	if (!buffer)
+		return -RET_E_NOT_READY;
+
+	buffer->planes[0].bytesused = 0;
+	buffer->format = &mme->format;
+	mme->buffer = buffer;
+
+	if (mme->codec_data_size > buffer->planes[0].size) {
+		PITCHER_ERR("buffer size(%ld) is too small for codec data(%d)\n",
+			    buffer->planes[0].size, mme->codec_data_size);
 			mme->end = true;
+			mme->buffer = NULL;
+			SAFE_RELEASE(buffer, pitcher_put_buffer);
+			return -RET_E_INVAL;
+	}
+	PITCHER_LOG("codec data(%s): %8d, %02x %02x %02x %02x %02x %02x %02x %02x\n",
+		    pitcher_get_format_name(mme->format.format),
+		    mme->codec_data_size,
+		    mme->codec_data[0], mme->codec_data[1],
+		    mme->codec_data[2], mme->codec_data[3],
+		    mme->codec_data[4], mme->codec_data[5],
+		    mme->codec_data[6], mme->codec_data[7]);
+	if (mme->format.format == PIX_FMT_H264) {
+		mme->is_avcc = true;
+		if (mme_avcc2annexb_codecdata(mme, buffer)) {
+			PITCHER_ERR("avcc bitstream is not supported\n");
+			mme->end = true;
+			mme->buffer = NULL;
+			SAFE_RELEASE(buffer, pitcher_put_buffer);
 			return -RET_E_INVAL;
 		}
-		PITCHER_LOG("codec data(%s): %8d, %02x %02x %02x %02x %02x %02x %02x %02x\n",
-			    pitcher_get_format_name(mme->format.format),
-			    mme->codec_data_size,
-			    mme->codec_data[0], mme->codec_data[1],
-			    mme->codec_data[2], mme->codec_data[3],
-			    mme->codec_data[4], mme->codec_data[5],
-			    mme->codec_data[6], mme->codec_data[7]);
-		if (mme->format.format == PIX_FMT_H264) {
-			mme->is_avcc = true;
-			if (mme_avcc2annexb_codecdata(mme, buffer)) {
-				PITCHER_ERR("avcc bitstream is not supported\n");
-				mme->end = true;
-				return -RET_E_INVAL;
-			}
-			mme->codec_data_sent = true;
-			return RET_OK;
-		} else if (mme->format.format == PIX_FMT_H265) {
-			mme->is_hvcc = true;
-			if (mme_hvcc2annexb_codecdata(mme, buffer)) {
-				PITCHER_ERR("hvcc bitstream is not supported\n");
-				mme->end = true;
-				return -RET_E_INVAL;
-			}
-			mme->codec_data_sent = true;
-			return RET_OK;
-		}
-
-		memcpy(buffer->planes[0].virt, mme->codec_data, mme->codec_data_size);
-		buffer->planes[0].bytesused = mme->codec_data_size;
 		mme->codec_data_sent = true;
+		buffer->planes[0].offset = buffer->planes[0].bytesused;
+		return RET_OK;
+	} else if (mme->format.format == PIX_FMT_H265) {
+		mme->is_hvcc = true;
+		if (mme_hvcc2annexb_codecdata(mme, buffer)) {
+			PITCHER_ERR("hvcc bitstream is not supported\n");
+			mme->end = true;
+			mme->buffer = NULL;
+			SAFE_RELEASE(buffer, pitcher_put_buffer);
+			return -RET_E_INVAL;
+		}
+		mme->codec_data_sent = true;
+		buffer->planes[0].offset = buffer->planes[0].bytesused;
 		return RET_OK;
 	}
 
-	ret = mme_get_next_sample(mme);
+	memcpy(buffer->planes[0].virt, mme->codec_data, mme->codec_data_size);
+	buffer->planes[0].bytesused = mme->codec_data_size;
+	buffer->planes[0].offset = buffer->planes[0].bytesused;
+	mme->codec_data_sent = true;
+	return RET_OK;
+}
+
+int mme_handle_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer **buffer)
+{
+	int ret;
+
+	ret = mme_get_next_sample(mme, buffer);
 	if (ret)
 		return ret;
 
-
-	if (mme->is_avcc || mme->is_hvcc)
-		mme_mp4_to_annexb_frame(mme, buffer);
 
 	return RET_OK;
 }
@@ -912,30 +978,29 @@ int mme_handle_frame(struct mm_extractor_test_t *mme, struct pitcher_buffer *buf
 int mme_run(void *arg, struct pitcher_buffer *pbuf)
 {
 	struct mm_extractor_test_t *mme = arg;
-	struct pitcher_buffer *buffer;
+	struct pitcher_buffer *buffer = NULL;
 	int ret = RET_OK;
 
 	if (!mme)
 		return -RET_E_INVAL;
 
-	buffer = pitcher_get_idle_buffer(mme->chnno);
+	if (mme->codec_data && mme->codec_data_size && !mme->codec_data_sent) {
+		ret = mme_handle_codec_data(mme);
+		if (ret) {
+			PITCHER_ERR("failed to handle codec data, ret = %d\n", ret);
+			return ret;
+		}
+	}
+
+	ret = mme_handle_frame(mme, &buffer);
+
 	if (!buffer)
 		return -RET_E_NOT_READY;
 
-	buffer->format = &mme->format;
-	buffer->planes[0].bytesused = 0;
-	mme->buffer = buffer;
-	ret = mme_handle_frame(mme, buffer);
-	mme->buffer = NULL;
+	if (mme->is_avcc || mme->is_hvcc)
+		mme_mp4_to_annexb_frame(mme, buffer);
 
-	if (0) {
-		uint8_t *data = buffer->planes[0].virt;
-
-		PITCHER_LOG("[%8ld][%8ld] %02x %02x %02x %02x %02x %02x %02x %02x\n",
-			mme->frame_count, buffer->planes[0].bytesused,
-			data[0], data[1], data[2], data[3],
-			data[4], data[5], data[6], data[7]);
-	}
+	buffer->planes[0].offset = 0;
 	if (ret == RET_OK)
 		pitcher_push_back_output(mme->chnno, buffer);
 
