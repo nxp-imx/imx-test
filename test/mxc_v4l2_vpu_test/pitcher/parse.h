@@ -45,6 +45,7 @@ struct pitcher_parser {
 	unsigned int idx;
 	uint32_t width;
 	uint32_t height;
+	uint32_t separate_codec_data;
 };
 
 struct pitcher_parser *pitcher_new_parser(void);
@@ -90,7 +91,8 @@ void vp8_insert_ivf_pichdr(FILE *file, unsigned long frame_size);
 enum {
 	PARSER_TYPE_UNKNOWN,
 	PARSER_TYPE_CONFIG,
-	PARSER_TYPE_FRAME
+	PARSER_TYPE_FRAME,
+	PARSER_TYPE_AUD
 };
 struct pitcher_parser_scode {
 	uint32_t scode;

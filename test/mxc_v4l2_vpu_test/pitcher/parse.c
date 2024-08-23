@@ -315,6 +315,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 	int64_t start = -1;
 	int64_t end = -1;
 	int64_t offset = 0;
+	int prev_type = PARSER_TYPE_UNKNOWN;
 	int type = PARSER_TYPE_FRAME;
 	long i;
 	int index = 0;
@@ -368,6 +369,7 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 
 		current = buf + i + 1;
 		if (sc.check_frame) {
+			prev_type = type;
 			type = sc.check_frame(current, parser->size - i - 1, priv);
 			if (type == PARSER_TYPE_UNKNOWN)
 				continue;
@@ -383,6 +385,12 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 			end = offset;
 		if (type == PARSER_TYPE_FRAME)
 			frame_count++;
+		if (parser->separate_codec_data) {
+			if (type == PARSER_TYPE_CONFIG && prev_type != PARSER_TYPE_CONFIG)
+				frame_count++;
+			else if (prev_type == PARSER_TYPE_CONFIG && type == PARSER_TYPE_FRAME)
+				end = offset;
+		}
 		if (frame_count > 1) {
 			frame_count--;
 			pitcher_parser_push_new_frame(parser,

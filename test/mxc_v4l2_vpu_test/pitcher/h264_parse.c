@@ -262,6 +262,8 @@ static int h264_check_frame(uint8_t *p, uint32_t size, void *priv)
 	case 6: //SEI
 		info->config_found = 1;
 		return PARSER_TYPE_CONFIG;
+	case 9:
+		return PARSER_TYPE_AUD;
 	default:
 		return PARSER_TYPE_UNKNOWN;
 	}

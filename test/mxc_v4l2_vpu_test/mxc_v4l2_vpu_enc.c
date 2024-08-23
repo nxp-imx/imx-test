@@ -164,6 +164,7 @@ struct parser_test_t {
 	unsigned long offset;
 	int end;
 	int loop;
+	int headers_only;
 	int show;
 
 	unsigned int skip;
@@ -699,6 +700,7 @@ struct mxc_vpu_test_option parser_options[] = {
 	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
 	{"skip", 1, "--skip <number>\n\t\t\tset skip frame number"},
 	{"seek", 3, "--seek <input number> <decode number> <new position>\n\t\t\tseek"},
+	{"headers_only", 0, "--headers_only\n\t\t\tput the codec header in a separate buffer"},
 	{"show", 0, "--show\n\t\t\tshow size and offset of per frame"},
 	{NULL, 0, NULL},
 };
@@ -3223,6 +3225,8 @@ int init_parser_node(struct test_node *node)
 	p->number = parser->frame_num;
 	p->virt = parser->virt;
 	p->size = parser->size;
+	if (parser->headers_only)
+		p->separate_codec_data = 1;
 
 	pitcher_init_parser(parser->p);
 
@@ -3338,6 +3342,8 @@ int parse_parser_option(struct test_node *node,
 		parser->node.seek_thd = strtol(argv[1], NULL, 0);
 		parser->seek.pos_new = strtol(argv[2], NULL, 0);
 		parser->seek.enable = 1;
+	} else if (!strcasecmp(option->name, "headers_only")) {
+		parser->headers_only = true;
 	} else if (!strcasecmp(option->name, "show")) {
 		parser->show = true;
 	}
