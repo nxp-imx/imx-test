@@ -3197,6 +3197,7 @@ int init_parser_node(struct test_node *node)
 {
 	struct parser_test_t *parser;
 	struct pitcher_parser *p;
+	const char *ext;
 	int ret;
 
 	if (!node)
@@ -3205,6 +3206,14 @@ int init_parser_node(struct test_node *node)
 	parser = container_of(node, struct parser_test_t, node);
 	if (!parser->filename)
 		return -RET_E_INVAL;
+
+	ext = pitcher_get_file_extension(parser->filename);
+	if (ext && ext != parser->filename) {
+		uint32_t format = pitcher_get_format_by_name(ext);
+
+		if (format != PIX_FMT_NONE)
+			parser->node.pixelformat = format;
+	}
 
 	if (is_support_parser(parser->node.pixelformat) == false) {
 		PITCHER_LOG("Format %s unsupported parser\n",

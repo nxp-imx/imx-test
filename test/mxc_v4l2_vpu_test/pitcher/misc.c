@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <time.h>
 #include <poll.h>
 #include "pitcher_def.h"
@@ -87,6 +88,16 @@ long pitcher_get_file_size(const char *filename)
 	SAFE_RELEASE(file, fclose);
 
 	return length;
+}
+
+const char *pitcher_get_file_extension(const char *filename)
+{
+	const char *ext = filename + strlen( filename );
+
+	while(*ext != '.' && ext > filename)
+		ext--;
+	ext += *ext == '.';
+	return ext;
 }
 
 uint32_t pitcher_get_bits_val_le(const uint8_t *data, uint32_t size, uint32_t nr, uint32_t count)
