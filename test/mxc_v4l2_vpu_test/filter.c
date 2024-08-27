@@ -58,7 +58,7 @@ struct filter_test_t {
 struct mxc_vpu_test_option filter_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
-	{"function", 1, "--function <func>\n\t\t\t set filter function ('fps', 'corrupt', 'drop')"},
+	{"function", 1, "--function <func>\n\t\t\t set filter function ('fps', 'corrupt', 'drop', 'trailing')"},
 	{"framerate", 1, "--framerate <f>\n\t\t\tset frame rate(fps)"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the buffer size, the unit is Kb."},
 	{"type", 1, "--type <corrupt type>\n\t\t\tCorrupt buffer data, 0:and, 1:or, 2:not"},
@@ -285,6 +285,28 @@ int filter_drop_func(struct filter_test_t *filter, struct pitcher_buffer *pbuf)
 	return filter_common_func(filter, pbuf, NULL);
 }
 
+static int filter_trailing_buffer(struct filter_test_t *filter, struct pitcher_buffer *buffer)
+{
+	uint32_t count = filter->corrupt.count;
+	uint8_t *pdata;
+
+	if (count > buffer->planes[0].size - buffer->planes[0].bytesused)
+		count = buffer->planes[0].size - buffer->planes[0].bytesused;
+
+	if (!count)
+		return RET_OK;
+
+	pdata = (uint8_t *)(buffer->planes[0].virt + buffer->planes[0].bytesused);
+	memset(pdata, 0, count);
+	buffer->planes[0].bytesused += count;
+	return RET_OK;
+}
+
+int filter_trailing_func(struct filter_test_t *filter, struct pitcher_buffer *pbuf)
+{
+	return filter_common_func(filter, pbuf, filter_trailing_buffer);
+}
+
 void init_filter_function(struct filter_test_t *filter)
 {
 	if (!filter || !filter->name)
@@ -296,6 +318,8 @@ void init_filter_function(struct filter_test_t *filter)
 		filter->filter_func = filter_corrupt_func;
 	else if (!strcasecmp(filter->name, "drop"))
 		filter->filter_func = filter_drop_func;
+	else if (!strcasecmp(filter->name, "trailing"))
+		filter->filter_func = filter_trailing_func;
 }
 
 int start_filter(void *arg)
