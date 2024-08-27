@@ -133,6 +133,7 @@ struct test_file_t {
 	unsigned long frame_num;
 	int loop;
 	struct pix_fmt_info format;
+	int postfix;
 };
 
 struct convert_test_t {
@@ -616,6 +617,7 @@ struct mxc_vpu_test_option ofile_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"name", 1, "--name <filename>\n\t\t\tassign output file name"},
 	{"source", 1, "--source <key no>\n\t\t\tset output file source key"},
+	{"postfix", 0, "--postfix \n\t\t\tappend format to output file name as postfix"},
 	{NULL, 0, NULL},
 };
 
@@ -2325,6 +2327,7 @@ exit:
 int init_ofile_node(struct test_node *node)
 {
 	struct test_file_t *file;
+	char *filename = NULL;
 
 	if (!node)
 		return -RET_E_NULL_POINTER;
@@ -2333,7 +2336,15 @@ int init_ofile_node(struct test_node *node)
 	if (!file->filename)
 		return -RET_E_INVAL;
 
-	file->filp = fopen(file->filename, file->mode);
+	if (file->postfix) {
+		filename = calloc(1, strlen(file->filename) + 64);
+		strcpy(filename, file->filename);
+		strcat(filename, ".");
+		strcat(filename, pitcher_get_format_name(file->node.pixelformat));
+		file->filp = fopen(filename, file->mode);
+	} else {
+		file->filp = fopen(file->filename, file->mode);
+	}
 	if (!file->filp) {
 		PITCHER_ERR("open %s fail\n", file->filename);
 		return -RET_E_OPEN;
@@ -2427,6 +2438,8 @@ int parse_ofile_option(struct test_node *node,
 		file->filename = argv[0];
 	else if (!strcasecmp(option->name, "source"))
 		file->node.source = strtol(argv[0], NULL, 0);
+	else if (!strcasecmp(option->name, "postfix"))
+		file->postfix = 1;
 
 	return RET_OK;
 }
