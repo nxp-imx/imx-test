@@ -2996,6 +2996,8 @@ int parser_checkready(void *arg, int *is_end)
 
 	if (is_termination())
 		parser->end = true;
+	if (pitcher_get_sink(parser->chnno) < 0)
+		parser->end = true;
 	if (is_end)
 		*is_end = parser->end;
 
@@ -3910,11 +3912,15 @@ int main(int argc, char *argv[])
 	}
 
 	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
+		if (nodes[i])
+			nodes[i]->context = context;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
 		int source;
 
 		if (!nodes[i])
 			continue;
-		nodes[i]->context = context;
 		source = nodes[i]->source;
 		if (source >= 0 && source < MAX_NODE_COUNT && nodes[source])
 			continue;
