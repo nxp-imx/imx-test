@@ -34,6 +34,7 @@
 #include "pitcher/convert.h"
 #include "pitcher/dmabuf.h"
 #include "pitcher/statistics.h"
+#include "pitcher/y4m.h"
 #include "mxc_v4l2_vpu_enc.h"
 
 #define STRING(x)		#x
@@ -134,6 +135,8 @@ struct test_file_t {
 	int loop;
 	struct pix_fmt_info format;
 	int postfix;
+	int header_size;
+	int y4m_flag;
 };
 
 struct convert_test_t {
@@ -975,6 +978,8 @@ int set_encoder_source(struct test_node *node, struct test_node *src)
 		encoder->output.bytesperline = src->width;
 		break;
 	}
+	if (src->framerate)
+		encoder->node.framerate = src->framerate;
 
 	if (encoder->output.bytesperline < src->bytesperline)
 		encoder->output.bytesperline = src->bytesperline;
@@ -1993,6 +1998,8 @@ int ifile_checkready(void *arg, int *is_end)
 
 	if (is_termination())
 		file->end = true;
+	if (pitcher_get_sink(file->chnno) < 0)
+		file->end = true;
 	if (is_end)
 		*is_end = file->end;
 
@@ -2020,6 +2027,17 @@ int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 	size = buffer->planes[0].size;
 	buffer->planes[0].bytesused = 0;
 
+	if (file->y4m_flag) {
+		int ret = y4m_read_frame(file->virt + file->offset, file->size - file->offset);
+
+		if (ret < 0) {
+			file->end = true;
+			SAFE_RELEASE(buffer, pitcher_put_buffer);
+			return -RET_E_INVAL;
+		}
+		file->offset += ret;
+	}
+
 	if (file->offset < file->size) {
 		buffer->planes[0].virt = file->virt + file->offset;
 		if (size + file->offset <= file->size)
@@ -2030,7 +2048,7 @@ int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 		if (file->loop && file->offset >= file->size) {
 			if (file->loop > 0)
 				file->loop--;
-			file->offset = 0;
+			file->offset = file->header_size;
 		}
 		file->frame_count++;
 	} else {
@@ -2055,6 +2073,7 @@ int ifile_run(void *arg, struct pitcher_buffer *pbuf)
 int init_ifile_node(struct test_node *node)
 {
 	struct test_file_t *file;
+	const char *ext;
 	int ret;
 
 	if (!node)
@@ -2091,9 +2110,31 @@ int init_ifile_node(struct test_node *node)
 			file->filename, file->node.key);
 
 	memset(&file->format, 0, sizeof(file->format));
-	file->format.format = file->node.pixelformat;
-	file->format.width = file->node.width;
-	file->format.height = file->node.height;
+	ext = pitcher_get_file_extension(file->filename);
+	if (ext && ext != file->filename && !strcasecmp(ext, "y4m")) {
+		uint32_t framerate;
+
+		ret = y4m_read_header(file->virt, file->size, &file->format, &framerate);
+		if (ret < 0) {
+			PITCHER_ERR("read y4m %s header fail\n", file->filename);
+			munmap(file->virt, file->size);
+			SAFE_CLOSE(file->fd, close);
+			return ret;
+		} else if (ret > 0) {
+			file->node.pixelformat = file->format.format;
+			file->node.width = file->format.width;
+			file->node.height = file->format.height;
+			file->node.framerate = framerate;
+			file->header_size = ret;
+			file->y4m_flag = true;
+			file->offset = file->header_size;
+		}
+	} else {
+		file->format.format = file->node.pixelformat;
+		file->format.width = file->node.width;
+		file->format.height = file->node.height;
+	}
+
 	pitcher_get_pix_fmt_info(&file->format, file->alignment);
 	node->bytesperline = file->alignment;
 	if (file->node.pixelformat == PIX_FMT_JPEG) {
@@ -2209,6 +2250,35 @@ int ofile_checkready(void *arg, int *is_end)
 	return true;
 }
 
+void ofile_insert_y4m_header(struct test_file_t *file, struct pitcher_buffer *buffer)
+{
+	int ret;
+	struct v4l2_rect *crop;
+	uint32_t width, height;
+
+	if (!file || !buffer || !file->y4m_flag || !buffer->format)
+		return;
+	if (buffer->format->format != PIX_FMT_I420)
+		return;
+
+	width = buffer->format->width;
+	height = buffer->format->height;
+	crop = buffer->crop;
+	if (crop && crop->width && crop->height) {
+		width = crop->width;
+		height = crop->height;
+	}
+	if (!file->frame_count) {
+		ret = y4m_write_header(file->filp, width, height, file->node.framerate);
+		if (ret < 0) {
+			file->y4m_flag = false;
+			return;
+		}
+	}
+
+	y4m_write_frame(file->filp);
+}
+
 void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
 {
 	struct test_file_t *file = arg;
@@ -2226,6 +2296,8 @@ void ofile_insert_header(void *arg, struct pitcher_buffer *buffer)
 		vp8_insert_ivf_pichdr(file->filp, data_len);
 		break;
 	default:
+		if (file->y4m_flag)
+			ofile_insert_y4m_header(file, buffer);
 		break;
 	}
 }
@@ -2343,7 +2415,11 @@ int init_ofile_node(struct test_node *node)
 		strcat(filename, pitcher_get_format_name(file->node.pixelformat));
 		file->filp = fopen(filename, file->mode);
 	} else {
+		const char *ext = pitcher_get_file_extension(file->filename);
+
 		file->filp = fopen(file->filename, file->mode);
+		if (ext && ext != file->filename && !strcasecmp(ext, "y4m"))
+			file->y4m_flag = true;
 	}
 	if (!file->filp) {
 		PITCHER_ERR("open %s fail\n", file->filename);
@@ -2371,7 +2447,8 @@ int set_ofile_source(struct test_node *node, struct test_node *src)
 	file->node.width = src->width;
 	file->node.height = src->height;
 	file->node.pixelformat = src->pixelformat;
-	file->node.framerate = src->framerate;
+	if (src->framerate)
+		file->node.framerate = src->framerate;
 
 	return RET_OK;
 }
@@ -2416,6 +2493,7 @@ struct test_node *alloc_ofile_node(void)
 	file->mode = "wb";
 	file->chnno = -1;
 	file->fd = -1;
+	file->node.framerate = DEFAULT_FRAMERATE;
 
 	return &file->node;
 }
@@ -2458,6 +2536,7 @@ int set_convert_source(struct test_node *node,
 	cvrt->node.height = ALIGN(src->height, 8);
 	/*cvrt->node.bytesperline = src->bytesperline;*/
 	cvrt->ifmt = src->pixelformat;
+	cvrt->node.framerate = src->framerate;
 
 	memset(&cvrt->format, 0, sizeof(cvrt->format));
 	cvrt->format.format = cvrt->node.pixelformat;
