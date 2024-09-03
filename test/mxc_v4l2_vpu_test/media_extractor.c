@@ -896,6 +896,11 @@ void mme_mp4_to_annexb_frame(struct mm_extractor_test_t *mme, struct pitcher_buf
 
 	while (consumed < bytesused) {
 		length = pitcher_bytestream_get_be(pdata, mme->length_size);
+		if (length + mme->length_size + consumed > bytesused) {
+			PITCHER_ERR("invalid nalu length %u, no nalu end, drop it\n", length);
+			buffer->planes[0].bytesused = buffer->planes[0].offset + consumed;
+			break;
+		}
 		pitcher_bytestream_set_be(pdata, 0x1, mme->length_size);
 		pdata += mme->length_size + length;
 		consumed += mme->length_size + length;
@@ -1001,7 +1006,7 @@ int mme_run(void *arg, struct pitcher_buffer *pbuf)
 		mme_mp4_to_annexb_frame(mme, buffer);
 
 	buffer->planes[0].offset = 0;
-	if (ret == RET_OK)
+	if (ret == RET_OK && buffer->planes[0].bytesused)
 		pitcher_push_back_output(mme->chnno, buffer);
 
 	SAFE_RELEASE(buffer, pitcher_put_buffer);
