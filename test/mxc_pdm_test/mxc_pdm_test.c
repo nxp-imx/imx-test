@@ -109,7 +109,7 @@ int main(int argc, char **argv)
 			priv->gain = strtof(optarg, &cptr);
 			break;
 		case 'h':
-			print_help(argv);
+			print_help((const char **)argv);
 			exit(1);
 		case 'l':
 			priv->debug_info = 1;
