@@ -112,6 +112,12 @@ struct v4l2_component_t {
 	struct stats_events_t frame;
 	struct stats_event_t *qevents[MAX_BUFFER_COUNT];
 	struct stats_sizes_t frame_sizes;
+	struct {
+		uint32_t range;
+		uint32_t matrix;
+		uint32_t transfer;
+		uint32_t primaries;
+	} colorimetry;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;

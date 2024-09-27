@@ -108,6 +108,24 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 							component->sizeimage;
 		}
 	}
+	if (component->colorimetry.range &&
+	    component->colorimetry.matrix &&
+	    component->colorimetry.transfer &&
+	    component->colorimetry.primaries) {
+
+		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
+			format.fmt.pix.quantization = component->colorimetry.range;
+			format.fmt.pix.ycbcr_enc = component->colorimetry.matrix;
+			format.fmt.pix.xfer_func = component->colorimetry.transfer;
+			format.fmt.pix.colorspace = component->colorimetry.primaries;
+		} else {
+			format.fmt.pix_mp.quantization = component->colorimetry.range;
+			format.fmt.pix_mp.ycbcr_enc = component->colorimetry.matrix;
+			format.fmt.pix_mp.xfer_func = component->colorimetry.transfer;
+			format.fmt.pix_mp.colorspace = component->colorimetry.primaries;
+		}
+	}
+
 	ret = ioctl(fd, VIDIOC_S_FMT, &format);
 	if (ret) {
 		PITCHER_ERR("VIDIOC_S_FMT fail, error : %s\n", strerror(errno));

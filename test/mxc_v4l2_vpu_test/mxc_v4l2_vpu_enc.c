@@ -654,6 +654,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265, vp8, vp9"},
+	{"color", 4, "--color <range> <matrix> <transfer> <primaries>\n\t\t\tset colorimetry info"},
 	{"roi", 5, "--roi <left> <top> <width> <height> <qp_delta>\n\t\t\tenable roi"},
 	{"ipcm", 4, "--ipcm <left> <top> <width> <height>\n\t\t\tenable ipcm"},
 	{"force", 1, "--force <no>\n\t\t\tforce a key frame at position <no>"},
@@ -1496,6 +1497,11 @@ int parse_encoder_option(struct test_node *node,
 
 		if (fmt != PIX_FMT_NONE)
 			encoder->node.pixelformat = fmt;
+	} else if (!strcasecmp(option->name, "color")) {
+		encoder->output.colorimetry.range = strtol(argv[0], NULL, 0);
+		encoder->output.colorimetry.matrix = strtol(argv[1], NULL, 0);
+		encoder->output.colorimetry.transfer = strtol(argv[2], NULL, 0);
+		encoder->output.colorimetry.primaries = strtol(argv[3], NULL, 0);
 	} else if (!strcasecmp(option->name, "roi")) {
 		encoder->roi.enable = 1;
 		encoder->roi.rect.left = strtol(argv[0], NULL, 0);
