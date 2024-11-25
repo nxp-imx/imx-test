@@ -92,7 +92,8 @@ enum {
 	PARSER_TYPE_UNKNOWN,
 	PARSER_TYPE_CONFIG,
 	PARSER_TYPE_FRAME,
-	PARSER_TYPE_AUD
+	PARSER_TYPE_AUD,
+	PARSER_TYPE_FIELD
 };
 struct pitcher_parser_scode {
 	uint32_t scode;

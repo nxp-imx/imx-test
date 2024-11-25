@@ -254,7 +254,7 @@ static int h264_check_frame(uint8_t *p, uint32_t size, void *priv)
 		parse_slice_header_info(info, &new_frame, type == 5);
 		assert(((bs_consumed_bits(&bs) + 7) >> 3) <= MAX_SLICE_HDR_SZ);
 		free(nalbuf);
-		return new_frame ? PARSER_TYPE_FRAME : PARSER_TYPE_UNKNOWN;
+		return new_frame ? PARSER_TYPE_FRAME : PARSER_TYPE_FIELD;
 	case 7: //SPS
 		info->header_cnt++;
 		psps = p;

@@ -371,14 +371,21 @@ int pitcher_parse_startcode(Parser p, struct pitcher_parser_scode *psc)
 		if (sc.check_frame) {
 			prev_type = type;
 			type = sc.check_frame(current, parser->size - i - 1, priv);
-			if (type == PARSER_TYPE_UNKNOWN)
-				continue;
 		}
 		sc.force_extra_on_first = 0;
 		if ((i + 1 >= sc.extra_num) && ((state & sc.extra_mask) == sc.extra_code))
 			offset = i + 1 - sc.extra_num;
 		else
 			offset = i + 1 - sc.num;
+
+		/* If the stream is filed, and there are some config nal before field
+		 * the end may be updated incorrectly when a config nal is parsed.
+		 * the end should include the previous field nal, but not frame boundary*/
+		if (prev_type == PARSER_TYPE_FIELD && end > 0)
+			end = offset;
+		if (type == PARSER_TYPE_UNKNOWN || type == PARSER_TYPE_FIELD)
+			continue;
+
 		if (start < 0)
 			start = offset;
 		if (frame_count > 0 && end < 0)
