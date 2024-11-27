@@ -730,6 +730,7 @@ int init_camera_node(struct test_node *node)
 {
 	struct camera_test_t *camera;
 	int ret;
+	struct v4l2_capability cap;
 
 	if (!node)
 		return -RET_E_INVAL;
@@ -745,7 +746,6 @@ int init_camera_node(struct test_node *node)
 
 	camera->capture.desc = pitcher_v4l2_capture;
 	camera->capture.desc.fd = camera->capture.fd;
-	camera->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	camera->capture.memory = V4L2_MEMORY_MMAP;
 	camera->capture.pixelformat = camera->node.pixelformat;
 	camera->capture.width = camera->node.width;
@@ -754,6 +754,14 @@ int init_camera_node(struct test_node *node)
 	camera->capture.sizeimage = 0;
 	camera->capture.bytesperline = camera->node.width;
 	camera->capture.is_end = is_camera_finish;
+
+	if (ioctl(camera->capture.fd, VIDIOC_QUERYCAP, &cap) != 0)
+		return -RET_E_NOT_SUPPORT;
+
+	if (is_v4l2_mplane(&cap))
+		camera->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	else
+		camera->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	snprintf(camera->capture.desc.name, sizeof(camera->capture.desc.name),
 			"camera.%d", camera->node.key);
