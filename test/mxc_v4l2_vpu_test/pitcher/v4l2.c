@@ -378,7 +378,7 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	memset(&v4lbuf, 0, sizeof(v4lbuf));
 	v4lbuf.type = component->type;
 	v4lbuf.memory = component->memory;
-	v4lbuf.index = -1;
+	v4lbuf.index = 0;
 	if (V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
 		v4lbuf.m.planes = planes;
 		v4lbuf.length = ARRAY_SIZE(planes);
