@@ -111,11 +111,7 @@ int main(int argc, char *argv[])
 			exit(1);
 		bufferout.bytesused = filesize;
 	} else { /* multi-planar */
-		if (ea.fourcc != V4L2_PIX_FMT_NV12M && ea.fourcc != V4L2_PIX_FMT_P012M) {
-			if (fread(bufferout_start[0], filesize, 1, testraw) != 1)
-				exit(1);
-			bufferout.m.planes[0].bytesused = filesize;
-		} else {
+		if (ea.fourcc == V4L2_PIX_FMT_NV12M || ea.fourcc == V4L2_PIX_FMT_P012M) {
 			int expected_size_padded = ea.w_padded * ea.h_padded * 3 / 2;
 			int expected_size = ea.width * ea.height * 3 / 2;
 			int luma_size = ea.w_padded * ea.h_padded;
@@ -151,6 +147,42 @@ int main(int argc, char *argv[])
 			if (fread(bufferout_start[1], chroma_size, 1, testraw) != 1)
 				exit(1);
 			bufferout.m.planes[1].bytesused = chroma_size;
+		} else if (ea.fourcc == V4L2_PIX_FMT_NV12 || ea.fourcc == V4L2_PIX_FMT_P012) {
+			int expected_size_padded = ea.w_padded * ea.h_padded * 3 / 2;
+			int expected_size = ea.width * ea.height * 3 / 2;
+			int data_luma_size = ea.width * ea.height;
+			int data_chroma_size = ea.width * ea.height / 2;
+			int buf_luma_size = ea.w_padded * ea.h_padded;
+			if (ea.fourcc == V4L2_PIX_FMT_P012) { /* 12bit precision*/
+				expected_size_padded *= 2;
+				expected_size *= 2;
+				data_luma_size *= 2;
+				data_chroma_size *=2;
+				buf_luma_size *= 2;
+			}
+			printf("%d x %d NV12 expected size %d/%d, actual filesize is %ld\n",
+			       ea.width, ea.height, expected_size, expected_size_padded, filesize);
+
+			if (filesize != expected_size_padded) {
+				if (ea.width != ea.w_padded)
+					exit(1);
+				else if (filesize != expected_size)
+					exit(1);
+				/*
+				 * if only the height is unaligned, allow NV12 buffer
+				 * without padding, ex: 1920 x 1080
+				 */
+			}
+
+			if (fread(bufferout_start[0], data_luma_size, 1, testraw) != 1)
+				exit(1);
+			if (fread(bufferout_start[0] + buf_luma_size, data_chroma_size, 1, testraw) != 1)
+				exit(1);
+			bufferout.m.planes[0].bytesused = expected_size_padded;
+		} else {
+			if (fread(bufferout_start[0], filesize, 1, testraw) != 1)
+				exit(1);
+			bufferout.m.planes[0].bytesused = filesize;
 		}
 	}
 	fclose(testraw);
