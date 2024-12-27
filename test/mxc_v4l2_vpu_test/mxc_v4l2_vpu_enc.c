@@ -2183,7 +2183,7 @@ struct test_node *alloc_ifile_node(void)
 	file->node.pixelformat = DEFAULT_FMT;
 	file->node.width = DEFAULT_WIDTH;
 	file->node.height = DEFAULT_HEIGHT;
-	file->node.framerate = DEFAULT_FRAMERATE;
+	file->node.framerate = 0;
 	file->node.get_source_chnno = get_file_chnno;
 	file->node.init_node = init_ifile_node;
 	file->node.free_node = free_file_node;
