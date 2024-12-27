@@ -760,6 +760,7 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fm
 	FILE *fout;
 	int bytesperline[2];
 	int bytesperline_no_padding[2];
+	int height[2];
 
 	fout = fopen(filename, "wb");
 
@@ -768,14 +769,16 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fm
 	printf("\tplane[0] bytesperline %d, bytesperline_no_padding %d\n",
 	       bytesperline[0], bytesperline_no_padding[0]);
 
+	height[0] = h_crop;
 	if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12M ||
 	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
 	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012M ||
 	    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012) {
-		bytesperline[1] = bytesperline[0] / 2;
-		bytesperline_no_padding[1] = bytesperline_no_padding[0] / 2;
+		bytesperline[1] = bytesperline[0];
+		bytesperline_no_padding[1] = (bytesperline_no_padding[0] + 1) / 2 * 2;
+		height[1] = (h_crop + 1) / 2;
 		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
-		    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12)
+		    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012)
 			printf("\tpseudo-plane[1] ");
 		else
 			printf("\tplane[1] ");
@@ -796,7 +799,7 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fm
 						     buf->m.planes[plane].bytesused,
 						     bytesperline[plane],
 						     bytesperline_no_padding[plane],
-						     h_crop, fout);
+						     height[plane], fout);
 		}
 		if (cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
 		    cap_fmt->fmt.pix.pixelformat == V4L2_PIX_FMT_P012) {
@@ -809,7 +812,7 @@ void v4l2_fwrite_payload_no_padding(bool is_mp, const struct v4l2_format *cap_fm
 						     pseudo_plane1_size,
 						     bytesperline[1],
 						     bytesperline_no_padding[1],
-						     h_crop, fout);
+						     height[1], fout);
 		}
 	}
 	fclose(fout);
