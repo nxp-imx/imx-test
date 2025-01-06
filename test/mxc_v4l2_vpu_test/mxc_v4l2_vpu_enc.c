@@ -491,11 +491,6 @@ int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 		return RET_OK;
 	}
 
-	if (!decoder->capture.end) {
-		decoder->capture.end = true;
-		return RET_OK;
-	}
-
 	return RET_OK;
 }
 
