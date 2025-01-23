@@ -56,6 +56,7 @@ struct testbuffer
 };
 
 struct testbuffer buffers[TEST_BUFFER_NUM];
+int g_verbose = 0;
 int g_in_width = 176;
 int g_in_height = 144;
 int g_out_width = 176;
@@ -368,6 +369,13 @@ int v4l_capture_test(int fd_v4l, const char * file)
 				}
 #endif
                 if (count >= TEST_BUFFER_NUM) {
+			if (g_verbose) {
+				printf("."); fflush(stdout);
+
+				if ((g_capture_count - count) % 80 == 0 || count == TEST_BUFFER_NUM)
+				       printf(" % 5d\n", g_capture_count - count);
+			}
+
                         if (ioctl (fd_v4l, VIDIOC_QBUF, &buf) < 0) {
                                 printf("VIDIOC_QBUF failed\n");
                         		break;
@@ -454,6 +462,10 @@ int process_cmdline(int argc, char **argv)
 		else if (strcmp(argv[i], "-uvc") == 0) {
 			g_usb_camera = 1;
 		}
+		else if (strcmp(argv[i], "-v") == 0) {
+			g_verbose = 1;
+		}
+
                 else if (strcmp(argv[i], "-help") == 0) {
                         printf("MXC Video4Linux capture Device Test\n\n" \
 			       "Syntax: mxc_v4l2_capture.out -iw <capture croped width>\n" \
@@ -468,6 +480,7 @@ int process_cmdline(int argc, char **argv)
 			       " -m <capture mode, 0-low resolution, 1-high resolution> \n" \
 			       " -d <camera select, /dev/video0, /dev/video1> \n" \
 			       " -uvc (for USB camera test) \n" \
+			       " -v verbose output \n"
 			       " -f <format> -fr <frame rate, 30fps by default> \n");
                         return -1;
                }
