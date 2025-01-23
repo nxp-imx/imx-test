@@ -320,7 +320,8 @@ ParserMemoryOps mme_memory_ops = {
 uint8 *mme_request_buffer(uint32 streamNum, uint32 *size, void **bufContext, void *parserContext)
 {
 	struct mm_extractor_test_t *mme = parserContext;
-	struct pitcher_buffer *buffer;
+	struct pitcher_buffer *buffer = NULL;
+	uint32_t offset;
 
 	if (!mme || !size || !(*size))
 		return NULL;
@@ -328,9 +329,19 @@ uint8 *mme_request_buffer(uint32 streamNum, uint32 *size, void **bufContext, voi
 		return NULL;
 
 	if (mme->buffer) {
-		buffer = mme->buffer;
-		mme->buffer = NULL;
-	} else {
+		if (*size + mme->buffer->planes[0].bytesused <= mme->buffer->planes[0].size) {
+			buffer = mme->buffer;
+		} else {
+			PITCHER_ERR("Parser size %d < %d + %d(drop)\n",
+				    mme->buffer->planes[0].size,
+				    *size,
+				    mme->buffer->planes[0].bytesused);
+			SAFE_RELEASE(mme->buffer, pitcher_put_buffer);
+		}
+	}
+
+	if (!buffer)
+	{
 		buffer = pitcher_get_idle_buffer(mme->chnno);
 		if (buffer) {
 			buffer->format = &mme->format;
@@ -347,10 +358,12 @@ uint8 *mme_request_buffer(uint32 streamNum, uint32 *size, void **bufContext, voi
 	if (!buffer)
 		return NULL;
 
+	offset = buffer->planes[0].bytesused;
+	buffer->planes[0].bytesused += *size;
+
 	if (bufContext)
 		*bufContext = (void *)buffer;
-	//PITCHER_LOG("requset %8d, %p\n", *size, buffer->planes[0].virt + buffer->planes[0].bytesused);
-	return (uint8 *)(buffer->planes[0].virt + buffer->planes[0].bytesused);
+	return (uint8 *)(buffer->planes[0].virt + offset);
 }
 
 void mme_release_buffer(uint32 streamNum, uint8 *pBuffer, void *bufContext, void *parserContext)
@@ -684,15 +697,18 @@ int mme_get_next_sample(struct mm_extractor_test_t *mme, struct pitcher_buffer *
 
 		if (pdata && size) {
 			buffer = buffer_context;
-			if (buffer)
-				buffer->planes[0].bytesused += size;
 		}
 		if (!(flag & FLAG_SAMPLE_NOT_FINISHED)) {
 			if (buffer && buffer->planes[0].bytesused) {
 				ret = RET_OK;
 				mme->frame_count++;
 			}
+			mme->buffer = NULL;
 		} else {
+			/*/MG_Streams/mm_private/H264Dec/Conformance/TS/AVC_BL3.1_1280x720_5479kbps_noaudio_encoded_frame.ts*/
+			if (mme->format.format != PIX_FMT_H264 &&
+			    mme->format.format != PIX_FMT_H265)
+				mme->buffer = buffer;
 			ret = -RET_E_NOT_READY;
 		}
 		if (ret == PARSER_EOS) {
