@@ -72,6 +72,8 @@ struct encoder_test_t {
 	uint32_t quality;
 	uint32_t slice_mode;
 	uint32_t slice_size;
+	uint32_t intra_refresh_period;
+	uint32_t intra_refresh_mb;
 
 	struct v4l2_enc_roi_param roi;
 	struct v4l2_enc_ipcm_param ipcm;
@@ -654,6 +656,8 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"bitrate", 1, "--bitrate <br>\n\t\t\tset encoder target bitrate, the unit is b"},
 	{"peak", 1, "--peak <br>\n\t\t\tset encoder peak bitrate, the unit is b"},
 	{"slice_cfg", 2, "--slice_cfg <mode> <max mb/bytes>\n\t\t\tset slice parameters, mode 1: max mb, mode 2: max bytes"},
+	{"intra_refresh_period", 1, "--intra_refresh_period <period>\n\t\t\tset intra refresh period"},
+	{"intra_refresh_mb", 1, "--intra_refresh_mb <period>\n\t\t\tset intra refresh mb"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265, vp8, vp9"},
@@ -1253,6 +1257,10 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, encoder->slice_mode);
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB, encoder->slice_size);
 	}
+	if (encoder->intra_refresh_period)
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_INTRA_REFRESH_PERIOD, encoder->intra_refresh_period);
+	if (encoder->intra_refresh_mb)
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_CYCLIC_INTRA_REFRESH_MB, encoder->intra_refresh_mb);
 	set_ctrl(fd, qp_i_id, encoder->qp);
 	set_ctrl(fd, qp_p_id, encoder->qp);
 	if (encoder->chroma_qp_index_offset)
@@ -1446,6 +1454,8 @@ struct test_node *alloc_encoder_node(void)
 	encoder->output.chnno = -1;
 	encoder->capture.chnno = -1;
 	encoder->slice_mode = V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE;
+	encoder->intra_refresh_period = 0;
+	encoder->intra_refresh_mb = 0;
 
 	encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -1506,6 +1516,10 @@ int parse_encoder_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "slice_cfg")) {
 		encoder->slice_mode = strtol(argv[0], NULL, 0);
 		encoder->slice_size = strtol(argv[1], NULL, 0);
+	} else if (!strcasecmp(option->name, "intra_refresh_period")) {
+		encoder->intra_refresh_period = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "intra_refresh_mb")) {
+		encoder->intra_refresh_mb = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
 		encoder->output.crop.left = strtol(argv[0], NULL, 0);
 		encoder->output.crop.top = strtol(argv[1], NULL, 0);
