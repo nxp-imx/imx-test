@@ -74,6 +74,9 @@ struct encoder_test_t {
 	uint32_t slice_size;
 	uint32_t intra_refresh_period;
 	uint32_t intra_refresh_mb;
+	uint32_t sar_idc;
+	uint32_t sar_ext_width;
+	uint32_t sar_ext_height;
 
 	struct v4l2_enc_roi_param roi;
 	struct v4l2_enc_ipcm_param ipcm;
@@ -658,6 +661,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"slice_cfg", 2, "--slice_cfg <mode> <max mb/bytes>\n\t\t\tset slice parameters, mode 1: max mb, mode 2: max bytes"},
 	{"intra_refresh_period", 1, "--intra_refresh_period <period>\n\t\t\tset intra refresh period"},
 	{"intra_refresh_mb", 1, "--intra_refresh_mb <period>\n\t\t\tset intra refresh mb"},
+	{"sar_cfg", 3, "--sar_cfg <idc> <ext_width> <ext_height>\n\t\t\tset sar idc and ext width/height"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265, vp8, vp9"},
@@ -1261,6 +1265,14 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_INTRA_REFRESH_PERIOD, encoder->intra_refresh_period);
 	if (encoder->intra_refresh_mb)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_CYCLIC_INTRA_REFRESH_MB, encoder->intra_refresh_mb);
+	if (encoder->sar_idc) {
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_SAR_ENABLE, 1);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_SAR_IDC, encoder->sar_idc);
+		if (encoder->sar_idc == 255) {
+			set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_EXT_SAR_WIDTH, encoder->sar_ext_width);
+			set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_EXT_SAR_HEIGHT, encoder->sar_ext_height);
+		}
+	}
 	set_ctrl(fd, qp_i_id, encoder->qp);
 	set_ctrl(fd, qp_p_id, encoder->qp);
 	if (encoder->chroma_qp_index_offset)
@@ -1456,6 +1468,7 @@ struct test_node *alloc_encoder_node(void)
 	encoder->slice_mode = V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE;
 	encoder->intra_refresh_period = 0;
 	encoder->intra_refresh_mb = 0;
+	encoder->sar_idc = 0;
 
 	encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -1520,6 +1533,10 @@ int parse_encoder_option(struct test_node *node,
 		encoder->intra_refresh_period = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "intra_refresh_mb")) {
 		encoder->intra_refresh_mb = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "sar_cfg")) {
+		encoder->sar_idc = strtol(argv[0], NULL, 0);
+		encoder->sar_ext_width = strtol(argv[1], NULL, 0);
+		encoder->sar_ext_height = strtol(argv[2], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
 		encoder->output.crop.left = strtol(argv[0], NULL, 0);
 		encoder->output.crop.top = strtol(argv[1], NULL, 0);
