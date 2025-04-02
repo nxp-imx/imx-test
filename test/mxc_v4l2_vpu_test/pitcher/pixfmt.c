@@ -468,15 +468,21 @@ uint32_t pitcher_get_format_by_name(const char *name)
 	return PIX_FMT_NONE;
 }
 
-uint32_t pitcher_get_format_by_fourcc(uint32_t fourcc)
+uint32_t pitcher_get_format_by_fourcc(uint32_t fourcc, uint32_t *query_mplane)
 {
 	uint32_t format;
 
 	for (format = PIX_FMT_I420; format < PIX_FMT_NB; format++) {
-		if (pix_fmt_descriptors[format].fourcc_nc == fourcc)
+		if (pix_fmt_descriptors[format].fourcc_nc == fourcc) {
+			if (query_mplane)
+				*query_mplane = 1;
 			return format;
-		if (pix_fmt_descriptors[format].fourcc == fourcc)
+		}
+		if (pix_fmt_descriptors[format].fourcc == fourcc) {
+			if (query_mplane)
+				*query_mplane = 0;
 			return format;
+		}
 	}
 
 	return PIX_FMT_NONE;

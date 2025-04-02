@@ -78,7 +78,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 			component->fourcc = format.fmt.pix.pixelformat;
 		else
 			component->fourcc = format.fmt.pix_mp.pixelformat;
-		component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc);
+		component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc, NULL);
 	}
 	if (!V4L2_TYPE_IS_OUTPUT(component->type) && (!component->width || !component->height)) {
 		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
@@ -149,7 +149,7 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 		component->bytesperline = format.fmt.pix_mp.plane_fmt[0].bytesperline;
 		component->field = format.fmt.pix_mp.field;
 	}
-	component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc);
+	component->pixelformat = pitcher_get_format_by_fourcc(component->fourcc, NULL);
 	if (V4L2_TYPE_IS_CAPTURE(component->type) && (!component->width || !component->height))
 		PITCHER_ERR("invalid capture fmt: %s %d x %d\n",
 			    pitcher_get_format_name(component->pixelformat),
@@ -942,13 +942,14 @@ int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferred_fourc
 {
 	struct v4l2_fmtdesc fmt_desc = {0};
 	int found = 0;
+	uint32_t mplane;
 
 	fmt_desc.type = component->type;
 	fmt_desc.index = 0;
 
 	while (!v4l2_enum_fmt(component->fd, &fmt_desc)) {
-		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat) == component->pixelformat) {
-			if (!found || fmt_desc.pixelformat == preferred_fourcc)
+		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat, &mplane) == component->pixelformat) {
+			if (!found || fmt_desc.pixelformat == preferred_fourcc || mplane == component->mplane)
 				component->fourcc = fmt_desc.pixelformat;
 			found = 1;
 		}
@@ -1411,7 +1412,7 @@ int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
 	fmt_desc.index = 0;
 
 	while (!v4l2_enum_fmt(fd, &fmt_desc)) {
-		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat) == pixelformat) {
+		if (pitcher_get_format_by_fourcc(fmt_desc.pixelformat, NULL) == pixelformat) {
 			PITCHER_LOG("%c%c%c%c %s is found\n",
 					fmt_desc.pixelformat,
 					fmt_desc.pixelformat >> 8,

@@ -72,6 +72,7 @@ struct v4l2_component_t {
 	enum v4l2_memory memory;
 	uint32_t pixelformat;
 	uint32_t fourcc;
+	uint32_t mplane;
 	uint32_t width;
 	uint32_t height;
 	struct v4l2_rect crop;

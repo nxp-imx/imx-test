@@ -662,6 +662,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"intra_refresh_period", 1, "--intra_refresh_period <period>\n\t\t\tset intra refresh period"},
 	{"intra_refresh_mb", 1, "--intra_refresh_mb <period>\n\t\t\tset intra refresh mb"},
 	{"sar_cfg", 3, "--sar_cfg <idc> <ext_width> <ext_height>\n\t\t\tset sar idc and ext width/height"},
+	{"mplane", 1, "--mplane <mp>\n\t\t\tset mplane, 1: multi-plane preference, 0: single plane preference (default)"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support h264, h265, vp8, vp9"},
@@ -1537,6 +1538,8 @@ int parse_encoder_option(struct test_node *node,
 		encoder->sar_idc = strtol(argv[0], NULL, 0);
 		encoder->sar_ext_width = strtol(argv[1], NULL, 0);
 		encoder->sar_ext_height = strtol(argv[2], NULL, 0);
+	} else if (!strcasecmp(option->name, "mplane")) {
+		encoder->output.mplane = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
 		encoder->output.crop.left = strtol(argv[0], NULL, 0);
 		encoder->output.crop.top = strtol(argv[1], NULL, 0);
