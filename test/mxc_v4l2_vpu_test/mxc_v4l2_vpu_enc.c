@@ -1659,6 +1659,8 @@ int set_decoder_source(struct test_node *node, struct test_node *src)
 	decoder->output.width = src->width;
 	decoder->output.height = src->height;
 	node->seek_thd = src->seek_thd;
+	if (src->framerate)
+		decoder->node.framerate = src->framerate;
 
 	return RET_OK;
 }
