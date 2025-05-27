@@ -471,6 +471,7 @@ int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 	if (pitcher_get_status(chnno) == PITCHER_STATE_STOPPED) {
 		decoder->capture.width = 0;
 		decoder->capture.height = 0;
+		decoder->capture.bytesperline = 0;
 		ret = pitcher_start_chn(chnno);
 		if (ret < 0) {
 			force_exit();
