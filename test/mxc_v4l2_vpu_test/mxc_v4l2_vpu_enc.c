@@ -62,6 +62,7 @@ struct encoder_test_t {
 	uint32_t iframe_interval;
 	uint32_t gop;
 	uint32_t bitrate_mode;
+	uint32_t mb_rc;
 	uint32_t target_bitrate;
 	uint32_t peak_bitrate;
 	uint32_t qp;
@@ -653,6 +654,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"level", 1, "--level <level>\n\t\t\tset h264 level, 0~15, 14:level_5_0(default)"},
 	{"gop", 1, "--gop <gop>\n\t\t\tset group of picture"},
 	{"mode", 1, "--mode <mode>\n\t\t\tset h264 mode, 0:vbr, 1:cbr(default), 2:constant quality 0xf:constant qp"},
+	{"mbrc", 1, "--mbrc <enable>\n\t\t\tset h264 mbrc mode when rc is enabled, 0:disable, 1:enable(default)"},
 	{"qp", 1, "--qp <qp>\n\t\t\tset quantizer parameter, 0~51"},
 	{"qprange", 2, "--qprange <qp_min> <qp_max>\n\t\t\tset quantizer parameter range, 0~51"},
 	{"chroma_qp_offset", 1, "--chroma_qp_offset <offset>\n\t\t\tset h264/h265 chroma qp index offset, -12~12"},
@@ -1254,7 +1256,7 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 0);
 	} else {
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE, 1);
-		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 1);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, encoder->mb_rc);
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_MODE, encoder->bitrate_mode);
 	}
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE, encoder->target_bitrate);
@@ -1468,6 +1470,7 @@ struct test_node *alloc_encoder_node(void)
 	encoder->node.init_node = init_encoder_node;
 	encoder->node.free_node = free_encoder_node;
 	encoder->bitrate_mode = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR;
+	encoder->mb_rc = 1;
 	encoder->profile = UINT_MAX;
 	encoder->level = UINT_MAX;
 	encoder->gop = 30;
@@ -1531,6 +1534,8 @@ int parse_encoder_option(struct test_node *node,
 		encoder->bframes = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "mode")) {
 		encoder->bitrate_mode = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "mbrc")) {
+		encoder->mb_rc = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "qp")) {
 		encoder->qp = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "qp_range")) {
