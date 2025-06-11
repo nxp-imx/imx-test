@@ -108,9 +108,9 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 							component->sizeimage;
 		}
 	}
-	if (component->colorimetry.range &&
-	    component->colorimetry.matrix &&
-	    component->colorimetry.transfer &&
+	if (component->colorimetry.range ||
+	    component->colorimetry.matrix ||
+	    component->colorimetry.transfer ||
 	    component->colorimetry.primaries) {
 
 		if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
