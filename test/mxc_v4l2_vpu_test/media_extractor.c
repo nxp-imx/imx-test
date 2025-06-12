@@ -332,7 +332,7 @@ uint8 *mme_request_buffer(uint32 streamNum, uint32 *size, void **bufContext, voi
 		if (*size + mme->buffer->planes[0].bytesused <= mme->buffer->planes[0].size) {
 			buffer = mme->buffer;
 		} else {
-			PITCHER_ERR("Parser size %d < %d + %d(drop)\n",
+			PITCHER_ERR("Parser size %ld < %d + %ld(drop)\n",
 				    mme->buffer->planes[0].size,
 				    *size,
 				    mme->buffer->planes[0].bytesused);
