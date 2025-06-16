@@ -990,6 +990,8 @@ int set_encoder_source(struct test_node *node, struct test_node *src)
 	encoder->output.pixelformat = src->pixelformat;
 	encoder->output.width = src->width;
 	encoder->output.height = src->height;
+	encoder->node.width = src->width;
+	encoder->node.height = src->height;
 	switch (src->pixelformat) {
 	case PIX_FMT_YUYV:
 	case PIX_FMT_RGB565:
@@ -2240,6 +2242,7 @@ int init_ifile_node(struct test_node *node)
 		file->format.height = file->node.height;
 	}
 
+	PITCHER_LOG("ifile format %s\n", pitcher_get_format_name(file->node.pixelformat));
 	pitcher_get_pix_fmt_info(&file->format, file->alignment);
 	node->bytesperline = file->alignment;
 	if (file->node.pixelformat == PIX_FMT_JPEG) {
@@ -3664,6 +3667,15 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.parse_option = parse_filter_option,
 		.alloc_node = alloc_filter,
 	},
+#ifdef ENABLE_VMAF_SCORE
+	{
+		.subcmd = "vmaf",
+		.type = TEST_TYPE_ANALYSIS,
+		.option = score_options,
+		.parse_option = parse_score_option,
+		.alloc_node = alloc_score_node,
+	},
+#endif
 };
 
 struct mxc_vpu_test_subcmd *find_subcmd(const char *name)
@@ -4161,6 +4173,15 @@ int main(int argc, char *argv[])
 			goto exit;
 		}
 	}
+
+	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
+		if (!nodes[i])
+			continue;
+
+		if (nodes[i]->pre_start)
+			nodes[i]->pre_start(nodes[i]);
+	}
+
 	ret = pitcher_start(context);
 	if (ret < 0) {
 		PITCHER_ERR("pitcher start fail, ret = %d\n", ret);

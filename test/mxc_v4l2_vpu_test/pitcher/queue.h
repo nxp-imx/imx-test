@@ -33,6 +33,9 @@ long pitcher_queue_count(Queue q);
 int pitcher_queue_find(Queue q, queue_callback func, void *arg,
 		int (*compare)(unsigned long item, unsigned long key),
 		unsigned long key);
+int pitcher_queue_clear_buffer(unsigned long item, void *arg);
+struct pitcher_buffer *pitcher_queue_pop_buffer(Queue q);
+
 #ifdef __cplusplus
 }
 #endif

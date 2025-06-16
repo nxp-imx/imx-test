@@ -34,6 +34,7 @@ enum {
 	TEST_TYPE_MM_EXTRACTOR,
 #endif
 	TEST_TYPE_FILTER,
+	TEST_TYPE_ANALYSIS,
 };
 
 struct test_node {
@@ -51,6 +52,7 @@ struct test_node {
 	void (*free_node)(struct test_node *node);
 	int (*get_source_chnno)(struct test_node *node);
 	int (*get_sink_chnno)(struct test_node *node);
+	int (*pre_start)(struct test_node *node);
 	int frame_skip;
 	unsigned int seek_thd;
 	PitcherContext context;
@@ -92,6 +94,12 @@ struct test_node *alloc_mm_extractor_node(void);
 extern struct mxc_vpu_test_option filter_options[];
 int parse_filter_option(struct test_node *node, struct mxc_vpu_test_option *option, char *argv[]);
 struct test_node *alloc_filter(void);
+
+#ifdef ENABLE_VMAF_SCORE
+extern struct mxc_vpu_test_option score_options[];
+struct test_node *alloc_score_node(void);
+int parse_score_option(struct test_node *node, struct mxc_vpu_test_option *option, char *argv[]);
+#endif
 
 #ifdef __cplusplus
 }

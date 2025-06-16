@@ -69,6 +69,11 @@ ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/linux/dma-heap.h))
 CFLAGS += -DENABLE_DMA_HEAP
 endif
 
+
+mxc_v4l2_vpu_enc.out += vmaf_score.o
+CFLAGS += -DENABLE_VMAF_SCORE
+CFLAGS += -I$(SRCDIR)
+
 mxc_v4l2_vpu_test.out = $(mxc_v4l2_vpu_enc.out)
 
 GIT_SHA=`git -C . rev-parse --short=12 HEAD`

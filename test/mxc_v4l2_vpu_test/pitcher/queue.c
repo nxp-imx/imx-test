@@ -17,6 +17,7 @@
 #include <assert.h>
 #include "list.h"
 #include "pitcher_def.h"
+#include "pitcher.h"
 #include "queue.h"
 
 #define QUEUE_IDLE_MAX_THD		16
@@ -198,6 +199,27 @@ int pitcher_queue_pop(Queue q, unsigned long *item)
 	ret = RET_OK;
 exit:
 	return ret;
+}
+
+struct pitcher_buffer *pitcher_queue_pop_buffer(Queue q)
+{
+	unsigned long item;
+	int ret;
+
+	ret = pitcher_queue_pop(q, &item);
+	if (ret < 0)
+		return NULL;
+
+	return (struct pitcher_buffer *)item;
+}
+
+int pitcher_queue_clear_buffer(unsigned long item, void *arg)
+{
+	struct pitcher_buffer *buffer = (struct pitcher_buffer *)item;
+
+	SAFE_RELEASE(buffer, pitcher_put_buffer);
+
+	return 1;
 }
 
 void pitcher_queue_clear(Queue q, queue_callback func, void *arg)
