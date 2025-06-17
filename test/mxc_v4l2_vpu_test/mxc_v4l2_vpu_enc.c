@@ -3988,8 +3988,10 @@ int check_ctrl_ready(void *arg, int *is_end)
 	int end = true;
 	int i;
 
-	if (is_termination())
+	if (is_termination()) {
 		end = true;
+		goto exit;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
 		struct test_node *src;
@@ -4018,12 +4020,13 @@ int check_ctrl_ready(void *arg, int *is_end)
 						src->key, dst->key);
 				end = true;
 				force_exit();
-			}
-			ret = pitcher_start_chn(schn);
-			if (ret < 0) {
-				PITCHER_ERR("start %d fail\n", src->key);
-				end = true;
-				force_exit();
+			} else {
+				ret = pitcher_start_chn(schn);
+				if (ret < 0) {
+					PITCHER_ERR("start %d fail\n", src->key);
+					end = true;
+					force_exit();
+				}
 			}
 		}
 		if (pitcher_is_error(schn) || pitcher_is_error(dchn)) {
@@ -4043,6 +4046,7 @@ int check_ctrl_ready(void *arg, int *is_end)
 		}
 	}
 
+exit:
 	if (is_end)
 		*is_end = end;
 
