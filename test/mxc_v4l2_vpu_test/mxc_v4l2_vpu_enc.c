@@ -998,8 +998,10 @@ int set_encoder_source(struct test_node *node, struct test_node *src)
 		encoder->output.bytesperline = src->width;
 		break;
 	}
-	if (src->framerate)
+	if (src->framerate && !encoder->node.framerate)
 		encoder->node.framerate = src->framerate;
+	if (!encoder->node.framerate)
+		encoder->node.framerate = DEFAULT_FRAMERATE;
 
 	if (encoder->output.bytesperline < src->bytesperline)
 		encoder->output.bytesperline = src->bytesperline;
@@ -1056,7 +1058,7 @@ void validate_h265_profile_level(struct encoder_test_t *encoder)
 	if (encoder->profile == UINT_MAX)
 		encoder->profile = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN;
 	if (encoder->level == UINT_MAX)
-		encoder->level = V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1;
+		encoder->level = V4L2_MPEG_VIDEO_HEVC_LEVEL_4;
 }
 
 void validate_vpx_profile_level(struct encoder_test_t *encoder)
@@ -1454,7 +1456,6 @@ struct test_node *alloc_encoder_node(void)
 	encoder->node.pixelformat = PIX_FMT_H264;
 	encoder->node.width = 8192;
 	encoder->node.height = 8192;
-	encoder->node.framerate = DEFAULT_FRAMERATE;
 	encoder->node.get_source_chnno = get_encoder_source_chnno;
 	encoder->node.get_sink_chnno = get_encoder_sink_chnno;
 	encoder->node.set_source = set_encoder_source;
