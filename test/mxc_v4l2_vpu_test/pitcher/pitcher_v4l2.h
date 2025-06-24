@@ -22,6 +22,10 @@ extern "C"
 #include "pixfmt.h"
 #include "statistics.h"
 
+#ifndef V4L2_CID_MPEG_VIDEO_AVERAGE_QP
+#define V4L2_CID_MPEG_VIDEO_AVERAGE_QP  (V4L2_CID_CODEC_BASE + 657)
+#endif
+
 #ifndef _UAPI__LINUX_IMX_VPU_H
 
 #define V4L2_CID_NON_FRAME		(V4L2_CID_USER_IMX_BASE)
@@ -119,6 +123,11 @@ struct v4l2_component_t {
 		uint32_t transfer;
 		uint32_t primaries;
 	} colorimetry;
+
+	unsigned long sum_bytes;
+	unsigned long sum_qp;
+	uint32_t flag_encoder : 1;
+	uint32_t flag_average_qp : 1;
 };
 
 extern struct pitcher_unit_desc pitcher_v4l2_capture;

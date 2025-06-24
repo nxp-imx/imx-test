@@ -956,6 +956,9 @@ void free_encoder_node(struct test_node *node)
 		uint64_t count = encoder->capture.frame_count;
 		uint64_t fps;
 		uint64_t ts_delta;
+		uint64_t bps = 0;
+		uint32_t framerate = encoder->node.framerate ? encoder->node.framerate :
+							       DEFAULT_FRAMERATE;
 
 		if (count > encoder->output.frame_count)
 			count = encoder->output.frame_count;
@@ -966,6 +969,14 @@ void free_encoder_node(struct test_node *node)
 				ts_delta / 1000000000,
 				(ts_delta % 1000000000) / 1000000,
 				count);
+
+		bps = encoder->capture.sum_bytes * 8 * framerate / encoder->capture.frame_count;
+		PITCHER_LOG("encoder average QP = %.2f, bps = %ld",
+			    encoder->capture.sum_qp * 1.0 / encoder->capture.frame_count, bps);
+		if (encoder->bitrate_mode != 0xf)
+			PITCHER_LOG("(%.2f%%)\n", bps * 100.0 / encoder->target_bitrate);
+		else
+			PITCHER_LOG("\n");
 	}
 
 	unsubcribe_event(encoder->fd);
@@ -1364,8 +1375,12 @@ int init_encoder_node(struct test_node *node)
 
 	subscribe_event(encoder->fd);
 
-	if (encoder->node.pixelformat == PIX_FMT_JPEG)
+	encoder->capture.flag_encoder = 1;
+	encoder->capture.flag_average_qp = 1;
+	if (encoder->node.pixelformat == PIX_FMT_JPEG) {
 		encoder->node.framerate = 0;
+		encoder->capture.flag_average_qp = 0;
+	}
 	encoder->output.desc = pitcher_v4l2_output;
 	encoder->capture.desc = pitcher_v4l2_capture;
 	encoder->capture.fd = encoder->fd;

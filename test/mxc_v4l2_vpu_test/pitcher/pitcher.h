@@ -50,7 +50,7 @@ enum {
 #define BUFFER_TYPE_OFFSET	16
 #define SET_BUFFER_TYPE(flags, type)	\
 	(flags) |= (((type) & BUFFER_TYPE_MASK) << BUFFER_TYPE_OFFSET)
-#define GET_BUFFER_TYPE(flags, type)	\
+#define GET_BUFFER_TYPE(flags)	\
 	(((flags) >> BUFFER_TYPE_OFFSET) & BUFFER_TYPE_MASK)
 
 struct pitcher_buf_ref {

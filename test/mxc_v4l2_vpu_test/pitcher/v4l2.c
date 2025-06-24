@@ -385,6 +385,7 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 	struct pitcher_buffer *buffer = NULL;
 	struct stats_event_t *se;
+	uint32_t buf_type = BUFFER_TYPE_DEFAULT;
 	uint32_t bytesused;
 	int is_ready;
 	int fd;
@@ -417,7 +418,7 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 	if (ret) {
 		if (errno == EPIPE ||
 		    (V4L2_TYPE_IS_CAPTURE(component->type) && component->eos_received)) {
-			PITCHER_LOG("dqbuf : EPIPE\n");
+			PITCHER_LOG("EPIPE, resolution_change = %d\n", component->resolution_change);
 			component->end = true;
 			return NULL;
 		}
@@ -458,6 +459,8 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 		else if (v4lbuf.flags & V4L2_BUF_FLAG_BFRAME)
 			SET_BUFFER_TYPE(buffer->flags, BUFFER_TYPE_BFRAME);
 
+		buf_type = GET_BUFFER_TYPE(buffer->flags);
+
 		if (v4lbuf.flags & V4L2_BUF_FLAG_LAST
 			|| buffer->planes[0].bytesused == 0) {
 			buffer->flags |= PITCHER_BUFFER_FLAG_LAST;
@@ -468,10 +471,27 @@ static struct pitcher_buffer *__dqbuf(struct v4l2_component_t *component)
 				buffer->flags &= ~PITCHER_BUFFER_FLAG_LAST;
 		}
 		if (buffer->flags & PITCHER_BUFFER_FLAG_LAST)
-			PITCHER_LOG("LAST BUFFER, flags = 0x%x, bytesused = %ld\n", v4lbuf.flags, buffer->planes[0].bytesused);
+			PITCHER_LOG("LAST BUFFER, flags = 0x%x, bytesused = %ld, frame_count %ld\n", v4lbuf.flags, buffer->planes[0].bytesused, component->frame_count);
 
-		if (buffer->planes[0].bytesused && !(buffer->flags & PITCHER_BUFFER_FLAG_ERROR))
-			component->frame_count++;
+		if (buffer->planes[0].bytesused && !(buffer->flags & PITCHER_BUFFER_FLAG_ERROR)) {
+			if (!component->flag_encoder || !component->flag_average_qp)
+				component->frame_count++;
+			else if (buf_type)
+				component->frame_count++;
+		}
+
+		if (component->flag_encoder &&
+		    (buf_type == BUFFER_TYPE_KEYFRAME ||
+		     buf_type == BUFFER_TYPE_PFRAME ||
+		     buf_type == BUFFER_TYPE_BFRAME)) {
+			component->sum_bytes += buffer->planes[0].bytesused;
+			if (component->flag_average_qp) {
+				int average_qp = 0;
+
+				get_ctrl(component->fd, V4L2_CID_MPEG_VIDEO_AVERAGE_QP, &average_qp);
+				component->sum_qp += average_qp;
+			}
+		}
 	}
 
 	return pitcher_get_buffer(buffer);
