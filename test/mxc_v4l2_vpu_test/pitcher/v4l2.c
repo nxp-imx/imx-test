@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <ctype.h>
 #include <signal.h>
 #include <errno.h>
 #include <assert.h>
@@ -1564,6 +1565,124 @@ int get_ctrl(int fd, int id, int *value)
 		*value = ctrl.value;
 
 	return 0;
+}
+
+static char *pitcher_strchrnul (const char *s, int c_in)
+{
+	const unsigned char *char_ptr;
+	unsigned char c;
+	int in_brackets = 0;
+
+	if (!s)
+		return NULL;
+
+	c = (unsigned char) c_in;
+	char_ptr = (const unsigned char *) s;
+	while (*char_ptr) {
+		if (*char_ptr == '(')
+			in_brackets++;
+		else if (*char_ptr == ')')
+			in_brackets--;
+		else if (*char_ptr == c && in_brackets == 0)
+			break;
+		++char_ptr;
+	}
+
+	return (char *) char_ptr;
+}
+
+static int get_subopt(char **optionp, char **valuep)
+{
+	char *endp;
+
+	if (**optionp == '\0')
+		return -1;
+
+	endp = pitcher_strchrnul(*optionp, ',');
+
+	*valuep = *optionp;
+	if (*endp != '\0')
+		*endp++ = '\0';
+	*optionp = endp;
+
+	return -1;
+}
+
+static int parse_next_subopt(char **subs, char **value)
+{
+	int opt;
+
+	opt = get_subopt(subs, value);
+	if (opt < 0 || *value)
+		return RET_OK;
+
+	PITCHER_ERR("Missing suboption value\n");
+	return -RET_E_INVAL;
+}
+
+static void ctrl_name_2_var(const char *name, char *var, uint32_t length)
+{
+	int add_underline = 0;
+	int index = 0;
+
+	while (*name) {
+		if (isalnum(*name)) {
+			if (add_underline)
+				var[index++] = '_';
+			add_underline = 0;
+			var[index++] = tolower(*name);
+		} else if (index) {
+			add_underline = 1;
+		}
+		name++;
+		if (index + 1 == length)
+			break;
+	}
+	var[index] = '\0';
+}
+
+int set_ctrl_setting(int fd, const char *setting)
+{
+	struct v4l2_queryctrl qctrl;
+	const char *equal;
+	char namevar[64];
+	int found = 0;
+
+	equal = strchr(setting, '=');
+	if (!equal)
+		return -RET_E_INVAL;
+
+	memset(&qctrl, 0, sizeof(qctrl));
+	qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
+	while (!ioctl(fd, VIDIOC_QUERYCTRL, &qctrl)) {
+		ctrl_name_2_var((const char *)qctrl.name, namevar, sizeof(namevar));
+		// PITCHER_LOG("ctrl %s  -> %s\n", qctrl.name, namevar);
+		if (!strncmp((const char *)namevar, setting, equal - setting)) {
+			found = 1;
+			break;
+		}
+		qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+	}
+
+	if (!found)
+		return -RET_E_NOT_FOUND;
+
+	return set_ctrl(fd, qctrl.id, strtol(equal + 1, NULL, 0));
+}
+
+int set_ctrls(int fd, char *ctrl_setting)
+{
+	char *subs = NULL, *value = NULL;
+
+	// PITCHER_LOG("set-ctrl: %s\n", ctrl_setting);
+	subs = ctrl_setting;
+	while (*subs != '\0') {
+		if (parse_next_subopt(&subs, &value) < 0)
+			break;
+		set_ctrl_setting(fd, value);
+	}
+
+	return RET_OK;
 }
 
 uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t alignment)

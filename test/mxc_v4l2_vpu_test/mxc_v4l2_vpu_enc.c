@@ -96,6 +96,8 @@ struct encoder_test_t {
 	struct stats_event_t open;
 	struct stats_event_t seq_init;
 	struct stats_event_t close;
+
+	char ctrl_setting[256];
 };
 
 struct decoder_test_t {
@@ -675,6 +677,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"cpbsize", 1, "--cpbsize <size>\n\t\t\tset encoder coded picture buffer size, the unit is b"},
 	{"quality", 1, "--quality <quality>\n\t\t\tset jpeg quality"},
 	{"stats-size", 1, "--stats-size\n\t\t\t statistics report size. 0 to disable"},
+	{"set-ctrl", 1, "--set-ctrl <ctrl>=<val>[,<ctrl>=<val>...]\n\t\t\t set the value of the controls"},
 	{NULL, 0, NULL},
 };
 
@@ -1301,6 +1304,8 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 	if (encoder->cpbsize)
 		set_ctrl(fd, cpbsize_id, encoder->cpbsize);
 
+	set_ctrls(fd, encoder->ctrl_setting);
+
 	return RET_OK;
 }
 
@@ -1598,6 +1603,8 @@ int parse_encoder_option(struct test_node *node,
 		encoder->stats_size = strtol(argv[0], NULL, 0);
 		if (encoder->stats_size > STATS_MAX_ENTRIES)
 			return -RET_E_INVAL;
+	} else if (!strcasecmp(option->name, "set-ctrl")) {
+		strncpy(encoder->ctrl_setting, argv[0], sizeof(encoder->ctrl_setting) - 1);
 	}
 
 	return RET_OK;

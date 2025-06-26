@@ -131,6 +131,7 @@ int is_v4l2_splane(struct v4l2_capability *cap);
 int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat);
 int set_ctrl(int fd, int id, int value);
 int get_ctrl(int fd, int id, int *value);
+int set_ctrls(int fd, char *ctrl_setting);
 uint32_t get_image_size(uint32_t fmt, uint32_t width, uint32_t height, uint32_t alignment);
 void fill_stats_v4l2(struct v4l2_component_t *component);
 #ifdef __cplusplus
