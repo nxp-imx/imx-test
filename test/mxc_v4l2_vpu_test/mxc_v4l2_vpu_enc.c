@@ -77,6 +77,8 @@ struct encoder_test_t {
 	uint32_t sar_idc;
 	uint32_t sar_ext_width;
 	uint32_t sar_ext_height;
+	uint32_t hflip;
+	uint32_t vflip;
 
 	struct v4l2_enc_roi_param roi;
 	struct v4l2_enc_ipcm_param ipcm;
@@ -662,6 +664,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"intra_refresh_period", 1, "--intra_refresh_period <period>\n\t\t\tset intra refresh period"},
 	{"intra_refresh_mb", 1, "--intra_refresh_mb <period>\n\t\t\tset intra refresh mb"},
 	{"sar_cfg", 3, "--sar_cfg <idc> <ext_width> <ext_height>\n\t\t\tset sar idc and ext width/height"},
+	{"mirror", 2, "--mirror <hflip> <vflip>\n\t\t\tset mirror parameters: hflip/vflip"},
 	{"mplane", 1, "--mplane <mp>\n\t\t\tset mplane, 1: multi-plane preference, 0: single plane preference (default)"},
 	{"bframes", 1, "--bframes <number>\n\t\t\tset the number of b frames"},
 	{"crop", 4, "--crop <left> <top> <width> <height>\n\t\t\tset h264 crop position and size"},
@@ -1274,6 +1277,10 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 			set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_EXT_SAR_HEIGHT, encoder->sar_ext_height);
 		}
 	}
+	if (encoder->hflip)
+		set_ctrl(fd, V4L2_CID_HFLIP, encoder->hflip);
+	if (encoder->vflip)
+		set_ctrl(fd, V4L2_CID_VFLIP, encoder->vflip);
 	set_ctrl(fd, qp_i_id, encoder->qp);
 	set_ctrl(fd, qp_p_id, encoder->qp);
 	if (encoder->chroma_qp_index_offset)
@@ -1470,6 +1477,8 @@ struct test_node *alloc_encoder_node(void)
 	encoder->intra_refresh_period = 0;
 	encoder->intra_refresh_mb = 0;
 	encoder->sar_idc = 0;
+	encoder->hflip = 0;
+	encoder->vflip = 0;
 
 	encoder->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	encoder->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -1538,6 +1547,9 @@ int parse_encoder_option(struct test_node *node,
 		encoder->sar_idc = strtol(argv[0], NULL, 0);
 		encoder->sar_ext_width = strtol(argv[1], NULL, 0);
 		encoder->sar_ext_height = strtol(argv[2], NULL, 0);
+	} else if (!strcasecmp(option->name, "mirror")) {
+		encoder->hflip = strtol(argv[0], NULL, 0);
+		encoder->vflip = strtol(argv[1], NULL, 0);
 	} else if (!strcasecmp(option->name, "mplane")) {
 		encoder->output.mplane = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "crop")) {
