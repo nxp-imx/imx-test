@@ -337,6 +337,7 @@ static int __req_v4l2_buffer(struct v4l2_component_t *component)
 	req_bufs.count = component->buffer_count;
 	req_bufs.type = component->type;
 	req_bufs.memory = component->memory;
+	req_bufs.flags = V4L2_MEMORY_FLAG_NON_COHERENT;
 	stats_start_event(&component->request_mem);
 	ret = ioctl(fd, VIDIOC_REQBUFS, &req_bufs);
 	stats_end_event(&component->request_mem);
