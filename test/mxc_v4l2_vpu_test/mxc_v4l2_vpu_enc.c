@@ -617,6 +617,7 @@ struct mxc_vpu_test_option ifile_options[] = {
 	{"framenum", 1, "--framenum <number>\n\t\t\tset input frame number"},
 	{"loop", 1, "--loop <loop times>\n\t\t\tset input loops times"},
 	{"packet_size", 1, "--packet_size <packet size>\n\t\t\tsize of packets to be sent to output"},
+	{"framerate", 1, "--framerate <f>\n\t\t\tset frame rate(fps)"},
 	{NULL, 0, NULL},
 };
 
@@ -2291,6 +2292,8 @@ int parse_ifile_option(struct test_node *node,
 	} else if (!strcasecmp(option->name, "packet_size")) {
 		file->node.width = strtol(argv[0], NULL, 0);
 		file->node.height = 1;
+	} else if (!strcasecmp(option->name, "framerate")) {
+		file->node.framerate = strtol(argv[0], NULL, 0);
 	}
 
 	return RET_OK;
