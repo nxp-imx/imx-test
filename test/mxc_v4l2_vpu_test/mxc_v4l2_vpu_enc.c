@@ -681,6 +681,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"stats-size", 1, "--stats-size\n\t\t\t statistics report size. 0 to disable"},
 	{"set-ctrl", 1, "--set-ctrl <ctrl>=<val>[,<ctrl>=<val>...]\n\t\t\t set the value of the controls"},
 	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of output buffer block size, the unit is Kb."},
+	{"dmabuf", 0, "--dmabuf\n\t\t\tset memory type of encoder's output queue to dmabuf"},
 	{NULL, 0, NULL},
 };
 
@@ -695,6 +696,7 @@ struct mxc_vpu_test_option decoder_options[] = {
 	{"fmt", 1, "--fmt <fmt>\n\t\t\tassign encode pixel format, support nv12, nv21,\n\
 		    \r\t\t\ti420, dtrc, dtrc10, P010, nvx2, rfc, rfcx, nv16"},
 	{"stats-size", 1, "--stats-size\n\t\t\t statistics report size. 0 to disable"},
+	{"dmabuf", 0, "--dmabuf\n\t\t\tset memory type of decoder's output queue to dmabuf"},
 	{NULL, 0, NULL},
 };
 
@@ -1618,6 +1620,8 @@ int parse_encoder_option(struct test_node *node,
 			bs = MIN_BS;
 		encoder->capture.sizeimage = bs * 1024;
 		PITCHER_LOG("sizeimage = %d\n", encoder->capture.sizeimage);
+	} else if (!strcasecmp(option->name, "dmabuf")) {
+		encoder->output.memory = V4L2_MEMORY_DMABUF;
 	}
 
 	return RET_OK;
@@ -1998,6 +2002,8 @@ int parse_decoder_option(struct test_node *node,
 		decoder->stats_size = strtol(argv[0], NULL, 0);
 		if (decoder->stats_size > STATS_MAX_ENTRIES)
 			return -RET_E_INVAL;
+	} else if (!strcasecmp(option->name, "dmabuf")) {
+		decoder->output.memory = V4L2_MEMORY_DMABUF;
 	}
 
 	return RET_OK;
