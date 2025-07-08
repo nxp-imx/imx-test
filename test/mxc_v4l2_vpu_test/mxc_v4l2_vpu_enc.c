@@ -680,6 +680,7 @@ struct mxc_vpu_test_option encoder_options[] = {
 	{"quality", 1, "--quality <quality>\n\t\t\tset jpeg quality"},
 	{"stats-size", 1, "--stats-size\n\t\t\t statistics report size. 0 to disable"},
 	{"set-ctrl", 1, "--set-ctrl <ctrl>=<val>[,<ctrl>=<val>...]\n\t\t\t set the value of the controls"},
+	{"bs", 1, "--bs <bs count>\n\t\t\tSpecify the count of output buffer block size, the unit is Kb."},
 	{NULL, 0, NULL},
 };
 
@@ -1373,8 +1374,8 @@ int init_encoder_node(struct test_node *node)
 	encoder->capture.pixelformat = encoder->node.pixelformat;
 	encoder->capture.width = encoder->node.width;
 	encoder->capture.height = encoder->node.height;
-	encoder->capture.sizeimage =
-		encoder->output.width * encoder->output.height;
+	if (!encoder->capture.sizeimage)
+		encoder->capture.sizeimage = encoder->output.width * encoder->output.height;
 	encoder->capture.bytesperline = encoder->node.width;
 	encoder->capture.is_end = is_encoder_capture_finish;
 	encoder->capture.buffer_count = 4;
@@ -1610,6 +1611,13 @@ int parse_encoder_option(struct test_node *node,
 			return -RET_E_INVAL;
 	} else if (!strcasecmp(option->name, "set-ctrl")) {
 		strncpy(encoder->ctrl_setting, argv[0], sizeof(encoder->ctrl_setting) - 1);
+	} else if (!strcasecmp(option->name, "bs")) {
+		uint32_t bs = strtol(argv[0], NULL, 0);
+
+		if (bs < MIN_BS)
+			bs = MIN_BS;
+		encoder->capture.sizeimage = bs * 1024;
+		PITCHER_LOG("sizeimage = %d\n", encoder->capture.sizeimage);
 	}
 
 	return RET_OK;
@@ -1677,6 +1685,9 @@ int set_decoder_source(struct test_node *node, struct test_node *src)
 	node->seek_thd = src->seek_thd;
 	if (src->framerate)
 		decoder->node.framerate = src->framerate;
+
+	if (src->type == TEST_TYPE_ENCODER)
+		decoder->output.memory = V4L2_MEMORY_DMABUF;
 
 	return RET_OK;
 }
