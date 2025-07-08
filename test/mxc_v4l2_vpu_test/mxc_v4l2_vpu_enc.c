@@ -463,6 +463,8 @@ int handle_decoder_resolution_change(struct decoder_test_t *decoder)
 					decoder->capture.desc.name);
 			return ret;
 		}
+		decoder->node.width = decoder->output.width;
+		decoder->node.height = decoder->output.height;
 		decoder->capture.chnno = ret;
 		scan_and_connect_sink(&decoder->node);
 	}

@@ -50,6 +50,32 @@ static int __is_v4l2_end(struct v4l2_component_t *component)
 	return false;
 }
 
+static int __get_v4l2_resolution(struct v4l2_component_t *component)
+{
+	struct v4l2_format format;
+	int fd;
+	int ret;
+
+	assert(component && component->fd >= 0);
+	fd = component->fd;
+
+	memset(&format, 0, sizeof(format));
+	format.type = component->type;
+	ret = ioctl(fd, VIDIOC_G_FMT, &format);
+	if (ret)
+		return -EINVAL;
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(component->type)) {
+		component->width = format.fmt.pix.width;
+		component->height = format.fmt.pix.height;
+	} else {
+		component->width = format.fmt.pix_mp.width;
+		component->height = format.fmt.pix_mp.height;
+	}
+
+	return 0;
+}
+
 static int __set_v4l2_fmt(struct v4l2_component_t *component)
 {
 	struct v4l2_format format;
@@ -1081,6 +1107,7 @@ static void __check_v4l2_events(struct v4l2_component_t *component)
 		break;
 	case V4L2_EVENT_SOURCE_CHANGE:
 		PITCHER_LOG("Receive Source Change, fd = %d\n", component->fd);
+		__get_v4l2_resolution(component);
 		component->resolution_change = true;
 		if (component->dqbuf.size == 0)
 			stats_end_event(&component->last_res_change);
