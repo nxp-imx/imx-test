@@ -59,10 +59,35 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{16, 8},
 		},
 	},
+	[PIX_FMT_YUV422P] = {
+		.name = "yuv422p",
+		.fourcc = V4L2_PIX_FMT_YUV422P,
+		.fourcc_nc = V4L2_PIX_FMT_YUV422M,
+		.num_planes = 3,
+		.log2_chroma_w = 1,
+		.log2_chroma_h = 0,
+		.comp = {
+			{8, 8},
+			{8, 8},
+			{8, 8},
+		},
+	},
 	[PIX_FMT_NV16] = {
 		.name = "nv16",
 		.fourcc = V4L2_PIX_FMT_NV16,
 		.fourcc_nc = V4L2_PIX_FMT_NV16M,
+		.num_planes = 2,
+		.log2_chroma_w = 1,
+		.log2_chroma_h = 0,
+		.comp = {
+			{8, 8},
+			{16, 8},
+		},
+	},
+	[PIX_FMT_NV61] = {
+		.name = "nv61",
+		.fourcc = V4L2_PIX_FMT_NV61,
+		.fourcc_nc = V4L2_PIX_FMT_NV61M,
 		.num_planes = 2,
 		.log2_chroma_w = 1,
 		.log2_chroma_h = 0,
@@ -76,6 +101,28 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 		.fourcc = V4L2_PIX_FMT_YUYV,
 		.num_planes = 1,
 		.comp = {
+			{16, 8},
+		},
+	},
+	[PIX_FMT_NV24] = {
+		.name = "nv24",
+		.fourcc = V4L2_PIX_FMT_NV24,
+		.num_planes = 2,
+		.log2_chroma_w = 0,
+		.log2_chroma_h = 0,
+		.comp = {
+			{8, 8},
+			{16, 8},
+		},
+	},
+	[PIX_FMT_NV42] = {
+		.name = "nv42",
+		.fourcc = V4L2_PIX_FMT_NV42,
+		.num_planes = 2,
+		.log2_chroma_w = 0,
+		.log2_chroma_h = 0,
+		.comp = {
+			{8, 8},
 			{16, 8},
 		},
 	},
@@ -195,6 +242,17 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 16},
 		},
 	},
+	[PIX_FMT_P210] = {
+		.name = "p210",
+		.fourcc = v4l2_fourcc('P', '2', '1', '0'),
+		.num_planes = 2,
+		.log2_chroma_w = 1,
+		.log2_chroma_h = 0,
+		.comp = {
+			{16, 10},
+			{32, 10},
+		},
+	},
 	[PIX_FMT_NVX2] = {
 		.name = "nvx2",
 		.fourcc = v4l2_fourcc('N', 'V', 'X', '2'),
@@ -248,14 +306,6 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{16, 5},
 		},
 	},
-	[PIX_FMT_RGBA] = {
-		.name = "rgba",
-		.fourcc = V4L2_PIX_FMT_RGBA32,
-		.num_planes = 1,
-		.comp = {
-			{32, 8},
-		},
-	},
 	[PIX_FMT_BGR24] = {
 		.name = "bgr",
 		.fourcc = V4L2_PIX_FMT_BGR24,
@@ -272,9 +322,33 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 8},
 		},
 	},
+	[PIX_FMT_RGBA] = {
+		.name = "rgba",
+		.fourcc = V4L2_PIX_FMT_RGBA32,
+		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
 	[PIX_FMT_ARGB] = {
 		.name = "argb",
 		.fourcc = V4L2_PIX_FMT_ARGB32,
+		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
+	[PIX_FMT_BGRA] = {
+		.name = "bgra",
+		.fourcc = V4L2_PIX_FMT_ABGR32,	/* need to reverse A or X channel for v4l2 BGR format*/
+		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
+	[PIX_FMT_ABGR] = {
+		.name = "abgr",
+		.fourcc = V4L2_PIX_FMT_BGRA32,	/* need to reverse A or X channel for v4l2 BGR format*/
 		.num_planes = 1,
 		.comp = {
 			{32, 8},
@@ -288,10 +362,36 @@ static const struct pixel_format_desc pix_fmt_descriptors[PIX_FMT_NB] = {
 			{32, 8},
 		},
 	},
-	[PIX_FMT_ABGR] = {
-		.name = "abgr",
-		.fourcc = V4L2_PIX_FMT_ABGR32,
+	[PIX_FMT_XRGB] = {
+		.name = "xrgb",
+		.fourcc = V4L2_PIX_FMT_XRGB32,
 		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
+	[PIX_FMT_BGRX] = {
+		.name = "bgrx",
+		.fourcc = V4L2_PIX_FMT_XBGR32,	/* need to reverse A or X channel for v4l2 BGR format*/
+		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
+	[PIX_FMT_XBGR] = {
+		.name = "xbgr",
+		.fourcc = V4L2_PIX_FMT_BGRX32,	/* need to reverse A or X channel for v4l2 BGR format*/
+		.num_planes = 1,
+		.comp = {
+			{32, 8},
+		},
+	},
+	[PIX_FMT_ARGB2101010] = {
+		.name = "argb210",
+		.fourcc = v4l2_fourcc('A', 'R', '3', '0'),
+		.num_planes = 1,
+		.log2_chroma_w = 0,
+		.log2_chroma_h = 0,
 		.comp = {
 			{32, 8},
 		},

@@ -613,8 +613,9 @@ struct mxc_vpu_test_option ifile_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"name", 1, "--name <filename>\n\t\t\tassign input file name"},
 	{"fmt",  1, "--fmt <fmt>\n\t\t\tassign input file pixel format, encode support\n\
-		     \r\t\t\tinput format nv12, i420, nv21, yuyv, rgb565, bgr565,\n\
-		     \r\t\t\trgb555, rgba, bgr32, argb, rgbx"},
+		     \r\t\t\tinput format i420/nv12/nv21, yuv422p/nv16/nv61/yuyv, nv24/nv42/yuv24,\n\
+			 \r\t\t\trgb555/rgb565/rgb888/rgba/argb/rgbx/xrgb, bgr565/bgr/bgr32/bgra/abgr/bgrx/xbgr,\n\
+		     \r\t\t\tp010/p210/argb210, etc."},
 	{"size", 2, "--size <width> <height>\n\t\t\tassign input file resolution"},
 	{"alignment", 1, "--alignment <alignment>\n\t\t\tassign line alignment"},
 	{"framenum", 1, "--framenum <number>\n\t\t\tset input frame number"},
