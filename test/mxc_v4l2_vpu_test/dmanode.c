@@ -26,6 +26,7 @@ struct dmanode_test_t {
 	int chnno;
 	struct pix_fmt_info format;
 	int end;
+	int verbose;
 
 	unsigned long frame_count;
 };
@@ -33,6 +34,7 @@ struct dmanode_test_t {
 struct mxc_vpu_test_option dmanode_options[] = {
 	{"key",  1, "--key <key>\n\t\t\tassign key number"},
 	{"source", 1, "--source <key no>\n\t\t\tset source key number"},
+	{"verbose", 0, "--verbose\n\t\t\tshow detailed address of data"},
 	{NULL, 0, NULL},
 };
 
@@ -159,6 +161,12 @@ int run_dmanode(void *arg, struct pitcher_buffer *buffer)
 		pitcher_get_buffer_plane(buffer, i, &splane);
 		pitcher_get_buffer_plane(dst, i, &dplane);
 		memcpy(dplane.virt, splane.virt, splane.bytesused);
+		if (dn->verbose) {
+			PITCHER_LOG("Copy to dma address 0x%lx, size 0x%lx\n",
+				    dplane.phys, splane.bytesused);
+			PITCHER_LOG("Data.SAVE.Binary * NAHB:0x%lx--0x%lx\n",
+				    dplane.phys, dplane.phys + splane.bytesused - 1);
+		}
 		bytesused += splane.bytesused;
 	}
 	dst->flags = buffer->flags;
@@ -262,6 +270,8 @@ int parse_dmanode_option(struct test_node *node,
 		dn->node.key = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "source")) {
 		dn->node.source = strtol(argv[0], NULL, 0);
+	} else if (!strcasecmp(option->name, "verbose")) {
+		dn->verbose = 1;
 	}
 
 	return RET_OK;

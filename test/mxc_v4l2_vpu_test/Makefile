@@ -43,10 +43,6 @@ CFLAGS += -DENABLE_MM_PARSE
 mxc_v4l2_vpu_enc.out += media_extractor.o
 endif
 
-ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/linux/dma-heap.h))
-CFLAGS += -DENABLE_DMA_HEAP
-endif
-
 ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/imx/linux/ion.h))
 CFLAGS += -DENABLE_ION
 endif
@@ -67,6 +63,10 @@ LDFLAGS += -lwayland-client
 endif
 endif
 endif
+endif
+
+ifneq (,$(wildcard $(SDKTARGETSYSROOT)/usr/include/linux/dma-heap.h))
+CFLAGS += -DENABLE_DMA_HEAP
 endif
 
 mxc_v4l2_vpu_test.out = $(mxc_v4l2_vpu_enc.out)
