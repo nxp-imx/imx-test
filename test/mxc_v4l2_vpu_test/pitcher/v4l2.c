@@ -919,6 +919,18 @@ int init_v4l2(void *arg)
 	stats_init_events(&component->dqbuf);
 	stats_init_sizes(&component->frame_sizes);
 
+	if (component->pixelformat != PIX_FMT_NONE && component->width && component->height) {
+		int ret;
+
+		ret = __set_v4l2_fmt(component);
+		if (ret) {
+			PITCHER_ERR("set fmt fail\n");
+			return ret;
+		}
+
+		__set_crop(component);
+		__set_v4l2_fps(component);
+	}
 	PITCHER_LOG("init : %s\n", component->desc.name);
 
 	return RET_OK;
