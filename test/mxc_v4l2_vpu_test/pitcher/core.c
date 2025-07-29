@@ -499,13 +499,13 @@ static int __poll_func(struct pitcher_poll_fd *pfd,
 		/*if events == 0, it means timeout*/
 		if (chn->pfd.events & events || !events)
 			__process_chn_run(chn);
-		else
+		else if (!chn->ignore_pollerr)
 			PITCHER_ERR("[%s] want event: 0x%x, but 0x%x\n",
 					chn->name, chn->pfd.events, events);
-		if ((events & POLLERR) && chn->state == PITCHER_STATE_ACTIVE) {
+		if ((events & POLLERR) && chn->state == PITCHER_STATE_ACTIVE &&
+		    !chn->ignore_pollerr) {
 			PITCHER_LOG("%s POLLERR\n", chn->name);
-			if (!chn->ignore_pollerr)
-				chn->error = 1;
+			chn->error = 1;
 		}
 	}
 
