@@ -138,6 +138,7 @@ int check_v4l2_device_type(int fd, unsigned int out_fmt, unsigned int cap_fmt);
 int is_v4l2_mplane(struct v4l2_capability *cap);
 int is_v4l2_splane(struct v4l2_capability *cap);
 int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat);
+int decide_v4l2_fourcc(struct v4l2_component_t *component);
 int set_ctrl(int fd, int id, int value);
 int get_ctrl(int fd, int id, int *value);
 int set_ctrls(int fd, char *ctrl_setting);

@@ -85,6 +85,11 @@ static int __set_v4l2_fmt(struct v4l2_component_t *component)
 	int ret;
 
 	assert(component && component->fd >= 0);
+
+	ret = decide_v4l2_fourcc(component);
+	if (ret)
+		return ret;
+
 	fd = component->fd;
 
 	if (component->pixelformat != PIX_FMT_NONE) {
@@ -1009,13 +1014,9 @@ int get_v4l2_fourcc(struct v4l2_component_t *component, uint32_t preferred_fourc
 	return RET_OK;
 }
 
-int start_v4l2(void *arg)
+int decide_v4l2_fourcc(struct v4l2_component_t *component)
 {
-	struct v4l2_component_t *component = arg;
 	int ret;
-
-	if (!component || component->fd < 0)
-		return -RET_E_INVAL;
 
 	if (component->pixelformat != PIX_FMT_NONE) {
 		uint32_t preferred_fourcc = 0;
@@ -1032,6 +1033,17 @@ int start_v4l2(void *arg)
 			return ret;
 		}
 	}
+
+	return RET_OK;
+}
+
+int start_v4l2(void *arg)
+{
+	struct v4l2_component_t *component = arg;
+	int ret;
+
+	if (!component || component->fd < 0)
+		return -RET_E_INVAL;
 
 	ret = __init_v4l2(component);
 	if (ret < 0)
