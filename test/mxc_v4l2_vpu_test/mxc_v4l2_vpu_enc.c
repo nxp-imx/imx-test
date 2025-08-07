@@ -1282,9 +1282,13 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK, encoder->peak_bitrate);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_GOP_SIZE, encoder->gop);
 	set_ctrl(fd, V4L2_CID_MPEG_VIDEO_B_FRAMES, encoder->bframes);
-	if (encoder->slice_mode != V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE) {
+	if (encoder->slice_mode == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB) {
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, encoder->slice_mode);
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB, encoder->slice_size);
+	}
+	else if (encoder->slice_mode == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES) {
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, encoder->slice_mode);
+		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_BYTES, encoder->slice_size);
 	}
 	if (encoder->intra_refresh_period)
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_INTRA_REFRESH_PERIOD, encoder->intra_refresh_period);
