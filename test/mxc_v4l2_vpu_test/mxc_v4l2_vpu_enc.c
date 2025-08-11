@@ -1297,7 +1297,7 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 	if (encoder->sar_idc) {
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_SAR_ENABLE, 1);
 		set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_SAR_IDC, encoder->sar_idc);
-		if (encoder->sar_idc == 255) {
+		if (encoder->sar_idc == 255 || encoder->sar_idc == 17) {
 			set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_EXT_SAR_WIDTH, encoder->sar_ext_width);
 			set_ctrl(fd, V4L2_CID_MPEG_VIDEO_H264_VUI_EXT_SAR_HEIGHT, encoder->sar_ext_height);
 		}
