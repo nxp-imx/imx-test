@@ -3683,15 +3683,6 @@ struct mxc_vpu_test_subcmd subcmds[] = {
 		.parse_option = parse_filter_option,
 		.alloc_node = alloc_filter,
 	},
-#ifdef ENABLE_VMAF_SCORE
-	{
-		.subcmd = "vmaf",
-		.type = TEST_TYPE_ANALYSIS,
-		.option = score_options,
-		.parse_option = parse_score_option,
-		.alloc_node = alloc_score_node,
-	},
-#endif
 };
 
 struct mxc_vpu_test_subcmd *find_subcmd(const char *name)

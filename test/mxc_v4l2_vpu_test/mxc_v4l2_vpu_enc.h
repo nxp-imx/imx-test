@@ -95,12 +95,6 @@ extern struct mxc_vpu_test_option filter_options[];
 int parse_filter_option(struct test_node *node, struct mxc_vpu_test_option *option, char *argv[]);
 struct test_node *alloc_filter(void);
 
-#ifdef ENABLE_VMAF_SCORE
-extern struct mxc_vpu_test_option score_options[];
-struct test_node *alloc_score_node(void);
-int parse_score_option(struct test_node *node, struct mxc_vpu_test_option *option, char *argv[]);
-#endif
-
 #ifdef __cplusplus
 }
 #endif
