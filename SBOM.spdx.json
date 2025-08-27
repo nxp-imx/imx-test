@@ -1,0 +1,89 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "creationInfo": {
+    "created": "2025-08-24T08:12:12Z",
+    "creators": [
+      "Organization: NXP"
+    ],
+    "licenseListVersion": "3.20"
+  },
+  "name": "imx-test-LF_6.12.34_2.1.0",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://nxp.com/spdx/f15eb5f6-1f31-4b11-9c1e-038094d65a12",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-package-f15eb5f6-1f31-4b11-9c1e-038094d65a12",
+      "name": "imx-test",
+      "versionInfo": "LF_6.12.34_2.1.0",
+      "licenseConcluded": "(GPL-2.0-only)",
+      "licenseDeclared": "(GPL-2.0-only)",
+      "downloadLocation": "https://github.com/nxp-imx/imx-test -b lf-6.12.34-2.1.0",
+      "originator": "Organization: NXP",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-9680c609-86f3-4ac6-baae-73890c848d95",
+      "name": "EFL (Enlightenment Foundation Libraries)",
+      "versionInfo": "v1.18.0-alpha1",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "(Zlib AND GPL-3.0-or-later AND LGPL-2.1-or-later AND BSD-2-Clause AND MIT AND GPL-2.0-or-later AND FTL)",
+      "homepage": "http://enlightenment.org",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: EFL (Enlightenment Foundation Libraries)",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-c852aea6-4126-44df-a3b1-24eb1281fe08",
+      "name": "westfield-runtime-client",
+      "versionInfo": "0.4.1",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "homepage": "https://github.com/udevbe/westfield#readme",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: westfield-runtime-client",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-2e9e2cde-c092-4ad8-be0f-d55e6133cf75",
+      "name": "Weston",
+      "versionInfo": "9.0.91",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "NOASSERTION",
+      "homepage": "http://wayland.freedesktop.org/",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: Weston",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-package-f15eb5f6-1f31-4b11-9c1e-038094d65a12"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-f15eb5f6-1f31-4b11-9c1e-038094d65a12",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-2e9e2cde-c092-4ad8-be0f-d55e6133cf75"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-f15eb5f6-1f31-4b11-9c1e-038094d65a12",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-c852aea6-4126-44df-a3b1-24eb1281fe08"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-f15eb5f6-1f31-4b11-9c1e-038094d65a12",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-9680c609-86f3-4ac6-baae-73890c848d95"
+    }
+  ]
+}
