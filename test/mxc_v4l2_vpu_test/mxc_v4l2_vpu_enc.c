@@ -1314,10 +1314,8 @@ int set_encoder_parameters(struct encoder_test_t *encoder)
 		set_ctrl(fd, chroma_offset_id, encoder->chroma_qp_index_offset);
 	if (qp_b_id)
 		set_ctrl(fd, qp_b_id, encoder->qp);
-	if (encoder->qp_min)
-		set_ctrl(fd, qp_min_id, encoder->qp_min);
-	if (encoder->qp_max)
-		set_ctrl(fd, qp_max_id, encoder->qp_max);
+	set_ctrl(fd, qp_min_id, encoder->qp_min);
+	set_ctrl(fd, qp_max_id, encoder->qp_max);
 	if (encoder->roi.enable)
 		set_encoder_roi(fd, &encoder->roi);
 	if (encoder->ipcm.enable)
@@ -1501,6 +1499,8 @@ struct test_node *alloc_encoder_node(void)
 	encoder->gop = 30;
 	encoder->bframes = 0;
 	encoder->qp = 25;
+	encoder->qp_min = 10;
+	encoder->qp_max = 40;
 	encoder->target_bitrate = 2 * 1024 * 1024;
 	encoder->quality = 75;
 	encoder->idrhdr = 1;
@@ -1563,7 +1563,7 @@ int parse_encoder_option(struct test_node *node,
 		encoder->mb_rc = strtol(argv[0], NULL, 0);
 	} else if (!strcasecmp(option->name, "qp")) {
 		encoder->qp = strtol(argv[0], NULL, 0);
-	} else if (!strcasecmp(option->name, "qp_range")) {
+	} else if (!strcasecmp(option->name, "qprange")) {
 		encoder->qp_min = strtol(argv[0], NULL, 0);
 		encoder->qp_max = strtol(argv[1], NULL, 0);
 	}  else if (!strcasecmp(option->name, "chroma_qp_offset")) {
