@@ -236,8 +236,7 @@ void interleaveDffBlock(uint8_t *dest, const uint8_t *src, unsigned channels, sn
 	for (i = 0; i < DSF_BLOCK_SIZE / bytes; i++) {
 		for (c = 0; c < channels; c++) {
 			for (j = 0; j < bytes; j++)
-				dest[channels*bytes*i + c*bytes + j] =
-					src[channels*bytes*i + c + j*channels];
+				dest[channels*bytes*i + c*bytes + j] = src[channels*bytes*i + c + (bytes - j - 1)*channels];
 		}
 	}
 }

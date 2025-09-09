@@ -494,7 +494,7 @@ int main(int argc, char *argv[])
 
 		leftsize = leftsize - r;
 
-		if (params.bits_per_sample == 8)
+		if (params.bits_per_sample == 1)
 			bit_reverse_buffer(buffer, buffer + block_size);
 
 		parser.interleave(interleaved_buffer, buffer, params.channel_num, ALSA_FORMAT);

@@ -116,14 +116,15 @@ int read_dsf_file(int fd, struct dsd_params *params)
 
 void interleaveDsfBlock(uint8_t *dest, const uint8_t *src, unsigned channels, snd_pcm_format_t format)
 {
-	unsigned i, c;
+	unsigned i, c, j;
 	int bytes = snd_pcm_format_physical_width(format) / 8;
 
 	for (i = 0; i < DSF_BLOCK_SIZE / bytes; i++) {
 		for (c = 0; c < channels; c++) {
 			int dst_off = channels*bytes*i + c*bytes;
 			int src_off = c*DSF_BLOCK_SIZE + i*bytes;
-			memcpy(dest + dst_off, src + src_off, bytes);
+			for (j = 0; j < bytes; j++)
+				dest[dst_off + j] = src[src_off + bytes - j - 1];
 		}
 	}
 }
