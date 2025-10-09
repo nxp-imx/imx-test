@@ -21,9 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if __STDC_VERSION__ < 202311L
 #define false (0)
 #define true (1)
 typedef int bool;
+#endif
 
 struct state {
 	uint8_t data;
