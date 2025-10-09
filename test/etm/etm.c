@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if __STDC_VERSION__ < 202311L
+#if __STDC_VERSION__ < 202000L
 #define false (0)
 #define true (1)
 typedef int bool;
@@ -705,13 +705,13 @@ int main(int argc, char **argv)
 		[OPT_ETM_3_3] = { "etm-3.3", 0, 0, 0 },
 		[OPT_ETM_3_4_ALT] ={ "etm-3.4-alt-branch", 0, 0, 0 },
 		[OPT_PFT_1_1] = { "pft-1.1", 0, 0, 0 },
-		[OPT_CYCLE_ACCURATE] = { "cycle-accurate", 2, &state.cycle_accurate, true },
-		[OPT_CONTEXTID_BYTES] = { "contextid-bytes", 1, &state.contextid_bytes, 0 },
-		[OPT_FORMATTER] = { "formatter", 2, &state.formatter, true },
+		[OPT_CYCLE_ACCURATE] = { "cycle-accurate", 2, (int*)&state.cycle_accurate, true },
+		[OPT_CONTEXTID_BYTES] = { "contextid-bytes", 1, (int*)&state.contextid_bytes, 0 },
+		[OPT_FORMATTER] = { "formatter", 2, (int*)&state.formatter, true },
 		[OPT_SOURCEID] = { "sourceid-match", 1, 0, 0 },
 		[OPT_LONG_WAIT] = { "print-long-waits", 1, (int*)&state.long_wait, 0 },
-		[OPT_PRINT_INPUT] = { "print-input", 2, &state.print_input, true },
-		[OPT_PRINT_CONFIG] = { "print-config", 0, &print_config, true },
+		[OPT_PRINT_INPUT] = { "print-input", 2, (int*)&state.print_input, true },
+		[OPT_PRINT_CONFIG] = { "print-config", 0, (int*)&print_config, true },
 		[OPT_PRINT_HELP] = { "help", 0, 0, 'h'},
 		{},
 	};
