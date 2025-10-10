@@ -18,8 +18,9 @@
  */
 
 #include <stdarg.h>
-#include <termio.h>
+#include <termios.h>
 #include <sys/timeb.h>
+#include <sys/ioctl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
