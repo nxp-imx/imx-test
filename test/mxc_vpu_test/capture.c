@@ -118,7 +118,6 @@ v4l_capture_setup(struct encode *enc, int width, int height, int fps)
 	struct v4l2_requestbuffers req = {0};
 	struct v4l2_control ctl;
 	struct v4l2_crop crop;
-	struct v4l2_dbg_chip_ident chip;
 	struct v4l2_frmsizeenum fsize;
 	int i, g_input = 1, mode = 0; /* Use different g_input (0 or 1) for each camera */
 
@@ -135,12 +134,6 @@ v4l_capture_setup(struct encode *enc, int width, int height, int fps)
 		err_msg("Unable to open %s\n", v4l_device);
 		return -1;
 	}
-
-	if (ioctl(cap_fd, VIDIOC_DBG_G_CHIP_IDENT, &chip)) {
-		printf("VIDIOC_DBG_G_CHIP_IDENT failed.\n");
-		return -1;
-	}
-	info_msg("sensor chip is %s\n", chip.match.name);
 
 	memset(sizes_buf, 0, sizeof(sizes_buf));
 	for (i = 0; i < MAX_CAPTURE_MODES; i++) {

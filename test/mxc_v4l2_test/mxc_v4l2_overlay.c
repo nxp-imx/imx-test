@@ -607,12 +607,10 @@ main(int argc, char **argv)
         struct mxcfb_loc_alpha l_alpha;
 	int ret = 0;
 	struct sigaction act;
-	struct v4l2_dbg_chip_ident chip;
 
 	print_name(argv);
 
 	memset(&fmt, 0, sizeof(fmt));
-	memset(&chip, 0, sizeof(chip));
 
 	/* for ctrl-c */
 	sigemptyset(&act.sa_mask);
@@ -632,13 +630,6 @@ main(int argc, char **argv)
                 printf("Unable to open %s\n", v4l_device);
                 return TFAIL;
         }
-
-	if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chip))
-	{
-                printf("VIDIOC_DBG_G_CHIP_IDENT failed.\n");
-                return TFAIL;
-	}
-	printf("sensor chip is %s\n", chip.match.name);
 
 	if ((fd_fb_0 = open(fb_device_0, O_RDWR )) < 0)	{
 		printf("Unable to open frame buffer 0\n");

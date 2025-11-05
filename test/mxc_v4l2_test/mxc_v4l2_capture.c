@@ -149,7 +149,6 @@ int v4l_capture_setup(void)
         struct v4l2_streamparm parm;
 	struct v4l2_crop crop;
 	struct v4l2_mxc_dest_crop of;
-	struct v4l2_dbg_chip_ident chip;
 	struct v4l2_frmsizeenum fsize;
 	struct v4l2_fmtdesc ffmt;
 	int fd_v4l = 0;
@@ -159,7 +158,6 @@ int v4l_capture_setup(void)
 	memset(&parm, 0, sizeof(parm));
 	memset(&crop, 0, sizeof(crop));
 	memset(&of, 0, sizeof(of));
-	memset(&chip, 0, sizeof(chip));
 	memset(&fsize, 0, sizeof(fsize));
 	memset(&ffmt, 0, sizeof(ffmt));
 
@@ -168,16 +166,6 @@ int v4l_capture_setup(void)
                 printf("Unable to open %s\n", g_v4l_device);
                 return 0;
         }
-
-	/* UVC driver does not support this ioctl */
-	if (g_usb_camera != 1) {
-		if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chip))
-		{
-			printf("VIDIOC_DBG_G_CHIP_IDENT failed.\n");
-			return -1;
-		}
-		printf("sensor chip is %s\n", chip.match.name);
-	}
 
 	printf("sensor supported frame size:\n");
 	fsize.index = 0;

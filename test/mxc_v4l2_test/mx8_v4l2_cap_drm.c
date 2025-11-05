@@ -1074,20 +1074,12 @@ static void fill_video_channel(struct video_channel *video_ch,
 
 static int v4l2_setup_dev(int ch_id, struct video_channel *video_ch)
 {
-	struct v4l2_dbg_chip_ident chipident;
 	struct v4l2_format fmt;
 	struct v4l2_streamparm parm;
 	struct v4l2_control ctrl;
 	struct v4l2_selection sel;
 	int fd = video_ch[ch_id].v4l_fd;
 	int ret;
-
-	memset(&chipident, 0, sizeof(chipident));
-	ret = ioctl(fd, VIDIOC_DBG_G_CHIP_IDENT, &chipident);
-	if (ret < 0)
-		v4l2_warn("get chip ident fail\n");
-	else
-		v4l2_dbg("Get chip ident: %s\n", chipident.match.name);
 
 	v4l2_enum_fmt(&video_ch[ch_id]);
 
