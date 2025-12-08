@@ -21,6 +21,80 @@ struct config {
 	int out_rate;
 };
 
+struct PID_Controller {
+	float kp;           // Proportional gain
+	float ki;           // Integral gain
+	float kd;           // Derivative gain
+	float dt;           // Sample time (seconds)
+
+	float integral;     // Integral accumulator
+	float prev_error;   // Previous error for derivative
+
+	float output_min;   // Minimum output limit
+	float output_max;   // Maximum output limit
+};
+
+// Initialize PID controller
+void PID_Init(struct PID_Controller *pid, float kp, float ki, float kd,
+	      float dt, float out_min, float out_max)
+{
+	pid->kp = kp;
+	pid->ki = ki;
+	pid->kd = kd;
+	pid->dt = dt;
+
+	pid->integral = 0.0f;
+	pid->prev_error = 0.0f;
+
+	pid->output_min = out_min;
+	pid->output_max = out_max;
+}
+
+// Compute PID output
+float PID_Compute(struct PID_Controller *pid, float setpoint,
+		  float measured_value)
+{
+	// Calculate error
+	float error = setpoint - measured_value;
+
+	// Proportional term
+	float p_term = pid->kp * error;
+
+	// Integral term with anti-windup
+	pid->integral += error * pid->dt;
+	float i_term = pid->ki * pid->integral;
+
+	// Derivative term
+	float derivative = (error - pid->prev_error) / pid->dt;
+	float d_term = pid->kd * derivative;
+
+	// Calculate total output
+	float output = p_term + i_term + d_term;
+
+	// Apply output limits (clamping)
+	if (output > pid->output_max) {
+		output = pid->output_max;
+		// Anti-windup: prevent integral from growing
+		pid->integral -= error * pid->dt;
+	} else if (output < pid->output_min) {
+		output = pid->output_min;
+		// Anti-windup: prevent integral from growing
+		pid->integral -= error * pid->dt;
+	}
+
+	// Save error for next iteration
+	pid->prev_error = error;
+
+	return output;
+}
+
+// Reset PID controller
+void PID_Reset(struct PID_Controller *pid)
+{
+	pid->integral = 0.0f;
+	pid->prev_error = 0.0f;
+}
+
 void usage(void) {
 	printf("\n\n**************************************************\n");
 	printf("* Test aplication for adjust audio pll on imx8mm\n");
@@ -237,8 +311,9 @@ int main(int argc, const char **argv)
 
 	double clock_diff;
 
-	char *p_kdiv;
+	char *p_mdiv, *p_pdiv, *p_sdiv, *p_kdiv;
 	int kdiv, kdiv_new, delta_kdiv;
+	int mdiv, pdiv, sdiv;
 	int stable_count;
 
 	conf.step = 1;
@@ -250,8 +325,8 @@ int main(int argc, const char **argv)
 		return -1;
 
 	if (!strcmp(conf.board, "8MM")) {
-		base_path_in = "/sys/devices/platform/soc@0/soc@0:bus@30000000/300";
-		base_path_out = "/sys/devices/platform/soc@0/soc@0:bus@30000000/300";
+		base_path_in = "/sys/devices/platform/soc@0/30000000.bus/30000000.spba-bus/300";
+		base_path_out = "/sys/devices/platform/soc@0/30000000.bus/30000000.spba-bus/300";
 		saipath_rx_monitor_spdif = "0000.sai/rx_monitor_spdif";
 
 		saipath_rx_bitcnt = "0000.sai/rx_bitcnt";
@@ -516,9 +591,28 @@ int main(int argc, const char **argv)
 	out_bitcount_sum = 0;
 	out_timestampcount_sum = 0;
 
-	read(fd_pll_param, buf, sizeof(buf)-1);
+	len = read(fd_pll_param, buf, sizeof(buf)-1);
 	p_kdiv = strstr(buf, "Kdiv");
 	kdiv = strtol(p_kdiv + 8, NULL, 16);
+
+	p_mdiv = strstr(buf, "Mdiv");
+	mdiv = strtol(p_mdiv + 8, NULL, 16);
+
+	p_pdiv = strstr(buf, "Pdiv");
+	pdiv = strtol(p_pdiv + 8, NULL, 16);
+
+	p_sdiv = strstr(buf, "Sdiv");
+	sdiv = strtol(p_sdiv + 8, NULL, 16);
+
+	p_kdiv = strstr(buf, "Kdiv");
+	kdiv = strtol(p_kdiv + 8, NULL, 16);
+
+	float fout_pll = 24000000 * (mdiv * 65536 + (float)kdiv) / (pdiv * 65536) / (1 << sdiv);
+	int pll_div_sample_rate = fout_pll / conf.out_rate;
+
+	struct PID_Controller pid;
+
+	PID_Init(&pid, 2.0f, 0.5f, 0.1f, 0.1f, -100.0f, 100.0f);
 
 	while (count < 1000 && stable_count < 10) {
 		memset(buf, 0, sizeof(buf));
@@ -546,155 +640,167 @@ int main(int argc, const char **argv)
 		lseek(fd_in[1], 0, SEEK_SET);
 		lseek(fd_in[2], 0, SEEK_SET);
 
-		if (count == 0) {
-			if (conf.is_spdif) {
-				memset(buf, 0, sizeof(buf));
-				buf[0] = '1';
-				write(fd_in_monitor_spdif, buf, sizeof(buf)-1);
-			}
-
-			lseek(fd_in[3], 0, SEEK_SET);
-			lseek(fd_in[4], 0, SEEK_SET);
-			lseek(fd_in[5], 0, SEEK_SET);
-			lseek(fd_in[6], 0, SEEK_SET);
-
-			memset(buf, 0, sizeof(buf));
-			buf[0] = '0';
-			write(fd_in[5], buf, sizeof(buf)-1);
-			write(fd_in[4], buf, sizeof(buf)-1);
-
-			lseek(fd_in[4], 0, SEEK_SET);
-			buf[0] = '1';
-			write(fd_in[4], buf, sizeof(buf)-1);
-
+		if (conf.is_spdif) {
 			memset(buf, 0, sizeof(buf));
 			buf[0] = '1';
-			write(fd_in[3], buf, sizeof(buf)-1);
-			write(fd_in[6], buf, sizeof(buf)-1);
-			buf[0] = '0';
-			write(fd_in[3], buf, sizeof(buf)-1);
-			write(fd_in[6], buf, sizeof(buf)-1);
-
-			/* Read counter and timestamp */
-			read(fd_in[0], buf, sizeof(buf)-1);
-			in_bitcount_prev = strtol(buf, NULL, 0);
-
-			read(fd_in[1], buf, sizeof(buf)-1);
-			in_timestampcount_prev = strtol(buf, NULL, 0);
-		} else {
-			/* Read counter and timestamp */
-			read(fd_in[0], buf, sizeof(buf)-1);
-			in_bitcount = strtol(buf, NULL, 0);
-
-			read(fd_in[1], buf, sizeof(buf)-1);
-			in_timestampcount = strtol(buf, NULL, 0);
-
-			in_bitcount_err = (long)in_bitcount - (long)in_bitcount_prev;
-			in_timestampcount_err = (long)in_timestampcount - (long)in_timestampcount_prev;
-
-			if(in_bitcount_err < 0) in_bitcount_err += (long)0x100000000;
-			if(in_timestampcount_err < 0) in_timestampcount_err += (long)0x100000000;
-
-			in_bitcount_prev = in_bitcount;
-			in_timestampcount_prev = in_timestampcount;
-
-			in_bitcount_sum += in_bitcount_err;
-			in_timestampcount_sum += in_timestampcount_err;
-
-			in_clock = (double)in_bitcount_sum * in_ipg_clock / (double)in_timestampcount_sum / conf.in_ratio;
+			len = write(fd_in_monitor_spdif, buf, sizeof(buf)-1);
 		}
 
+		lseek(fd_in[3], 0, SEEK_SET);
+		lseek(fd_in[4], 0, SEEK_SET);
+		lseek(fd_in[5], 0, SEEK_SET);
+		lseek(fd_in[6], 0, SEEK_SET);
+
+		memset(buf, 0, sizeof(buf));
+		buf[0] = '0';
+		len = write(fd_in[5], buf, sizeof(buf)-1);
+		len = write(fd_in[4], buf, sizeof(buf)-1);
+
+		lseek(fd_in[4], 0, SEEK_SET);
+		buf[0] = '1';
+		len = write(fd_in[4], buf, sizeof(buf)-1);
+
+		memset(buf, 0, sizeof(buf));
+		buf[0] = '1';
+		len = write(fd_in[3], buf, sizeof(buf)-1);
+		len = write(fd_in[6], buf, sizeof(buf)-1);
+		buf[0] = '0';
+		len = write(fd_in[3], buf, sizeof(buf)-1);
+		len = write(fd_in[6], buf, sizeof(buf)-1);
+
+		/* Read counter and timestamp */
+		len = read(fd_in[0], buf, sizeof(buf)-1);
+		in_bitcount_prev = strtol(buf, NULL, 0);
+
+		len = read(fd_in[1], buf, sizeof(buf)-1);
+		in_timestampcount_prev = strtol(buf, NULL, 0);
+
+		usleep(10000);
+
+		lseek(fd_in[0], 0, SEEK_SET);
+		lseek(fd_in[1], 0, SEEK_SET);
+		lseek(fd_in[2], 0, SEEK_SET);
+		/* Read counter and timestamp */
+		len = read(fd_in[0], buf, sizeof(buf)-1);
+		in_bitcount = strtol(buf, NULL, 0);
+
+		len = read(fd_in[1], buf, sizeof(buf)-1);
+		in_timestampcount = strtol(buf, NULL, 0);
+
+		in_bitcount_err = (long)in_bitcount - (long)in_bitcount_prev;
+		in_timestampcount_err = (long)in_timestampcount - (long)in_timestampcount_prev;
+
+		if (in_bitcount_err < 0)
+			in_bitcount_err += 0x100000000L;
+		if (in_timestampcount_err < 0)
+			in_timestampcount_err += 0x100000000L;
+
+		in_bitcount_sum += in_bitcount_err;
+		in_timestampcount_sum += in_timestampcount_err;
+
+		in_clock = (double)in_bitcount_sum * in_ipg_clock / in_timestampcount_sum;
+		in_clock /= conf.in_ratio;
 
 		lseek(fd_out[0], 0, SEEK_SET);
 		lseek(fd_out[1], 0, SEEK_SET);
 		lseek(fd_out[2], 0, SEEK_SET);
 
-		if (count == 0) {
-			lseek(fd_out[3], 0, SEEK_SET);
-			lseek(fd_out[4], 0, SEEK_SET);
-			lseek(fd_out[5], 0, SEEK_SET);
-			lseek(fd_out[6], 0, SEEK_SET);
+		lseek(fd_out[3], 0, SEEK_SET);
+		lseek(fd_out[4], 0, SEEK_SET);
+		lseek(fd_out[5], 0, SEEK_SET);
+		lseek(fd_out[6], 0, SEEK_SET);
 
-			memset(buf, 0, sizeof(buf));
-			buf[0] = '0';
-			write(fd_out[5], buf, sizeof(buf)-1);
-			write(fd_out[4], buf, sizeof(buf)-1);
+		memset(buf, 0, sizeof(buf));
+		buf[0] = '0';
+		len = write(fd_out[5], buf, sizeof(buf)-1);
+		len = write(fd_out[4], buf, sizeof(buf)-1);
 
-			lseek(fd_out[4], 0, SEEK_SET);
-			buf[0] = '1';
-			write(fd_out[4], buf, sizeof(buf)-1);
+		lseek(fd_out[4], 0, SEEK_SET);
+		buf[0] = '1';
+		len = write(fd_out[4], buf, sizeof(buf)-1);
 
-			memset(buf, 0, sizeof(buf));
-			buf[0] = '1';
-			write(fd_out[3], buf, sizeof(buf)-1);
-			write(fd_out[6], buf, sizeof(buf)-1);
-			buf[0] = '0';
-			write(fd_out[3], buf, sizeof(buf)-1);
-			write(fd_out[6], buf, sizeof(buf)-1);
+		memset(buf, 0, sizeof(buf));
+		buf[0] = '1';
+		len = write(fd_out[3], buf, sizeof(buf)-1);
+		len = write(fd_out[6], buf, sizeof(buf)-1);
+		buf[0] = '0';
+		len = write(fd_out[3], buf, sizeof(buf)-1);
+		len = write(fd_out[6], buf, sizeof(buf)-1);
 
-			/* Read counter and timestamp */
-			read(fd_out[0], buf, sizeof(buf)-1);
-			out_bitcount_prev = strtol(buf, NULL, 0);
+		/* Read counter and timestamp */
+		len = read(fd_out[0], buf, sizeof(buf)-1);
+		out_bitcount_prev = strtol(buf, NULL, 0);
 
-			read(fd_out[1], buf, sizeof(buf)-1);
-			out_timestampcount_prev = strtol(buf, NULL, 0);
-		} else {
-
-			/* Read counter and timestamp */
-			read(fd_out[0], buf, sizeof(buf)-1);
-			out_bitcount = strtol(buf, NULL, 0);
-
-			read(fd_out[1], buf, sizeof(buf)-1);
-			out_timestampcount = strtol(buf, NULL, 0);
-
-			out_bitcount_err = (long)out_bitcount - (long)out_bitcount_prev;
-			out_timestampcount_err = (long)out_timestampcount - (long)out_timestampcount_prev;
-
-			if(out_bitcount_err < 0) out_bitcount_err += (long)0x100000000;
-			if(out_timestampcount_err < 0) out_timestampcount_err += (long)0x100000000;
-
-			out_bitcount_prev = out_bitcount;
-			out_timestampcount_prev = out_timestampcount;
-
-			out_bitcount_sum += out_bitcount_err;
-			out_timestampcount_sum += out_timestampcount_err;
-
-			out_clock = (double)out_bitcount_sum * out_ipg_clock / (double)out_timestampcount_sum / conf.out_ratio;
-		}
-
-		if (count > 0) {
-			clock_diff = (double)out_clock  - (double)(in_clock * conf.out_rate / conf.in_rate);
-			printf("in_clock %f, out_clock %f, diff %f\n", in_clock, out_clock, clock_diff);
-			if (clock_diff > 1000) {
-				printf("there may be wrong setting for rate & ratio\n");
-				goto fail;
-			}
-
-			if (clock_diff > 0.01) {
-				memset(buf, 0, sizeof(buf));
-				lseek(fd_pll_k, 0, SEEK_SET);
-				snprintf(buf, sizeof(buf)-1, "%d", (0 - conf.step));
-				write(fd_pll_k, buf, sizeof(buf)-1);
-				stable_count = 0;
-			} else if (clock_diff < -0.01){
-				memset(buf, 0, sizeof(buf));
-				lseek(fd_pll_k, 0, SEEK_SET);
-				snprintf(buf, sizeof(buf)-1, "%d", conf.step);
-				write(fd_pll_k, buf, sizeof(buf)-1);
-				stable_count = 0;
-			} else {
-				stable_count++;
-			}
-		}
+		len = read(fd_out[1], buf, sizeof(buf)-1);
+		out_timestampcount_prev = strtol(buf, NULL, 0);
 
 		usleep(10000);
+
+		lseek(fd_out[0], 0, SEEK_SET);
+		lseek(fd_out[1], 0, SEEK_SET);
+		lseek(fd_out[2], 0, SEEK_SET);
+		/* Read counter and timestamp */
+		len = read(fd_out[0], buf, sizeof(buf)-1);
+		out_bitcount = strtol(buf, NULL, 0);
+
+		len = read(fd_out[1], buf, sizeof(buf)-1);
+		out_timestampcount = strtol(buf, NULL, 0);
+
+		out_bitcount_err = (long)out_bitcount - (long)out_bitcount_prev;
+		out_timestampcount_err = (long)out_timestampcount - (long)out_timestampcount_prev;
+
+		if (out_bitcount_err < 0)
+			out_bitcount_err += 0x100000000L;
+		if (out_timestampcount_err < 0)
+			out_timestampcount_err += 0x100000000L;
+
+		out_bitcount_sum += out_bitcount_err;
+		out_timestampcount_sum += out_timestampcount_err;
+
+		out_clock = (double)out_bitcount_sum * out_ipg_clock / out_timestampcount_sum;
+		out_clock /= conf.out_ratio;
+
+		clock_diff = (double)out_clock  - (double)(in_clock * conf.out_rate / conf.in_rate);
+		if (clock_diff > 1000) {
+			printf("there may be wrong setting for rate & ratio\n");
+			goto fail;
+		}
+
+		float pid_out = PID_Compute(&pid, in_clock, out_clock);
+		int delta;
+
+		memset(buf, 0, sizeof(buf));
+		lseek(fd_pll_param, 0, SEEK_SET);
+		len = read(fd_pll_param, buf, sizeof(buf)-1);
+
+		char *p_k;
+		int k_t;
+
+		p_k = strstr(buf, "Kdiv");
+		k_t = strtol(p_k + 8, NULL, 16);
+
+		/* 8192 is got from (pll rate / sample rate) */
+		float fout = out_clock * pll_div_sample_rate;
+		float foutnew = fout + pid_out * pll_div_sample_rate;
+		float k_new = (foutnew * (1 << sdiv) * (pdiv * 65536) / 24000000) - mdiv * 65536;
+
+		delta = (int)(k_new - k_t);
+		printf("info %f, %f, %f, %d, -- %f, %f, %f, %d,\n", pid_out,
+		       in_clock, out_clock, pll_div_sample_rate, fout, foutnew, k_new, delta);
+
+		memset(buf, 0, sizeof(buf));
+		lseek(fd_pll_k, 0, SEEK_SET);
+		snprintf(buf, sizeof(buf)-1, "%d", delta);
+		len = write(fd_pll_k, buf, sizeof(buf)-1);
+
+		usleep(100000);
 		count++;
 	}
 
 fail:
 	memset(buf, 0, sizeof(buf));
 	lseek(fd_pll_param, 0, SEEK_SET);
-	read(fd_pll_param, buf, sizeof(buf)-1);
+	len = read(fd_pll_param, buf, sizeof(buf)-1);
 	p_kdiv = strstr(buf, "Kdiv");
 	kdiv_new = strtol(p_kdiv + 8, NULL, 16);
 	delta_kdiv = -(kdiv_new - kdiv);
@@ -702,12 +808,12 @@ fail:
 	memset(buf, 0, sizeof(buf));
 	lseek(fd_pll_k, 0, SEEK_SET);
 	snprintf(buf, sizeof(buf)-1, "%d", delta_kdiv);
-	write(fd_pll_k, buf, sizeof(buf)-1);
+	len = write(fd_pll_k, buf, sizeof(buf)-1);
 
 	if (conf.is_spdif) {
 		memset(buf, 0, sizeof(buf));
 		buf[0] = '0';
-		write(fd_in_monitor_spdif, buf, sizeof(buf)-1);
+		len = write(fd_in_monitor_spdif, buf, sizeof(buf)-1);
 	}
 
 	close(fd_pll_k);
