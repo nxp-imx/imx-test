@@ -57,7 +57,7 @@ struct audio_info_s {
 static char header[WAVE_HEAD_SIZE];
 
 static int *input_buffer;
-
+int dev_id;
 char *infile;
 char *outfile;
 
@@ -69,6 +69,7 @@ void help_info(int ac, const char *av[])
 	printf("\n\n**************************************************\n");
 	printf("* Test aplication for ASRC\n");
 	printf("* Options : \n\n");
+	printf("-d card id of /dev/snd/comprCxD0\n");
 	printf("-o <output sample rate>\n");
 	printf("-x <origin.wav>\n");
 	printf("-z <converted.wav>\n");
@@ -89,9 +90,10 @@ int parse_arguments(int argc, const char *argv[], struct audio_info_s *info)
 	}
 
 	int c, option_index;
-	static const char short_options[] = "ho:x:z:ep:q:f:c:r:F:C:m";
+	static const char short_options[] = "hd:o:x:z:f:c:r:F:m";
 	static const struct option long_options[] = {
 		{"help", 0, 0, 'h'},
+		{"device", 1, 0, 'd'},
 		{"outFreq", 1, 0, 'o'},
 		{"inputFile", 1, 0, 'x'},
 		{"outputFile", 1, 0, 'z'},
@@ -105,6 +107,9 @@ int parse_arguments(int argc, const char *argv[], struct audio_info_s *info)
 
 	while ((c = getopt_long(argc, (char * const*)argv, short_options, long_options, &option_index)) != -1) {
 		switch (c) {
+		case 'd':
+			dev_id = strtol(optarg, NULL, 0);
+			break;
 		case 'o':
 			info->output_sample_rate = strtol(optarg, NULL, 0);
 			break;
@@ -397,15 +402,24 @@ int main(int ac, const char *av[])
 	if (parse_arguments(ac, av, &audio_info) != 0 )
 		return -1;
 
-	for (i = 0; i < 10; i++) {
+	if (dev_id == 0) {
+		for (i = 0; i < 10; i++) {
+			memset(path, 0, 64);
+			sprintf(path, "/dev/snd/comprC%uD0", i);
+			if (access(path, F_OK) == 0)
+				break;
+		}
+		if (i == 10) {
+			printf("no asrc sound card found\n");
+			return -1;
+		}
+	} else {
 		memset(path, 0, 64);
-		sprintf(path, "/dev/snd/comprC%uD0", i);
-		if (access(path, F_OK) == 0)
-			break;
-	}
-	if (i == 10) {
-		printf("no asrc sound card found\n");
-		return -1;
+		sprintf(path, "/dev/snd/comprC%uD0", dev_id);
+		if (access(path, F_OK) != 0) {
+			printf("%s can't be accessed\n", path);
+			return -1;
+		}
 	}
 
 	printf("\n---- Running < %s > test on <%s> ---- \n\n", av[0], path);
