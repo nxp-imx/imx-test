@@ -1,3 +1,10 @@
+/*
+ * Copyright 2023 NXP
+ *
+ * SPDX-License-Identifier: BSD-3
+ *
+ */
+
 #ifndef __ALSA_LIB_API_H
 #define __ALSA_LIB_API_H
 
