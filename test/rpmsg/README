@@ -1,0 +1,29 @@
+Remoteproc README
+~~~~~~~~~~~~
+
+Supported boards:
+	imx8mmevk
+	imx8mnevk
+	imx8mpevk
+	imx8mqevk
+	imx952evk
+	imx95evk-19
+	imx95verdin
+	imx95evk-15
+	imx95frdm-15
+	imx93evk
+	imx93evkpf09
+	imx93qsb
+	imx943evk-m70
+	imx943evk-m71
+	imx943evk-m33s
+
+Usage:
+
+param1: boards
+param2: TCM or DDR demo. Some platform only has TCM demos.
+param3: if uboot starts tty demo, use 'tty',
+        if uboot starts 'pingpong', use pingpong
+	if uboot does not start any demo, just use tty or pingpong.
+
+rproc.sh [imx95evk-19] [TCM,DDR] [tty,pingpong]
