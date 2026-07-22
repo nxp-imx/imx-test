@@ -1481,6 +1481,7 @@ int check_v4l2_support_fmt(int fd, uint32_t type, uint32_t pixelformat)
 {
 	struct v4l2_fmtdesc fmt_desc;
 
+	memset(&fmt_desc, 0, sizeof(fmt_desc));
 	fmt_desc.type = type;
 	fmt_desc.index = 0;
 
